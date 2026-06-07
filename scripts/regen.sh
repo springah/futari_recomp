@@ -22,7 +22,11 @@ MODS=(reco_normal reco_abnormal palm_normal palm_abnormal hirow_normal hirow_abn
 #    single-module manifest also (re)generates default/. Use reco_normal's.
 echo "[regen] entrypoint + modules (isolated)"
 for m in "${MODS[@]}"; do
-  printf '[project]\nname = "futari"\nsdk_version = "0.8.0.0"\ngame_root = "assets"\n\n[entrypoint]\nfile_path = "assets/default.xex"\nout_directory_path = "generated/default"\nincludes = ["futari_functions.toml"]\n\n[[modules]]\nguest_path = "x"\nfile_path = "assets/media/Module/%s.xex"\nout_directory_path = "generated/%s"\nincludes = []\n' "$m" "$m" > .regen_solo.toml
+  # Per-module function-entry hints (analyzer misses indirect-call targets, same
+  # as the shell). Use <module>_functions.toml if present.
+  mod_inc="[]"
+  if [ -f "${m}_functions.toml" ]; then mod_inc="[\"${m}_functions.toml\"]"; fi
+  printf '[project]\nname = "futari"\nsdk_version = "0.8.0.0"\ngame_root = "assets"\n\n[entrypoint]\nfile_path = "assets/default.xex"\nout_directory_path = "generated/default"\nincludes = ["futari_functions.toml"]\n\n[[modules]]\nguest_path = "x"\nfile_path = "assets/media/Module/%s.xex"\nout_directory_path = "generated/%s"\nincludes = %s\n' "$m" "$m" "$mod_inc" > .regen_solo.toml
   "$REXGLUE" codegen .regen_solo.toml >/dev/null
   echo "  [ok] $m"
 done
