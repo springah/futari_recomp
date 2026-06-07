@@ -1,10 +1,20 @@
 # futari_recomp
 
 Static recompilation of **Mushihimesama Futari Ver. 1.5** (Xbox 360, 2006/2012)
-for native PC execution, using the [ReXGlue SDK](https://github.com/Subarasheese/rexglue-sdk).
+for native PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk).
 
 > **This repository contains no copyrighted game files.**
-> You must own a legal copy of the game.
+> You must own a legal copy of the game and extract the assets yourself.
+
+The Xbox 360 PowerPC code is translated ahead-of-time to C++ and linked against
+the ReXGlue runtime (a Xenia-derived layer providing the kernel, a D3D12/Vulkan
+GPU, XMA audio, input, and a virtual filesystem). `default.xex` is the
+shell/menu; each game mode is a separate module XEX that's recompiled into its
+own DLL and loaded on demand.
+
+**Status:** boots to the title and full menu; all 8 game-mode modules load and
+mode-switching works. Some gameplay paths still hit recompiler edge cases — see
+[Known issues](#known-issues).
 
 ---
 
@@ -14,72 +24,86 @@ for native PC execution, using the [ReXGlue SDK](https://github.com/Subarasheese
 |------|---------|-------|
 | CMake | 3.25+ | |
 | Ninja | any | `winget install Ninja-build.Ninja` |
-| Clang | 20+ | Windows: install via VS 2022 → "C++ Clang tools for Windows" |
-| Python | 3.8+ | For extraction scripts |
-| Git | any | For submodules |
+| LLVM / clang-cl | 20+ (validated on 22) | Standalone [LLVM](https://github.com/llvm/llvm-project/releases) — the build uses the **clang-cl** (MSVC) driver |
+| Windows SDK | 10/11 | Provides `rc.exe` (resource compiler) |
+| Python | 3.8+ | Extraction scripts |
+| Git + Bash | any | Submodules; `scripts/regen.sh` is a bash script |
 
-### Windows — install Clang via Visual Studio
-1. Open **Visual Studio Installer**
-2. Modify → Desktop development with C++ → check:
-   - **C++ Clang Compiler for Windows**
-   - **MSBuild support for LLVM (clang-cl) toolset**
+> This project builds with **clang-cl** (MSVC ABI), not `clang++`. The scaffolded
+> CMake presets default to `clang++` — the configure command below overrides
+> them. A standalone LLVM install is assumed at `C:\Program Files\LLVM`.
 
 ---
 
-## Step-by-step build
+## Build
 
 ### 1. Clone with submodules
 ```sh
-git clone --recurse-submodules https://github.com/YOUR_USER/futari_recomp.git
+git clone --recurse-submodules <repo-url> futari_recomp
 cd futari_recomp
 ```
+The `thirdparty/rexglue-sdk` submodule is pinned to the local
+`futari-clang-cl-fixes` branch (clang-cl-22 portability + same-base module
+hot-swap fixes). If a clean `git submodule update` can't find that commit,
+those fixes must be re-applied — they're documented in the agent memory file
+`futari-recomp-sdk-build.md` and in the submodule's commit message.
 
-### 2. Extract game files from your ISO
+### 2. Build the ReXGlue CLI
 ```sh
-python3 scripts/extract_iso.py "Mushihimesama Futari Ver. 1.5 [RF].iso" --out assets/
-```
-This extracts `default.xex` and all game data into `assets/`.
-
-### 3. Analyse the XEX — get addresses for the config
-```sh
-python3 scripts/analyse_xex.py assets/default.xex
-```
-Copy the printed addresses into:
-- `ppc/ppc_config.h` — `PPC_IMAGE_BASE`, `PPC_CODE_BASE`, sizes
-- `config/futari_rexglue.toml` — save/restore stub addresses
-
-Then run XenonAnalyse (from the ReXGlue SDK tools) to generate switch tables:
-```sh
-XenonAnalyse assets/default.xex config/futari_switch_tables.toml
-```
-Uncomment `switch_table_file_path` in `config/futari_rexglue.toml` and
-`config/futari_manifest.toml`.
-
-### 4. Configure CMake
-```sh
-# Windows
-cmake --preset win-amd64 -S project -B project/out/build/win-amd64
-
-# Linux
-cmake --preset linux-amd64 -S project -B project/out/build/linux-amd64
+cmake -S thirdparty/rexglue-sdk -B thirdparty/rexglue-sdk/build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
+  -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe"
+cmake --build thirdparty/rexglue-sdk/build --target rexglue
+# -> thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe
 ```
 
-### 5. Run codegen (translate PPC → C++)
+### 3. Extract your game assets
 ```sh
-cmake --build project/out/build/win-amd64 --target codegen
+python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 ```
-> Note: codegen may exit with signal 11 after printing "done" — that's normal.
-> Check that `generated/*.cpp` files were created.
+This populates `assets/` with `default.xex` and `media/Module/*.xex`
+(gitignored — never committed).
 
-### 6. Build
+### 4. Generate the recompiled C++
 ```sh
-cmake --build project/out/build/win-amd64 --config Release
+bash scripts/regen.sh
+```
+This runs `rexglue codegen` for the shell and **each** game-mode module **in
+isolation** (the SDK analyzer corrupts cross-module analysis when same-base
+modules share one manifest — all 8 modes load at `0x88000000`), then assembles
+`generated/default/module_registry.cpp` and `dll_targets.cmake` for all modules.
+Inputs are [`futari_manifest.toml`](futari_manifest.toml) and the function-entry
+hints in [`futari_functions.toml`](futari_functions.toml). Output lands in
+`generated/` (gitignored).
+
+### 5. Configure
+```sh
+cmake -S . -B out/build/win-amd64 -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
+  -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
+  -DCMAKE_RC_COMPILER="C:/Program Files (x86)/Windows Kits/10/bin/<sdk-ver>/x64/rc.exe" \
+  -DREXSDK_DIR="$PWD/thirdparty/rexglue-sdk"
+```
+> Do **not** pass `-DCMAKE_CXX_FLAGS=...` — it clobbers CMake's default `/EHsc`
+> and breaks exception-handling in dependencies. The required SSE baseline and
+> `char8_t` flags are applied inside the SDK's CMake (the submodule fixes).
+
+### 6. Build (host + all module DLLs)
+```sh
+cmake --build out/build/win-amd64 --target futari \
+  futari_reco_normal futari_reco_abnormal \
+  futari_palm_normal futari_palm_abnormal \
+  futari_hirow_normal futari_hirow_abnormal \
+  futari_kiniro_normal futari_kiniro_abnormal
 ```
 
 ### 7. Run
 ```sh
-./project/out/build/win-amd64/Release/futari.exe --game_data_root assets/
+out/build/win-amd64/futari.exe --game_data_root assets
 ```
+`futari.exe` is a GUI (WIN32) app — it opens a window and logs to
+`out/build/win-amd64/logs/futari_NNN.log`. Add `--log_level debug` for detail.
 
 ---
 
@@ -87,34 +111,51 @@ cmake --build project/out/build/win-amd64 --config Release
 
 ```
 futari_recomp/
-├── assets/              # gitignored — your extracted game files go here
-├── config/
-│   ├── futari_manifest.toml    # ReXGlue manifest
-│   └── futari_rexglue.toml     # XenonRecomp config (addresses)
-├── generated/           # gitignored — codegen output
-├── ppc/
-│   ├── ppc_config.h     # Image base / size constants
-│   └── ppc_detail.h     # Indirect call validator
-├── project/
-│   ├── CMakeLists.txt
-│   ├── CMakePresets.json
-│   └── src/
-│       ├── main.cpp     # Entry point / ReXGlue init
-│       └── stubs.cpp    # XOS/XAM kernel stubs
+├── assets/                  # gitignored — your extracted game files
+├── generated/               # gitignored — codegen output (see scripts/regen.sh)
+├── futari_manifest.toml     # entrypoint + 8 [[modules]] game modes
+├── futari_functions.toml    # function-entry hints for the shell
+├── CMakeLists.txt           # links rex::runtime via generated/rexglue.cmake
+├── src/
+│   ├── main.cpp             # REX_DEFINE_APP entry
+│   └── futari_app.h         # ReXApp subclass (backend wiring is automatic)
 ├── scripts/
-│   ├── extract_iso.py   # XDVDFS ISO extractor
-│   └── analyse_xex.py   # XEX header parser / address finder
+│   ├── extract_iso.py       # XDVDFS ISO extractor
+│   ├── analyse_xex.py       # XEX header / address inspector
+│   └── regen.sh             # regenerate generated/ (per-module isolated codegen)
+├── legacy/                  # gitignored — the old hand-rolled XenonRecomp runtime
 └── thirdparty/
-    └── rexglue-sdk/     # git submodule
+    └── rexglue-sdk/         # submodule (branch futari-clang-cl-fixes)
 ```
+
+---
+
+## Known issues
+
+- **Jump-table traps.** Some gameplay paths (e.g. reco_abnormal character
+  select) host-crash with `STATUS_ILLEGAL_INSTRUCTION` from
+  `__builtin_trap(); // Switch case out of range` in a recompiled module —
+  under-sized jump-table detection. Fix needs `[[switch_tables]]` hints or
+  improved detection per table.
+- **Shell edge case `0x820816EC`.** A function with a backward branch into
+  itself that doesn't split cleanly; only crashes if that path runs.
+
+---
+
+## How it was built
+
+A fuller account of the toolchain quirks (clang-cl flag spellings, the
+multi-module isolation requirement, the module-unload path-matching fix, and
+the function-hint workflow) lives in the agent memory file
+`futari-recomp-sdk-build.md`.
 
 ---
 
 ## Credits
 
-- [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) — PPC → C++ recompiler
-- [ReXGlue SDK](https://github.com/Subarasheese/rexglue-sdk) — Xbox 360 runtime layer
-- [daytona-xbla-recomp](https://github.com/Subarasheese/daytona-xbla-recomp) — reference project
-- [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp) — Sonic Unleashed reference
+- [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) — Xbox 360 runtime + recompiler (Xenia-derived)
+- [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) — reference PPC → C++ recompiler
+- [Xenia](https://github.com/xenia-project) — the emulator ReXGlue's runtime is rooted in
+- [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp) — recomp reference project
 
 Cave / CAVE Interactive Co., Ltd. own all rights to Mushihimesama Futari.
