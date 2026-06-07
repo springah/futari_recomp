@@ -1,0 +1,217 @@
+# Function-entry seeds for Mushihimesama Futari Ver. 1.5
+#
+# ReXGlue's analyzer discovers ~6065 functions; the reference XenonRecomp run
+# (legacy/generated/ppc_func_mapping.cpp) found more. The gap that matters is
+# REAL functions (not XenonRecomp's many ".long 0x0" data/null slots) that
+# ReXGlue misses — indirect/computed-call targets with no PDATA or static call
+# edge, plus a few GapFill merged into neighbors. The game computes calls into
+# these and the runtime FATALs ("Call to invalid or unregistered function").
+#
+# This list is exactly: {legacy functions that ReXGlue can decode to real
+# instruction blocks} - {ReXGlue baseline}. Data/null addresses are excluded
+# (seeding them as functions corrupts surrounding real code -> "Unresolved call"
+# regressions). All are bare entry seeds; the analyzer discovers each extent.
+[functions]
+# Two original analysis-blocking branch targets ("target not in any function"):
+"0x820F3C20" = {}
+"0x8210B038" = {}
+# Static-call (bl) targets that land on an internal loc_ label rather than a
+# function entry -> codegen emits REX_FATAL("Unresolved call from X to Y").
+# COMPLETE set (grep of generated REX_FATAL("Unresolved call...)); seeding the 3
+# unique targets makes them callable. 0x820E6728/0x820E6734 are mid-sub_820E6668
+# (which has an 18-entry jump table).
+"0x820E6728" = {}
+"0x820E6734" = {}
+# NOTE: 0x820816EC (inside PDATA sub_82081658, which has an internal backward
+# branch to it) is intentionally NOT seeded. It's a tangled case — seeding it
+# turns the internal `b` into an unresolvable cross-function tail-call, no
+# better than leaving it. It only FATALs if that code path runs; revisit with
+# a midasm hook or proper split if the game actually reaches it.
+# Real functions ReXGlue misses (computed from the legacy/ReXGlue map diff):
+"0x82061D60" = {}
+"0x82061D70" = {}
+"0x82061D80" = {}
+"0x82063A58" = {}
+"0x82065A88" = {}
+"0x82065A98" = {}
+"0x82065AA8" = {}
+"0x82065AB8" = {}
+"0x82066048" = {}
+"0x820662B8" = {}
+"0x820662C8" = {}
+"0x820662D8" = {}
+"0x82068808" = {}
+"0x82068818" = {}
+"0x82068828" = {}
+"0x82068838" = {}
+"0x8207A248" = {}
+"0x8207A2C8" = {}
+"0x8207A348" = {}
+"0x8207BEF8" = {}
+"0x8207BF28" = {}
+"0x8207BF40" = {}
+"0x8207C668" = {}
+"0x8207C848" = {}
+"0x8207D1A0" = {}
+"0x8207DAB0" = {}
+"0x8207DAB8" = {}
+"0x820807B0" = {}
+"0x82080F20" = {}
+"0x82081778" = {}
+"0x82081794" = {}
+"0x820818F0" = {}
+"0x82081C5C" = {}
+"0x82081C68" = {}
+"0x82081C80" = {}
+"0x82081D9C" = {}
+"0x8208245C" = {}
+"0x8208247C" = {}
+"0x82082588" = {}
+"0x8208264C" = {}
+"0x82082858" = {}
+"0x82084A78" = {}
+"0x82084D78" = {}
+"0x82084EA8" = {}
+"0x8208A2B0" = {}
+"0x8208BE80" = {}
+"0x8208BF20" = {}
+"0x8208C450" = {}
+"0x8208D6C4" = {}
+"0x8208D6FC" = {}
+"0x8208D83C" = {}
+"0x8208FE18" = {}
+"0x820CABAC" = {}
+"0x820E669C" = {}
+"0x820E6724" = {}
+"0x820E6744" = {}
+"0x820E674C" = {}
+"0x820E680C" = {}
+"0x820E6914" = {}
+"0x820E79C0" = {}
+"0x820E8040" = {}
+"0x820EB27C" = {}
+"0x820EB2E4" = {}
+"0x820EB2F4" = {}
+"0x820EB304" = {}
+"0x820EB314" = {}
+"0x820EB324" = {}
+"0x820EB334" = {}
+"0x820EB344" = {}
+"0x820EB354" = {}
+"0x820EB364" = {}
+"0x820EB374" = {}
+"0x820EB384" = {}
+"0x820EB394" = {}
+"0x820EB3A4" = {}
+"0x820EB3AC" = {}
+"0x820EB3B4" = {}
+"0x820EB3BC" = {}
+"0x820EB3C4" = {}
+"0x820EB3CC" = {}
+"0x820EB3D4" = {}
+"0x820EB3DC" = {}
+"0x820EB3E4" = {}
+"0x820EDF48" = {}
+"0x820F5CF0" = {}
+"0x820F5D20" = {}
+"0x820F5FFC" = {}
+"0x820F601C" = {}
+"0x820F603C" = {}
+"0x820F605C" = {}
+"0x820F607C" = {}
+"0x820F60A4" = {}
+"0x820F6FE0" = {}
+"0x820F70C4" = {}
+"0x820F8958" = {}
+"0x820F8EEC" = {}
+"0x820F8F0C" = {}
+"0x820F98AC" = {}
+"0x820F98D4" = {}
+"0x820FA528" = {}
+"0x820FA5A8" = {}
+"0x820FA5C8" = {}
+"0x820FE458" = {}
+"0x820FE48C" = {}
+"0x820FE4D8" = {}
+"0x820FE550" = {}
+"0x82108BB0" = {}
+"0x82108BF8" = {}
+"0x82108C08" = {}
+"0x8210D15C" = {}
+"0x8210D180" = {}
+"0x8210D1A8" = {}
+"0x8210D1D0" = {}
+"0x8210E770" = {}
+"0x8210E778" = {}
+"0x8210E780" = {}
+"0x8210E790" = {}
+"0x8210E798" = {}
+"0x8210E7A0" = {}
+"0x82113468" = {}
+"0x82113470" = {}
+"0x82113478" = {}
+"0x82113480" = {}
+"0x82113488" = {}
+"0x82113498" = {}
+"0x821134A0" = {}
+"0x821134A8" = {}
+"0x82113720" = {}
+"0x82113730" = {}
+"0x82113738" = {}
+"0x82113DF0" = {}
+"0x82116C28" = {}
+"0x82117CC0" = {}
+"0x82117CE8" = {}
+"0x82117D10" = {}
+"0x82118178" = {}
+"0x82118D40" = {}
+"0x82122AC8" = {}
+"0x82122B10" = {}
+"0x821367C0" = {}
+"0x82136808" = {}
+"0x8213681C" = {}
+"0x82139260" = {}
+"0x8214EBF8" = {}
+"0x8214EC58" = {}
+"0x8214EF48" = {}
+"0x8214F004" = {}
+"0x82155908" = {}
+"0x82155938" = {}
+"0x8215B950" = {}
+"0x8215BB58" = {}
+"0x8215DFB8" = {}
+"0x8215ED78" = {}
+"0x8215EF38" = {}
+"0x82169B08" = {}
+"0x82170214" = {}
+"0x8217023C" = {}
+"0x82170264" = {}
+"0x82170288" = {}
+"0x82173A10" = {}
+"0x82181E38" = {}
+"0x821856AC" = {}
+"0x821856C4" = {}
+"0x8218969C" = {}
+"0x8218A474" = {}
+"0x8218A48C" = {}
+"0x8218A4AC" = {}
+"0x8218A4C4" = {}
+"0x82191C2C" = {}
+"0x82199E18" = {}
+"0x8219D008" = {}
+"0x8219D544" = {}
+"0x8219D588" = {}
+"0x8219D594" = {}
+"0x8219D5A0" = {}
+"0x8219D5AC" = {}
+"0x8219D5B8" = {}
+"0x8219D5C4" = {}
+"0x8219D5D0" = {}
+"0x8219D5DC" = {}
+"0x821A9AE8" = {}
+"0x821AC508" = {}
+"0x821B9E78" = {}
+"0x821BBA9C" = {}
+"0x821BE228" = {}
+"0x821BE398" = {}
+"0x821CB190" = {}
