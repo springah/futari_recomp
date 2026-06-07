@@ -1,0 +1,49 @@
+# Function-entry hints for the palm_abnormal game module (base 0x88000000).
+# Auto-derived by scripts/build_module_hints.sh: XenonRecomp reference map
+# minus ReXGlue-registered, filtered to the addresses ReXGlue decodes to
+# real instruction blocks (data/gap-fill addresses stub out and are dropped).
+[functions]
+"0x88080540" = {}
+"0x8808054C" = {}
+"0x88080958" = {}
+"0x88082AB8" = {}
+"0x88082B94" = {}
+"0x88082E40" = {}
+"0x88083C60" = {}
+"0x88083C68" = {}
+"0x88083EA8" = {}
+"0x88083FD8" = {}
+"0x880841D8" = {}
+"0x880844A8" = {}
+"0x880845C0" = {}
+"0x88094E78" = {}
+"0x88094F18" = {}
+"0x88095448" = {}
+"0x88097F80" = {}
+"0x8809D578" = {}
+"0x8809E290" = {}
+"0x880A20BC" = {}
+"0x880A20F4" = {}
+"0x880ABF30" = {}
+"0x880AD710" = {}
+"0x880AE300" = {}
+"0x880B1648" = {}
+"0x880BC218" = {}
+"0x880C41B0" = {}
+"0x880CC9B0" = {}
+"0x880FEAE0" = {}
+"0x88118638" = {}
+"0x8811B228" = {}
+"0x8811C3A8" = {}
+"0x88123480" = {}
+"0x8812437C" = {}
+"0x8813D0E0" = {}
+"0x88147E80" = {}
+"0x88154EF0" = {}
+"0x881602A8" = {}
+"0x88161450" = {}
+"0x8817F7F0" = {}
+"0x88199C60" = {}
+"0x8819F800" = {}
+"0x881AD270" = {}
+"0x881E14B8" = {}

@@ -1,0 +1,45 @@
+# Function-entry hints for the kiniro_normal game module (base 0x88000000).
+# Auto-derived by scripts/build_module_hints.sh: XenonRecomp reference map
+# minus ReXGlue-registered, filtered to the addresses ReXGlue decodes to
+# real instruction blocks (data/gap-fill addresses stub out and are dropped).
+[functions]
+"0x88070540" = {}
+"0x8807054C" = {}
+"0x88070958" = {}
+"0x88072AB8" = {}
+"0x88072B94" = {}
+"0x88072E40" = {}
+"0x88073C60" = {}
+"0x88073C68" = {}
+"0x88073EA8" = {}
+"0x88073FD8" = {}
+"0x880741D8" = {}
+"0x880744A8" = {}
+"0x880745C0" = {}
+"0x88084E78" = {}
+"0x88084F18" = {}
+"0x88085448" = {}
+"0x88087F80" = {}
+"0x8808D4F0" = {}
+"0x8808E208" = {}
+"0x88092034" = {}
+"0x8809206C" = {}
+"0x880A7AA0" = {}
+"0x880B3CA0" = {}
+"0x880BC918" = {}
+"0x880C7F60" = {}
+"0x880DC2E0" = {}
+"0x880DF298" = {}
+"0x88109508" = {}
+"0x88116780" = {}
+"0x881416A0" = {}
+"0x881427D0" = {}
+"0x88155278" = {}
+"0x8817C150" = {}
+"0x8817D360" = {}
+"0x881AFB08" = {}
+"0x881B5708" = {}
+"0x881C2938" = {}
+"0x881E4CD8" = {}
+"0x881E6028" = {}
+"0x881E6E58" = {}

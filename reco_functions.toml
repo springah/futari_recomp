@@ -1,6 +1,0 @@
-# Function-entry hints for the reco_normal game module (base 0x88000000).
-# Modules get the same analyzer misses as the shell (indirect-call targets with
-# no PDATA/static edge -> runtime "Call to invalid or unregistered function").
-# Seed bare entries; the analyzer discovers each extent.
-[functions]
-"0x881B0038" = {}
