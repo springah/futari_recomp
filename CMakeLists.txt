@@ -16,7 +16,16 @@ set(FUTARI_SOURCES
 )
 
 if(WIN32)
-    add_executable(futari WIN32 ${FUTARI_SOURCES})
+    # Embed the application icon via a Windows resource script. The .rc is
+    # generated with the absolute .ico path so the RC compiler resolves it
+    # regardless of the build working directory.
+    enable_language(RC)
+    set(FUTARI_ICON_ABS "${CMAKE_CURRENT_SOURCE_DIR}/src/futari.ico")
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/futari.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/futari.rc"
+        @ONLY)
+    add_executable(futari WIN32 ${FUTARI_SOURCES} "${CMAKE_CURRENT_BINARY_DIR}/futari.rc")
 else()
     add_executable(futari ${FUTARI_SOURCES})
 endif()

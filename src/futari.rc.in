@@ -1,0 +1,5 @@
+// Windows resource script for futari.exe — embeds the application icon.
+// Generated from this template by CMake (configure_file) with the absolute
+// icon path substituted, so the RC compiler finds it regardless of CWD.
+// Resource ID 1 = the icon Windows Explorer / taskbar use for the exe.
+1 ICON "@FUTARI_ICON_ABS@"
