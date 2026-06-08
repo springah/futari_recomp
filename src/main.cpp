@@ -269,7 +269,15 @@ class FutariApp : public rex::ReXApp {
 
  protected:
   void OnConfigurePaths(rex::PathConfig& paths) override {
-    LoadFutariIni(rex::filesystem::GetExecutableFolder(), paths);
+    const auto exe_dir = rex::filesystem::GetExecutableFolder();
+    LoadFutariIni(exe_dir, paths);
+    // Default the game data root to an "assets" folder next to the executable
+    // when no --game_data_root was provided, so the game runs on a plain
+    // double-click (no launcher .bat needed). An explicit --game_data_root
+    // (cvar non-empty) still takes precedence.
+    if (paths.game_data_root.empty()) {
+      paths.game_data_root = exe_dir / "assets";
+    }
   }
 };
 
