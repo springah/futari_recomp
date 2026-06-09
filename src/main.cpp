@@ -12,11 +12,15 @@
 
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
+#include <rex/logging.h>
 #include <rex/rex_app.h>
+#include <rex/system/kernel_state.h>
+#include <rex/system/xam/content_manager.h>
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -133,34 +137,33 @@ void WriteDefaultIni(const std::filesystem::path& path) {
   if (!file) {
     return;
   }
-  file
-      << "# Mushihimesama Futari (recompiled) PC settings\n"
-      << "# Edit this file, then restart the game. Values shown are the defaults.\n"
-      << "\n"
-      << "[Display]\n"
-      << "# Window/output resolution as WxH, e.g. 1280x720. Empty = SDK default.\n"
-      << "resolution =\n"
-      << "fullscreen = false\n"
-      << "vsync = true\n"
-      << "refresh_rate = 60\n"
-      << "letterbox = true\n"
-      << "\n"
-      << "[Graphics]\n"
-      << "# Output effect: bilinear, cas, fsr, fsr2, fsr3\n"
-      << "upscaler = bilinear\n"
-      << "cas_sharpness = 0.0\n"
-      << "dither = false\n"
-      << "\n"
-      << "[Storage]\n"
-      << "# Where saves and shader cache go. Empty = platform folder\n"
-      << "# (Documents\\futari). A relative path resolves next to the .exe\n"
-      << "# (e.g. \"saves\" / \"cache\") for a portable build.\n"
-      << "user_data_path =\n"
-      << "cache_path =\n"
-      << "\n"
-      << "[Diagnostics]\n"
-      << "# trace, debug, info, warn, error, critical, off\n"
-      << "log_level = info\n";
+  file << "# Mushihimesama Futari (recompiled) PC settings\n"
+       << "# Edit this file, then restart the game. Values shown are the defaults.\n"
+       << "\n"
+       << "[Display]\n"
+       << "# Window/output resolution as WxH, e.g. 1280x720. Empty = SDK default.\n"
+       << "resolution =\n"
+       << "fullscreen = false\n"
+       << "vsync = true\n"
+       << "refresh_rate = 60\n"
+       << "letterbox = true\n"
+       << "\n"
+       << "[Graphics]\n"
+       << "# Output effect: bilinear, cas, fsr, fsr2, fsr3\n"
+       << "upscaler = bilinear\n"
+       << "cas_sharpness = 0.0\n"
+       << "dither = false\n"
+       << "\n"
+       << "[Storage]\n"
+       << "# Where saves and shader cache go. Empty = platform folder\n"
+       << "# (Documents\\futari). A relative path resolves next to the .exe\n"
+       << "# (e.g. \"saves\" / \"cache\") for a portable build.\n"
+       << "user_data_path =\n"
+       << "cache_path =\n"
+       << "\n"
+       << "[Diagnostics]\n"
+       << "# trace, debug, info, warn, error, critical, off\n"
+       << "log_level = info\n";
 }
 
 std::unordered_map<std::string, std::string> ReadIni(const std::filesystem::path& path) {
@@ -215,10 +218,12 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
     }
   }
   if (auto* v = find("display.fullscreen")) {
-    if (auto b = ParseBool(*v)) SetCvarBool("fullscreen", *b);
+    if (auto b = ParseBool(*v))
+      SetCvarBool("fullscreen", *b);
   }
   if (auto* v = find("display.vsync")) {
-    if (auto b = ParseBool(*v)) SetCvarBool("vsync", *b);
+    if (auto b = ParseBool(*v))
+      SetCvarBool("vsync", *b);
   }
   if (auto* v = find("display.refresh_rate")) {
     if (auto d = ParseDouble(*v)) {
@@ -226,7 +231,8 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
     }
   }
   if (auto* v = find("display.letterbox")) {
-    if (auto b = ParseBool(*v)) SetCvarBool("present_letterbox", *b);
+    if (auto b = ParseBool(*v))
+      SetCvarBool("present_letterbox", *b);
   }
 
   if (auto* v = find("graphics.upscaler")) {
@@ -238,7 +244,8 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
     }
   }
   if (auto* v = find("graphics.dither")) {
-    if (auto b = ParseBool(*v)) SetCvarBool("present_dither", *b);
+    if (auto b = ParseBool(*v))
+      SetCvarBool("present_dither", *b);
   }
 
   if (auto* v = find("storage.user_data_path")) {
@@ -277,6 +284,50 @@ class FutariApp : public rex::ReXApp {
     // (cvar non-empty) still takes precedence.
     if (paths.game_data_root.empty()) {
       paths.game_data_root = exe_dir / "assets";
+    }
+  }
+
+  // Auto-install any DLC packages bundled next to the exe (a "dlc" folder)
+  // before the game launches, so they appear as owned marketplace content.
+  // Runs after the kernel/content-manager are up but before guest code starts.
+  void OnPreLaunchModule() override { InstallBundledDlc(); }
+
+ private:
+  static void InstallBundledDlc() {
+    const auto dlc_dir = rex::filesystem::GetExecutableFolder() / "dlc";
+    std::error_code ec;
+    if (!std::filesystem::exists(dlc_dir, ec)) {
+      return;
+    }
+    auto* kernel_state = rex::system::kernel_state();
+    if (!kernel_state) {
+      return;
+    }
+    auto* content_manager = kernel_state->content_manager();
+    if (!content_manager) {
+      return;
+    }
+
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dlc_dir, ec)) {
+      if (ec || !entry.is_regular_file(ec)) {
+        continue;
+      }
+      // Only consider STFS packages (CON / LIVE / PIRS magic at offset 0).
+      char magic[4] = {};
+      {
+        std::ifstream f(entry.path(), std::ios::binary);
+        if (!f.read(magic, sizeof(magic))) {
+          continue;
+        }
+      }
+      const bool is_stfs = std::memcmp(magic, "LIVE", 4) == 0 ||
+                           std::memcmp(magic, "CON ", 4) == 0 || std::memcmp(magic, "PIRS", 4) == 0;
+      if (!is_stfs) {
+        continue;
+      }
+      const auto name = rex::path_to_utf8(entry.path().filename());
+      auto result = content_manager->InstallContent(entry.path());
+      REXLOG_INFO("DLC: InstallContent('{}') -> {:#010x}", name, static_cast<uint32_t>(result));
     }
   }
 };
