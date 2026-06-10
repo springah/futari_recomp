@@ -1,5 +1,28 @@
-// Windows resource script for futari.exe — embeds the application icon.
-// Generated from this template by CMake (configure_file) with the absolute
-// icon path substituted, so the RC compiler finds it regardless of CWD.
+// Windows resource script for futari.exe — embeds the application icon and
+// version info. Generated from this template by CMake (configure_file) with
+// the absolute icon path and project version substituted, so the RC compiler
+// finds the icon regardless of CWD.
 // Resource ID 1 = the icon Windows Explorer / taskbar use for the exe.
 1 ICON "@FUTARI_ICON_ABS@"
+
+1 VERSIONINFO
+FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "FileDescription", "Mushihimesama Futari Ver 1.5 (PC recompilation)"
+      VALUE "FileVersion", "@PROJECT_VERSION@"
+      VALUE "ProductName", "Mushihimesama Futari"
+      VALUE "ProductVersion", "@PROJECT_VERSION@"
+      VALUE "OriginalFilename", "futari.exe"
+      VALUE "InternalName", "futari"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 1200
+  END
+END

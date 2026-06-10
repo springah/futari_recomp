@@ -14,6 +14,7 @@
 #include <rex/filesystem.h>
 #include <rex/logging.h>
 #include <rex/rex_app.h>
+#include <rex/version.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/content_manager.h>
 
@@ -289,8 +290,15 @@ class FutariApp : public rex::ReXApp {
 
   // Auto-install any DLC packages bundled next to the exe (a "dlc" folder)
   // before the game launches, so they appear as owned marketplace content.
-  // Runs after the kernel/content-manager are up but before guest code starts.
-  void OnPreLaunchModule() override { InstallBundledDlc(); }
+  // Runs after the kernel/content-manager are up but before guest code starts
+  // (and after the SDK has set its default window title, which we replace
+  // with the port's own version).
+  void OnPreLaunchModule() override {
+    if (auto* wnd = window()) {
+      wnd->SetTitle("Mushihimesama Futari v" FUTARI_VERSION_STRING " " REXGLUE_BUILD_TITLE);
+    }
+    InstallBundledDlc();
+  }
 
  private:
   static void InstallBundledDlc() {
