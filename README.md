@@ -6,6 +6,10 @@ for native PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/r
 > **This repository contains no copyrighted game files.**
 > You must own a legal copy of the game and extract the assets yourself.
 
+![Mushihimesama Futari title screen](screenshots/title.png)
+
+**Latest release:** v1.1.1 (Windows + Steam Deck).
+
 The Xbox 360 PowerPC code is translated ahead-of-time to C++ and linked against
 the ReXGlue runtime (a Xenia-derived layer providing the kernel, a D3D12/Vulkan
 GPU, XMA audio, input, and a virtual filesystem). `default.xex` is the
