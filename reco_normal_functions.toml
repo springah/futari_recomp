@@ -1,0 +1,51 @@
+# Function-entry hints for the reco_normal game module (base 0x88000000).
+# Auto-derived by scripts/build_module_hints.sh: XenonRecomp reference map
+# minus ReXGlue-registered, filtered to the addresses ReXGlue decodes to
+# real instruction blocks (data/gap-fill addresses stub out and are dropped).
+[functions]
+"0x88070540" = {}
+"0x8807054C" = {}
+"0x88070958" = {}
+"0x88072AB8" = {}
+"0x88072B94" = {}
+"0x88072E40" = {}
+"0x88073C60" = {}
+"0x88073C68" = {}
+"0x88073EA8" = {}
+"0x88073FD8" = {}
+"0x880741D8" = {}
+"0x880744A8" = {}
+"0x880745C0" = {}
+"0x88084E78" = {}
+"0x88084F18" = {}
+"0x88085448" = {}
+"0x88087F80" = {}
+"0x8808D578" = {}
+"0x8808E280" = {}
+"0x880920A4" = {}
+"0x880920DC" = {}
+"0x8809ECA0" = {}
+"0x8809F7A8" = {}
+"0x880A4DB0" = {}
+"0x880B1020" = {}
+"0x880B9C98" = {}
+"0x880C5330" = {}
+"0x880D96C8" = {}
+"0x880DC6B8" = {}
+"0x88106090" = {}
+"0x88113540" = {}
+"0x8813BD60" = {}
+"0x8813E950" = {}
+"0x8813FAD0" = {}
+"0x88146BA8" = {}
+"0x88147AA4" = {}
+"0x88160630" = {}
+"0x8816AD28" = {}
+"0x8817BF40" = {}
+"0x8817D190" = {}
+"0x881B0038" = {}
+"0x881B5C28" = {}
+"0x881C2FD0" = {}
+"0x881E4E80" = {}
+"0x881E60B0" = {}
+"0x881E6E28" = {}
