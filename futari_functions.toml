@@ -215,3 +215,6 @@
 "0x821BE228" = {}
 "0x821BE398" = {}
 "0x821CB190" = {}
+
+# auto-seed: foreign-body conditional-branch targets (autoseed_branch_splits.py)
+"0x820E673C" = {}  # auto-seed: Unresolved-branch target
