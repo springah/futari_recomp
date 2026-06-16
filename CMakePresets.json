@@ -51,6 +51,15 @@
             }
         },
         {
+            "name": "linux-amd64-base",
+            "hidden": true,
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS": "-march=x86-64-v3",
+                "CMAKE_CXX_FLAGS": "-march=x86-64-v3"
+            }
+        },
+        {
             "name": "win-amd64-debug",
             "displayName": "Windows AMD64 Debug",
             "inherits": "windows-base",
@@ -65,13 +74,13 @@
         {
             "name": "linux-amd64-debug",
             "displayName": "Linux AMD64 Debug",
-            "inherits": "linux-base",
+            "inherits": "linux-amd64-base",
             "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
         },
         {
             "name": "linux-amd64-release",
             "displayName": "Linux AMD64 Release",
-            "inherits": "linux-base",
+            "inherits": "linux-amd64-base",
             "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
         },
         {
@@ -83,7 +92,7 @@
         {
             "name": "linux-amd64-relwithdebinfo",
             "displayName": "Linux AMD64 RelWithDebInfo",
-            "inherits": "linux-base",
+            "inherits": "linux-amd64-base",
             "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
         },
         {
