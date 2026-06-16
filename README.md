@@ -41,25 +41,27 @@ mode-switching works. Some gameplay paths still hit recompiler edge cases — se
 
 ## Build
 
-### 1. Clone with submodules
+### 1. Clone + the shared SDK
 ```sh
 git clone --recurse-submodules <repo-url> futari_recomp
 cd futari_recomp
 ```
-The `thirdparty/rexglue-sdk` submodule is pinned to the local
-`futari-clang-cl-fixes` branch (clang-cl-22 portability + same-base module
-hot-swap fixes). If a clean `git submodule update` can't find that commit,
-those fixes must be re-applied — they're documented in the agent memory file
-`futari-recomp-sdk-build.md` and in the submodule's commit message.
+futari's only submodule is `thirdparty/XenonRecomp`. The ReXGlue SDK is **not**
+vendored here — it's the shared [`springah/rexglue-sdk`](https://github.com/springah/rexglue-sdk)
+checkout (branch `main`, the same one the sibling recomps use). Clone it as a
+sibling and point `REXSDK_DIR` at it (step 5):
+```sh
+git clone -b main https://github.com/springah/rexglue-sdk.git ../rexglue-sdk
+```
 
 ### 2. Build the ReXGlue CLI
 ```sh
-cmake -S thirdparty/rexglue-sdk -B thirdparty/rexglue-sdk/build -G Ninja \
+cmake -S ../rexglue-sdk -B ../rexglue-sdk/build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
   -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe"
-cmake --build thirdparty/rexglue-sdk/build --target rexglue
-# -> thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe
+cmake --build ../rexglue-sdk/build --target rexglue
+# -> ../rexglue-sdk/out/win-amd64/rexglue.exe
 ```
 
 ### 3. Extract your game assets
@@ -87,11 +89,11 @@ cmake -S . -B out/build/win-amd64 -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
   -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
   -DCMAKE_RC_COMPILER="C:/Program Files (x86)/Windows Kits/10/bin/<sdk-ver>/x64/rc.exe" \
-  -DREXSDK_DIR="$PWD/thirdparty/rexglue-sdk"
+  -DREXSDK_DIR="$PWD/../rexglue-sdk"
 ```
 > Do **not** pass `-DCMAKE_CXX_FLAGS=...` — it clobbers CMake's default `/EHsc`
 > and breaks exception-handling in dependencies. The required SSE baseline and
-> `char8_t` flags are applied inside the SDK's CMake (the submodule fixes).
+> `char8_t` flags are applied inside the SDK's own CMake.
 
 ### 6. Build (host + all module DLLs)
 ```sh
@@ -129,8 +131,10 @@ futari_recomp/
 │   └── regen.sh             # regenerate generated/ (per-module isolated codegen)
 ├── legacy/                  # gitignored — the old hand-rolled XenonRecomp runtime
 └── thirdparty/
-    └── rexglue-sdk/         # submodule (branch futari-clang-cl-fixes)
+    └── XenonRecomp/         # submodule (recompiler tooling)
 ```
+> The ReXGlue SDK is **not** under `thirdparty/` — it's the shared
+> `springah/rexglue-sdk` checkout (branch `main`), referenced via `REXSDK_DIR`.
 
 ---
 
