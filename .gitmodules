@@ -1,7 +1,3 @@
-[submodule "thirdparty/rexglue-sdk"]
-	path = thirdparty/rexglue-sdk
-	url = https://github.com/springah/rexglue-sdk.git
-	branch = futari-clang-cl-fixes
 [submodule "thirdparty/XenonRecomp"]
 	path = thirdparty/XenonRecomp
 	url = https://github.com/hedge-dev/XenonRecomp.git
