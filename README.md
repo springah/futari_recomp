@@ -8,7 +8,10 @@ for native PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/r
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.3.1 (Windows + Steam Deck).
+**Latest release:** v1.3.2 (Windows + Steam Deck + macOS).
+
+Per-OS build/status details live in [PORTS.md](PORTS.md); the macOS bundle scripts
+are in [`mac-build/`](mac-build/).
 
 The Xbox 360 PowerPC code is translated ahead-of-time to C++ and linked against
 the ReXGlue runtime (a Xenia-derived layer providing the kernel, a D3D12/Vulkan
