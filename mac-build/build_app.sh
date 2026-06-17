@@ -3,12 +3,25 @@
 # Output: ~/Desktop/projects/Futari.app
 set -euo pipefail
 
-PROJ="$HOME/Desktop/projects"
-BUILD="$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release"
-SDK="$PROJ/futari-mac/futari_recomp/thirdparty/rexglue-sdk"
-ASSETS_SRC="$PROJ/Mushihimesama-Futari-PC-v1.2.0"
-APP="$PROJ/Futari.app"
+PROJ="${PROJ:-$HOME/Desktop/projects}"
+BUILD="${BUILD:-$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release}"
+# SDK source tree (the external shared rexglue-sdk). Defaults to $REXSDK_DIR, else
+# the legacy in-tree submodule path. Its runtime dylibs land in $SDK/out/mac-arm64/.
+SDK="${SDK:-${REXSDK_DIR:-$PROJ/futari-mac/futari_recomp/thirdparty/rexglue-sdk}}"
+ASSETS_SRC="${ASSETS_SRC:-$PROJ/Mushihimesama-Futari-PC-v1.2.0}"
+APP="${APP:-$PROJ/Futari.app}"
 C="$APP/Contents"
+
+# Copy a file from the first place it exists: the game build dir (old in-tree
+# layout colocated the SDK dylibs there) or the SDK's own out/mac-arm64/ dir
+# (where the shared external SDK emits librexruntime.dylib / libTracyClient.dylib).
+copy_first() {
+  local name="$1" dest="$2" c
+  for c in "$BUILD/$name" "$SDK/out/mac-arm64/$name"; do
+    if [ -f "$c" ]; then cp "$c" "$dest"; return 0; fi
+  done
+  echo "  ERROR: $name not found in \$BUILD or \$SDK/out/mac-arm64" >&2; return 1
+}
 
 echo "[1/7] fresh bundle skeleton"
 rm -rf "$APP"
@@ -17,8 +30,8 @@ mkdir -p "$C/MacOS" "$C/lib" "$C/Resources/vulkan/icd.d"
 echo "[2/7] executable + colocated dylibs"
 cp "$BUILD/futari" "$C/MacOS/"
 cp "$BUILD"/libfutari_*.dylib "$C/MacOS/"
-cp "$BUILD/librexruntime.dylib" "$C/MacOS/"
-cp "$BUILD/libTracyClient.dylib" "$C/MacOS/"
+copy_first librexruntime.dylib "$C/MacOS/"
+copy_first libTracyClient.dylib "$C/MacOS/"
 
 echo "[3/7] bundled MoltenVK (self-contained, no Homebrew dependency)"
 # Resolve the real dylib (Homebrew symlink) so the copy is standalone.
@@ -37,9 +50,13 @@ cat > "$C/Resources/vulkan/icd.d/MoltenVK_icd.json" <<'JSON'
 }
 JSON
 
-echo "[4/7] game data (assets + dlc) — ~1.1GB, copying..."
-ditto "$ASSETS_SRC/assets" "$C/MacOS/assets"
-[ -d "$ASSETS_SRC/dlc" ] && ditto "$ASSETS_SRC/dlc" "$C/MacOS/dlc"
+if [ "${SKIP_ASSETS:-0}" = "1" ]; then
+  echo "[4/7] game data — SKIPPED (SKIP_ASSETS=1, verification build)"
+else
+  echo "[4/7] game data (assets + dlc) — ~1.1GB, copying..."
+  ditto "$ASSETS_SRC/assets" "$C/MacOS/assets"
+  [ -d "$ASSETS_SRC/dlc" ] && ditto "$ASSETS_SRC/dlc" "$C/MacOS/dlc"
+fi
 
 echo "[5/7] icon"
 ICON_SRC="$ASSETS_SRC/icon1.ico"
