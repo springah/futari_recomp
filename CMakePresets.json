@@ -9,7 +9,10 @@
             "binaryDir": "${sourceDir}/out/build/${presetName}",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "clang",
-                "CMAKE_CXX_COMPILER": "clang++"
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CMAKE_C_FLAGS": "-march=x86-64-v3",
+                "CMAKE_CXX_FLAGS": "-march=x86-64-v3",
+                "REXSDK_DIR": "$env{REXSDK_DIR}"
             },
             "condition": {
                 "type": "equals",
@@ -24,7 +27,8 @@
             "binaryDir": "${sourceDir}/out/build/${presetName}",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "clang-20",
-                "CMAKE_CXX_COMPILER": "clang++-20"
+                "CMAKE_CXX_COMPILER": "clang++-20",
+                "REXSDK_DIR": "$env{REXSDK_DIR}"
             },
             "condition": {
                 "type": "equals",
@@ -42,6 +46,15 @@
             }
         },
         {
+            "name": "linux-amd64-base",
+            "hidden": true,
+            "inherits": "linux-base",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS": "-march=x86-64-v3",
+                "CMAKE_CXX_FLAGS": "-march=x86-64-v3"
+            }
+        },
+        {
             "name": "linux-arm64-base",
             "hidden": true,
             "inherits": "linux-base",
@@ -51,12 +64,29 @@
             }
         },
         {
-            "name": "linux-amd64-base",
+            "name": "mac-base",
             "hidden": true,
-            "inherits": "linux-base",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
             "cacheVariables": {
-                "CMAKE_C_FLAGS": "-march=x86-64-v3",
-                "CMAKE_CXX_FLAGS": "-march=x86-64-v3"
+                "CMAKE_C_COMPILER": "/opt/homebrew/opt/llvm/bin/clang",
+                "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++",
+                "REXSDK_DIR": "$env{REXSDK_DIR}"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "mac-arm64-base",
+            "hidden": true,
+            "inherits": "mac-base",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS": "-march=armv8-a",
+                "CMAKE_CXX_FLAGS": "-march=armv8-a",
+                "CMAKE_OSX_ARCHITECTURES": "arm64"
             }
         },
         {
@@ -130,6 +160,24 @@
             "displayName": "Linux ARM64 RelWithDebInfo",
             "inherits": "linux-arm64-base",
             "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+        },
+        {
+            "name": "mac-arm64-debug",
+            "displayName": "macOS ARM64 Debug",
+            "inherits": "mac-arm64-base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+        },
+        {
+            "name": "mac-arm64-release",
+            "displayName": "macOS ARM64 Release",
+            "inherits": "mac-arm64-base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+        },
+        {
+            "name": "mac-arm64-relwithdebinfo",
+            "displayName": "macOS ARM64 RelWithDebInfo",
+            "inherits": "mac-arm64-base",
+            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
         }
     ],
     "buildPresets": [
@@ -144,6 +192,9 @@
         { "name": "win-arm64-relwithdebinfo", "configurePreset": "win-arm64-relwithdebinfo" },
         { "name": "linux-arm64-debug", "configurePreset": "linux-arm64-debug" },
         { "name": "linux-arm64-release", "configurePreset": "linux-arm64-release" },
-        { "name": "linux-arm64-relwithdebinfo", "configurePreset": "linux-arm64-relwithdebinfo" }
+        { "name": "linux-arm64-relwithdebinfo", "configurePreset": "linux-arm64-relwithdebinfo" },
+        { "name": "mac-arm64-debug", "configurePreset": "mac-arm64-debug" },
+        { "name": "mac-arm64-release", "configurePreset": "mac-arm64-release" },
+        { "name": "mac-arm64-relwithdebinfo", "configurePreset": "mac-arm64-relwithdebinfo" }
     ]
 }
