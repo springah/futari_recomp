@@ -100,8 +100,8 @@ cat > "$C/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key>              <string>AppIcon</string>
     <key>CFBundlePackageType</key>           <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
-    <key>CFBundleShortVersionString</key>    <string>1.3.3</string>
-    <key>CFBundleVersion</key>               <string>1.3.3</string>
+    <key>CFBundleShortVersionString</key>    <string>1.3.4</string>
+    <key>CFBundleVersion</key>               <string>1.3.4</string>
     <key>LSMinimumSystemVersion</key>        <string>13.0</string>
     <key>NSHighResolutionCapable</key>       <true/>
     <key>LSApplicationCategoryType</key>     <string>public.app-category.games</string>
