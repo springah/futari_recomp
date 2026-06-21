@@ -126,6 +126,10 @@ void SetCvarBool(std::string_view name, bool value) {
   SetCvar(name, value ? "true" : "false");
 }
 
+void SetCvarInt(std::string_view name, int32_t value) {
+  SetCvar(name, std::to_string(value));
+}
+
 void SetCvarDouble(std::string_view name, double value) {
   SetCvar(name, std::to_string(value));
 }
@@ -142,8 +146,9 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# Edit this file, then restart the game. Values shown are the defaults.\n"
        << "\n"
        << "[Display]\n"
-       << "# Window/output resolution as WxH, e.g. 1280x720. Empty = SDK default.\n"
-       << "resolution =\n"
+       << "# Window size as WxH. The game opens windowed at this size; the guest\n"
+       << "# still renders at its native resolution and is scaled to fit.\n"
+       << "resolution = 1920x1080\n"
        << "fullscreen = false\n"
        << "vsync = true\n"
        << "refresh_rate = 60\n"
@@ -214,8 +219,10 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
 
   if (auto* v = find("display.resolution")) {
     if (auto res = ParseResolution(*v)) {
-      SetCvar("resolution", std::to_string(ClampInt(res->first, 320, 8192)) + "x" +
-                                std::to_string(ClampInt(res->second, 240, 8192)));
+      // Window only: size the host window, leave the guest video mode at its
+      // native resolution (the output is scaled to fit the window).
+      SetCvarInt("window_width", ClampInt(res->first, 640, 8192));
+      SetCvarInt("window_height", ClampInt(res->second, 480, 8192));
     }
   }
   if (auto* v = find("display.fullscreen")) {
@@ -286,6 +293,16 @@ class FutariApp : public rex::ReXApp {
     if (paths.game_data_root.empty()) {
       paths.game_data_root = exe_dir / "assets";
     }
+  }
+
+  void OnPreSetup(rex::RuntimeConfig& config) override {
+    (void)config;
+    // Non-game runtime settings are baked into the binary (not exposed in the
+    // .ini, which carries only user-facing game settings): a full content
+    // license, and keyboard/mouse input on with the mouse left uncaptured.
+    SetCvarInt("license_mask", 1);
+    SetCvarBool("mnk_mode", true);
+    SetCvarBool("mnk_mouse_capture", false);
   }
 
   // Auto-install any DLC packages bundled next to the exe (a "dlc" folder)
