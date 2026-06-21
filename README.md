@@ -126,8 +126,7 @@ futari_recomp/
 ├── futari_functions.toml    # function-entry hints for the shell
 ├── CMakeLists.txt           # links rex::runtime via generated/rexglue.cmake
 ├── src/
-│   ├── main.cpp             # REX_DEFINE_APP entry
-│   └── futari_app.h         # ReXApp subclass (backend wiring is automatic)
+│   └── main.cpp             # REX_DEFINE_APP entry + ReXApp subclass + ini config
 ├── scripts/
 │   ├── extract_iso.py       # XDVDFS ISO extractor
 │   ├── analyse_xex.py       # XEX header / address inspector
