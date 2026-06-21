@@ -9,9 +9,9 @@ active build.)
 ## Platforms
 | OS | CMake preset | Status |
 |----|--------------|--------|
-| Windows (x64) | `win-amd64-release` | ✅ v1.3.1 (thunk-leak fix) |
-| Steam Deck / Linux (x64) | `linux-amd64-release` | ✅ native linux-amd64 |
-| macOS (arm64) | `mac-arm64-release` | ✅ v1.3.1 on the MBP (MoltenVK; see `mac-build/`) |
+| Windows (x64) | `win-amd64-release` | ✅ v1.3.3 (standardized PC config) |
+| Steam Deck / Linux (x64) | `linux-amd64-release` | ✅ native linux-amd64 (v1.3.2) |
+| macOS (arm64) | `mac-arm64-release` | ✅ v1.3.3 on the MBP (MoltenVK; see `mac-build/`) |
 
 ## SDK
 All builds link the shared **rexglue-sdk** via the **`REXSDK_DIR`** environment
