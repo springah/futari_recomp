@@ -28,6 +28,10 @@ for m in "${MODS[@]}"; do
   # as the shell). Use <module>_functions.toml if present.
   mod_inc="[]"
   if [ -f "${m}_functions.toml" ]; then mod_inc="[\"${m}_functions.toml\"]"; fi
+  # NOTE: sdk_version below is metadata-only — rexglue codegen parses it but only
+  # echoes it in the project header; it never validates or drives codegen (the SDK
+  # helper uses the binary's own REXGLUE_VERSION_FLOOR), and codegen restamps it.
+  # So this value is cosmetic and harmless if stale; left as-is to avoid churn.
   printf '[project]\nname = "futari"\nsdk_version = "0.8.0.0"\ngame_root = "assets"\n\n[entrypoint]\nfile_path = "assets/default.xex"\nout_directory_path = "generated/default"\nincludes = ["futari_functions.toml"]\n\n[[modules]]\nguest_path = "x"\nfile_path = "assets/media/Module/%s.xex"\nout_directory_path = "generated/%s"\nincludes = %s\n' "$m" "$m" "$mod_inc" > .regen_solo.toml
   "$REXGLUE" codegen .regen_solo.toml >/dev/null
   echo "  [ok] $m"

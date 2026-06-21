@@ -100,7 +100,6 @@ from there when re-staging the bundle, then re-`codesign --force --deep --sign -
 ```
 futari-mac/
 ├── STATUS.md                     # this file
-├── do-mac-merge.sh               # runs the SDK macOS-support merge (helper only)
 └── futari_recomp/                # the game port repo (springah/futari_recomp)
     └── thirdparty/
         ├── XenonRecomp/          # reference recompiler submodule (fetched)
@@ -126,7 +125,9 @@ mergeable, CI green, but not yet reviewed.
 
 **Recommended sequencing:** wait for #356 to merge upstream, then rebase the fork
 onto mainline — rather than carrying a fork-of-a-PR. If you want to start now,
-use `do-mac-merge.sh` against the `pr356` ref.
+merge manually from the SDK checkout: `git fetch upstream pull/356/head:pr356`,
+`git switch futari-mac-merge`, then `git merge --no-ff pr356` (expect ~2
+conflicts — see below).
 
 ## Conflict analysis (fork's futari-clang-cl-fixes vs PR #356)
 
