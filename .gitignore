@@ -10,3 +10,6 @@ legacy/
 # Transient XenonRecomp reference maps + codegen logs (regenerate via
 # scripts/build_module_hints.sh). 254MB of derived data.
 scripts/module_maps/
+
+# Scratch soak/smoke drivers + their report/sample outputs (not part of the build).
+soak_tools/

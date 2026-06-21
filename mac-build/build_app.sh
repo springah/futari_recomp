@@ -8,7 +8,20 @@ BUILD="${BUILD:-$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release}"
 # SDK source tree (the external shared rexglue-sdk). Defaults to $REXSDK_DIR, else
 # the legacy in-tree submodule path. Its runtime dylibs land in $SDK/out/mac-arm64/.
 SDK="${SDK:-${REXSDK_DIR:-$PROJ/futari-mac/futari_recomp/thirdparty/rexglue-sdk}}"
-ASSETS_SRC="${ASSETS_SRC:-$PROJ/Mushihimesama-Futari-PC-v1.2.0}"
+# Assets default: an env-provided ASSETS_SRC always wins. Otherwise pick the
+# NEWEST Mushihimesama-Futari-PC-v* dir under $PROJ (highest version), so the
+# script doesn't pin a stale release. bash-3.2 safe; set -u safe (an unmatched
+# glob must not expand to a literal and crash). We list candidates with find and
+# take the highest with sort -V; no nullglob/associative arrays/globstar needed.
+if [ -z "${ASSETS_SRC:-}" ]; then
+  ASSETS_SRC="$(find "$PROJ" -maxdepth 1 -type d -name 'Mushihimesama-Futari-PC-v*' \
+                  2>/dev/null | sort -V | tail -1)"
+  if [ -z "$ASSETS_SRC" ]; then
+    echo "ERROR: no Mushihimesama-Futari-PC-v* directory found under $PROJ" >&2
+    echo "       set ASSETS_SRC=/path/to/assets-dir to override." >&2
+    exit 1
+  fi
+fi
 APP="${APP:-$PROJ/Futari.app}"
 C="$APP/Contents"
 

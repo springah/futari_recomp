@@ -50,9 +50,28 @@ std::string Lower(std::string value) {
 }
 
 std::string StripInlineComment(std::string_view value) {
-  const size_t comment = value.find_first_of("#;");
-  if (comment != std::string_view::npos) {
-    value = value.substr(0, comment);
+  // A '#' or ';' starts an inline comment only when it is the first non-space
+  // character of the line, or is immediately preceded by whitespace. This keeps
+  // embedded '#'/';' inside unquoted values/paths (e.g. C:\Users\me#1\saves)
+  // while still stripping full-line comments and trailing " # ..." comments.
+  const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+  size_t i = 0;
+  while (i < value.size() && is_space(static_cast<unsigned char>(value[i]))) {
+    ++i;
+  }
+  for (; i < value.size(); ++i) {
+    const char c = value[i];
+    if (c == '#' || c == ';') {
+      // i is either the first non-space char (start of left-trimmed content)
+      // or there is a preceding char; treat as a comment when that preceding
+      // char is whitespace.
+      const bool at_content_start = i == 0 ||
+                                    is_space(static_cast<unsigned char>(value[i - 1]));
+      if (at_content_start) {
+        value = value.substr(0, i);
+        break;
+      }
+    }
   }
   return Trim(value);
 }
@@ -155,7 +174,8 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "letterbox = true\n"
        << "\n"
        << "[Graphics]\n"
-       << "# Output effect: bilinear, cas, fsr, fsr2, fsr3\n"
+       << "# Output effect: bilinear (cas, fsr, fsr2, fsr3 require a\n"
+       << "# FidelityFX-enabled build, which this one is not)\n"
        << "upscaler = bilinear\n"
        << "cas_sharpness = 0.0\n"
        << "dither = false\n"
@@ -300,6 +320,10 @@ class FutariApp : public rex::ReXApp {
     // Non-game runtime settings are baked into the binary (not exposed in the
     // .ini, which carries only user-facing game settings): a full content
     // license, and keyboard/mouse input on with the mouse left uncaptured.
+    // These intentionally pin the values futari relies on. They presently match
+    // the SDK defaults (so they are no-ops today), but pinning them explicitly
+    // insulates the port from any future drift in those SDK defaults; do not
+    // remove them on the grounds that they currently look redundant.
     SetCvarInt("license_mask", 1);
     SetCvarBool("mnk_mode", true);
     SetCvarBool("mnk_mouse_capture", false);
@@ -333,8 +357,21 @@ class FutariApp : public rex::ReXApp {
       return;
     }
 
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dlc_dir, ec)) {
-      if (ec || !entry.is_regular_file(ec)) {
+    // Walk dlc/ with the std::error_code-aware increment so a mid-walk I/O
+    // error can never throw (the throwing range-for operator++ would otherwise
+    // std::terminate the process at launch). The constructor's ec is reused for
+    // each increment(ec); on any iteration error we break out cleanly.
+    std::filesystem::recursive_directory_iterator it(dlc_dir, ec);
+    const std::filesystem::recursive_directory_iterator end;
+    if (ec) {
+      return;
+    }
+    for (; it != end; it.increment(ec)) {
+      if (ec) {
+        break;
+      }
+      const auto& entry = *it;
+      if (!entry.is_regular_file(ec)) {
         continue;
       }
       // Only consider STFS packages (CON / LIVE / PIRS magic at offset 0).
