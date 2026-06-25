@@ -79,6 +79,12 @@ python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 This populates `assets/` with `default.xex` and `media/Module/*.xex`
 (gitignored — never committed).
 
+> **Windows shortcut:** drag your disc `.iso` onto
+> [`extract_assets.bat`](extract_assets.bat) (or double-click it with an `.iso`
+> in the folder). It finds Python, runs the extractor, and fills `assets/` for
+> you. The game looks in `assets/` next to the exe by default, so after this it
+> runs on a plain double-click — no launcher needed.
+
 ### 4. Generate the recompiled C++
 ```sh
 bash scripts/regen.sh
