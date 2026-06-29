@@ -13,3 +13,7 @@ scripts/module_maps/
 
 # Scratch soak/smoke drivers + their report/sample outputs (not part of the build).
 soak_tools/
+
+# Python bytecode caches from the helper scripts in scripts/.
+__pycache__/
+*.pyc
