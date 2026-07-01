@@ -4,6 +4,7 @@
 set -euo pipefail
 
 PROJ="${PROJ:-$HOME/Desktop/projects}"
+VER="${VER:-1.3.6}"
 BUILD="${BUILD:-$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release}"
 # SDK source tree (the external shared rexglue-sdk). Defaults to $REXSDK_DIR, else
 # the legacy in-tree submodule path. Its runtime dylibs land in $SDK/out/mac-arm64/.
@@ -88,7 +89,7 @@ fi
 rm -rf "$WORK"
 
 echo "[6/7] Info.plist"
-cat > "$C/Info.plist" <<'PLIST'
+cat > "$C/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -100,8 +101,8 @@ cat > "$C/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key>              <string>AppIcon</string>
     <key>CFBundlePackageType</key>           <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
-    <key>CFBundleShortVersionString</key>    <string>1.3.4</string>
-    <key>CFBundleVersion</key>               <string>1.3.4</string>
+    <key>CFBundleShortVersionString</key>    <string>${VER}</string>
+    <key>CFBundleVersion</key>               <string>${VER}</string>
     <key>LSMinimumSystemVersion</key>        <string>13.0</string>
     <key>NSHighResolutionCapable</key>       <true/>
     <key>LSApplicationCategoryType</key>     <string>public.app-category.games</string>
