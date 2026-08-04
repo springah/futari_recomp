@@ -50,28 +50,28 @@ mode-switching works. Some gameplay paths still hit recompiler edge cases — se
 
 ## Build
 
-### 1. Clone + the shared SDK
+### 1. Clone (SDK included)
 ```sh
 git clone --recurse-submodules <repo-url> futari_recomp
 cd futari_recomp
 ```
-futari's only submodule is `thirdparty/XenonRecomp`. The ReXGlue SDK is **not**
-vendored here — it's the shared [`springah/rexglue-sdk`](https://github.com/springah/rexglue-sdk)
-checkout (branch `main`, the same one the sibling recomps use). Clone it as a
-sibling and point `REXSDK_DIR` at it (step 5):
-```sh
-git clone -b main https://github.com/springah/rexglue-sdk.git ../rexglue-sdk
-```
+The [ReXGlue SDK](https://github.com/springah/rexglue-sdk) is a submodule at
+`thirdparty/rexglue-sdk`, **pinned at a tagged release** (currently v0.8.5) so
+every build links a recorded SDK SHA. To develop against a live SDK checkout
+instead, set `REXSDK_DIR` to it at configure time (step 5) — when unset, the
+build uses the submodule.
 
 ### 2. Build the ReXGlue CLI
 ```sh
-cmake -S ../rexglue-sdk -B ../rexglue-sdk/build -G Ninja \
+cmake -S thirdparty/rexglue-sdk -B thirdparty/rexglue-sdk/build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
   -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe"
-cmake --build ../rexglue-sdk/build --target rexglue
-# -> ../rexglue-sdk/out/win-amd64/rexglue.exe
+cmake --build thirdparty/rexglue-sdk/build --target rexglue
+# -> thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe
 ```
+(`scripts/regen.sh` finds the submodule's binary automatically, falling back to
+a `../rexglue-sdk` sibling build.)
 
 ### 3. Extract your game assets
 ```sh
@@ -103,9 +103,10 @@ hints in [`futari_functions.toml`](futari_functions.toml). Output lands in
 cmake -S . -B out/build/win-amd64 -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
   -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
-  -DCMAKE_RC_COMPILER="C:/Program Files (x86)/Windows Kits/10/bin/<sdk-ver>/x64/rc.exe" \
-  -DREXSDK_DIR="$PWD/../rexglue-sdk"
+  -DCMAKE_RC_COMPILER="C:/Program Files (x86)/Windows Kits/10/bin/<sdk-ver>/x64/rc.exe"
 ```
+The SDK defaults to the pinned `thirdparty/rexglue-sdk` submodule; add
+`-DREXSDK_DIR=<path>` to build against a live SDK checkout instead.
 > Do **not** pass `-DCMAKE_CXX_FLAGS=...` — it clobbers CMake's default `/EHsc`
 > and breaks exception-handling in dependencies. The required SSE baseline and
 > `char8_t` flags are applied inside the SDK's own CMake.
@@ -145,10 +146,11 @@ futari_recomp/
 │   └── regen.sh             # regenerate generated/ (per-module isolated codegen)
 ├── legacy/                  # gitignored — the old hand-rolled XenonRecomp runtime
 └── thirdparty/
-    └── XenonRecomp/         # submodule (recompiler tooling)
+    └── rexglue-sdk/         # submodule — the SDK, pinned at a tagged release
 ```
-> The ReXGlue SDK is **not** under `thirdparty/` — it's the shared
-> `springah/rexglue-sdk` checkout (branch `main`), referenced via `REXSDK_DIR`.
+> Builds use the pinned submodule by default. `REXSDK_DIR` (as a CMake `-D`
+> flag) overrides it — e.g. to the shared sibling checkout the other recomp
+> ports build against — for SDK development.
 
 ---
 

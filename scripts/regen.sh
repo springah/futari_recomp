@@ -15,9 +15,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Default is the Windows codegen binary; override (e.g. on Linux/macOS) with
+# Default is the pinned submodule's Windows codegen binary, falling back to the
+# shared sibling checkout; override (e.g. on Linux/macOS) with
 # REXGLUE=<path to rexglue> scripts/regen.sh
-REXGLUE="${REXGLUE:-../rexglue-sdk/out/win-amd64/rexglue.exe}"
+if [ -z "${REXGLUE:-}" ]; then
+  if [ -x "thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe" ]; then
+    REXGLUE="thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe"
+  else
+    REXGLUE="../rexglue-sdk/out/win-amd64/rexglue.exe"
+  fi
+fi
 MODS=(reco_normal reco_abnormal palm_normal palm_abnormal hirow_normal hirow_abnormal kiniro_normal kiniro_abnormal)
 
 # 1. Entrypoint (default.xex) — uses futari_functions.toml hints. A

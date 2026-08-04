@@ -14,12 +14,14 @@ active build.)
 | macOS (arm64) | `mac-arm64-release` | ✅ v1.3.6 on the MBP (MoltenVK; see `mac-build/`) |
 
 ## SDK
-All builds link the shared **rexglue-sdk** via the **`REXSDK_DIR`** environment
-variable — an external dependency, not a vendored sibling or submodule. Set it
-before configuring, e.g. `REXSDK_DIR=C:\Users\shant\Desktop\projects\rexglue-sdk`
-(set persistently in the user profile; the `_resync_build.ps1` helper also sets it).
-The preset feeds it through as `"REXSDK_DIR": "$env{REXSDK_DIR}"`, so
-`cmake --preset win-amd64-release` resolves the SDK with no manual `-D` flag.
+All builds link the **rexglue-sdk** submodule at `thirdparty/rexglue-sdk`,
+**pinned at a tagged SDK release** (currently v0.8.5) — `cmake --preset
+win-amd64-release` resolves it with no flags or env vars. The presets no longer
+read the `REXSDK_DIR` environment variable (the persistent user-profile value
+still serves the sibling ports); to build futari against a live SDK checkout,
+pass it explicitly: `cmake --preset win-amd64-release -DREXSDK_DIR=<path>`.
+To bump the pin: tag a new SDK release, `git -C thirdparty/rexglue-sdk fetch
+--tags && git -C thirdparty/rexglue-sdk checkout vX.Y.Z`, commit the gitlink.
 
 ## Build & stage
 - **Windows:** `cmake --preset win-amd64-release && cmake --build --preset win-amd64-release`
