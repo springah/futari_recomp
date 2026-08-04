@@ -52,11 +52,17 @@ mode-switching works. Some gameplay paths still hit recompiler edge cases — se
 
 ### 1. Clone (SDK included)
 ```sh
-git clone --recurse-submodules <repo-url> futari_recomp
+git clone -c core.symlinks=true --recurse-submodules <repo-url> futari_recomp
 cd futari_recomp
 ```
+> **Windows:** `-c core.symlinks=true` matters — the SDK's libmspack submodule
+> uses git symlinks (`cabextract/mspack/*.c` → `../../libmspack/mspack/`).
+> Without it (and Developer Mode, so git may create symlinks unprivileged),
+> those files check out as path-text stubs and the SDK build fails with
+> `lzxd.c(1,1): error: expected identifier or '('`. Fix an affected checkout
+> with: `git -C <submodule> config core.symlinks true` + re-checkout the files.
 The [ReXGlue SDK](https://github.com/springah/rexglue-sdk) is a submodule at
-`thirdparty/rexglue-sdk`, **pinned at a tagged release** (currently v0.8.5) so
+`thirdparty/rexglue-sdk`, **pinned at a tagged release** (currently v0.8.5.1) so
 every build links a recorded SDK SHA. To develop against a live SDK checkout
 instead, set `REXSDK_DIR` to it at configure time (step 5) — when unset, the
 build uses the submodule.
