@@ -62,7 +62,7 @@ cd futari_recomp
 > `lzxd.c(1,1): error: expected identifier or '('`. Fix an affected checkout
 > with: `git -C <submodule> config core.symlinks true` + re-checkout the files.
 The [ReXGlue SDK](https://github.com/springah/rexglue-sdk) is a submodule at
-`thirdparty/rexglue-sdk`, **pinned at a tagged release** (currently v0.8.5.1) so
+`thirdparty/rexglue-sdk`, **pinned at a tagged release** (currently v0.9.1) so
 every build links a recorded SDK SHA. To develop against a live SDK checkout
 instead, set `REXSDK_DIR` to it at configure time (step 5) — when unset, the
 build uses the submodule.
@@ -162,13 +162,13 @@ futari_recomp/
 
 ## Known issues
 
-- **Jump-table traps.** Some gameplay paths (e.g. reco_abnormal character
-  select) host-crash with `STATUS_ILLEGAL_INSTRUCTION` from
-  `__builtin_trap(); // Switch case out of range` in a recompiled module —
-  under-sized jump-table detection. Fix needs `[[switch_tables]]` hints or
-  improved detection per table.
 - **Shell edge case `0x820816EC`.** A function with a backward branch into
   itself that doesn't split cleanly; only crashes if that path runs.
+
+(Historical: early builds host-crashed entering game modes via under-sized
+jump tables. Fixed in the SDK — index-register copy tracing, manual
+`[[switch_tables]]` support, and out-of-range cases now fall back to faithful
+indirect dispatch instead of `__builtin_trap()`.)
 
 ---
 
