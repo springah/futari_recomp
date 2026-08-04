@@ -13,8 +13,8 @@ for native PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/r
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.3.5 (Windows, macOS, and Steam Deck) — rebuilt against the
-hardened ReXGlue SDK v0.8.3 (audit security fixes).
+**Latest release:** v1.3.6 (Windows, macOS, and Steam Deck) — rebuilt against
+ReXGlue SDK v0.8.4 (F4 settings overlay rework).
 
 Per-OS build/status details live in [PORTS.md](PORTS.md); the macOS bundle scripts
 are in [`mac-build/`](mac-build/).
