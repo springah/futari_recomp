@@ -316,7 +316,12 @@ class FutariApp : public rex::ReXApp {
   }
 
   void OnPreSetup(rex::RuntimeConfig& config) override {
-    (void)config;
+    // Since the SDK's v0.9 GPU-plugin split an empty gpu_plugin means headless;
+    // futari always renders through the Xenos plugin. An explicit --gpu_plugin
+    // (cvar non-empty by the time this runs) still takes precedence.
+    if (config.gpu_plugin.empty()) {
+      config.gpu_plugin = "xenos";
+    }
     // Non-game runtime settings are baked into the binary (not exposed in the
     // .ini, which carries only user-facing game settings): a full content
     // license, and keyboard/mouse input on with the mouse left uncaptured.
