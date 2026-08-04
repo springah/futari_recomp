@@ -38,6 +38,6 @@ else()
     add_executable(futari ${FUTARI_SOURCES})
 endif()
 
-rexglue_setup_target(futari)
+rexglue_setup_target(futari GPU_PLUGINS xenos)
 
 target_compile_definitions(futari PRIVATE FUTARI_VERSION_STRING="${PROJECT_VERSION}")
