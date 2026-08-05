@@ -13,8 +13,10 @@ for native PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/r
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.3.6 (Windows, macOS, and Steam Deck) — rebuilt against
-ReXGlue SDK v0.8.4 (F4 settings overlay rework).
+**Latest release:** v1.4.0 (Windows, macOS, and Steam Deck) — first release on
+the ReXGlue SDK v0.9 line (v0.9.2): upstream v0.9.0 merge with XMA audio fixes,
+manual switch-table support, DLL indirect-call fix, SDL3 windowing, and the
+rexgpu-xenos GPU plugin split.
 
 Per-OS build/status details live in [PORTS.md](PORTS.md); the macOS bundle scripts
 are in [`mac-build/`](mac-build/).
