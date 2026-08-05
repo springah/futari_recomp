@@ -4,7 +4,7 @@
 set -euo pipefail
 
 PROJ="${PROJ:-$HOME/Desktop/projects}"
-VER="${VER:-1.3.6}"
+VER="${VER:-1.4.0}"
 BUILD="${BUILD:-$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release}"
 # SDK source tree (the external shared rexglue-sdk). Defaults to $REXSDK_DIR, else
 # the legacy in-tree submodule path. Its runtime dylibs land in $SDK/out/mac-arm64/.
