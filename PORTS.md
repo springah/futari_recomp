@@ -15,7 +15,7 @@ active build.)
 
 ## SDK
 All builds link the **rexglue-sdk** submodule at `thirdparty/rexglue-sdk`,
-**pinned at a tagged SDK release** (currently v0.9.2) — `cmake --preset
+**pinned at a tagged SDK release** (currently v0.9.3) — `cmake --preset
 win-amd64-release` resolves it with no flags or env vars. The presets no longer
 read the `REXSDK_DIR` environment variable (the persistent user-profile value
 still serves the sibling ports); to build futari against a live SDK checkout,

@@ -64,7 +64,7 @@ cd futari_recomp
 > `lzxd.c(1,1): error: expected identifier or '('`. Fix an affected checkout
 > with: `git -C <submodule> config core.symlinks true` + re-checkout the files.
 The [ReXGlue SDK](https://github.com/springah/rexglue-sdk) is a submodule at
-`thirdparty/rexglue-sdk`, **pinned at a tagged release** (currently v0.9.2) so
+`thirdparty/rexglue-sdk`, **pinned at a tagged release** (currently v0.9.3) so
 every build links a recorded SDK SHA. To develop against a live SDK checkout
 instead, set `REXSDK_DIR` to it at configure time (step 5) — when unset, the
 build uses the submodule.
