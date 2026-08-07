@@ -5,7 +5,7 @@
 > of AI coding tools (large language models). It's a hobby project: verify things
 > yourself before relying on them, and expect rough edges. No warranty.
 
-Static recompilation of **Mushihimesama Futari Ver. 1.5** (Xbox 360, 2006/2012)
+Static recompilation of **Mushihimesama Futari** (Xbox 360, 2006/2012)
 for native PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk).
 
 > **This repository contains no copyrighted game files.**
