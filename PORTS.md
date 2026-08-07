@@ -8,7 +8,7 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 | OS | Build | Status |
 |----|-------|--------|
 | Windows (x64) | manual clang-cl configure → `out/build/win-amd64` (README) | ✅ v1.4.1 (SDK v0.9.3.1) |
-| Steam Deck / Linux (x64) | `linux-amd64-release` preset, built in WSL | ✅ v1.4.1 native, verified on-device |
+| Steam Deck / Linux (x64) | `linux-amd64-release` preset, built in WSL | ✅ v1.4.1 native (v1.4.0 was Deck-verified; v1.4.1's rewritten launcher is not yet re-tested on device) |
 | macOS (arm64) | `mac-arm64-release` preset on the MBP, bundled by `mac-build/build_app.sh` | ✅ v1.4.1 (MoltenVK) |
 
 **Windows builds are not a preset.** The project compiles with clang-cl while the
