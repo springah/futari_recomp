@@ -145,8 +145,7 @@ out-of-range cases now fall back to faithful indirect dispatch rather than
 - [Xenia](https://github.com/xenia-project) — the emulator ReXGlue's runtime is rooted in
 - [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp) — recomp reference project
 
-Other Xbox 360 recomps worth a look:
-[SDOJ-Recomp](https://github.com/eandis/SDOJ-Recomp) (DoDonPachi SaiDaiOuJou) ·
-[SVR07-Recomp](https://github.com/HollywoodAkeem/SVR07-Recomp) (SmackDown vs. Raw 2007).
+Also worth a look: [SDOJ-Recomp](https://github.com/eandis/SDOJ-Recomp) — a recomp
+of another CAVE Xbox 360 shooter, DoDonPachi SaiDaiOuJou.
 
 Cave / CAVE Interactive Co., Ltd. own all rights to Mushihimesama Futari.
