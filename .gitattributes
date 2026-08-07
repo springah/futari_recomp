@@ -6,3 +6,13 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
+
+# Language stats. The shipped product is C++, but nearly all of it is the
+# recompiled `generated/` tree, which is a codegen artifact and gitignored —
+# so what remains in git is one main.cpp plus the tooling that produces the
+# build. Left alone, GitHub reports this repo as ~⅓ Shell / ⅓ Python, which
+# describes the toolbox rather than the port. These files are developer
+# tooling, not the deliverable; exclude them from the language breakdown.
+scripts/** linguist-detectable=false
+mac-build/** linguist-detectable=false
+extract_assets.bat linguist-detectable=false

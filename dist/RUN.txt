@@ -1,0 +1,37 @@
+futari_recomp v1.4.1 - self-contained test build
+Mushihimesama Futari Ver. 1.5 (Xbox 360) statically recompiled for PC.
+
+TO PLAY: double-click  futari.exe
+  (it auto-loads the bundled .\assets folder next to the exe - no launcher
+   script needed)
+
+REQUIREMENTS
+  - Windows 10/11 x64 with a Direct3D 12 GPU
+  - Microsoft Visual C++ Redistributable (x64):
+      https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+A window opens; logs go to logs\futari_NNN.log next to the exe.
+
+CONTROLS: an Xbox controller works out of the box. Keyboard is also enabled
+by default (gameplay AND menus) - defaults: arrows/WASD = d-pad/move,
+Space = A, Shift = B, Enter = Start, Tab = Back. The mouse cursor stays free
+(mouse capture is off). Press F4 for the settings overlay to rebind keys
+(Input > Keybinds) or to turn keyboard mode off (Input > mnk_mode). Changes
+there are saved to futari.ini.
+
+ADVANCED: to point at a different game-data folder, launch from a terminal
+with  futari.exe --game_data_root "X:\path\to\assets"  (an explicit
+--game_data_root overrides the default .\assets).
+
+SETTINGS: edit futari.ini (next to the exe) for resolution, fullscreen, vsync,
+upscaler, log level, etc., then restart. Saves and shader cache default to
+Documents\futari; set user_data_path / cache_path in futari.ini to relocate
+them (a relative path like "saves" keeps everything next to the exe).
+
+STATUS: title, full menu, audio, controller, save (create + load), and all 8
+game modes load, run, and mode-switch cleanly. The recompiler jump-table
+under-sizing bug that crashed mode entry (STATUS_ILLEGAL_INSTRUCTION) is fixed.
+Deeper gameplay may still hit rarer jump-table edge cases - report any crash
+with its logs\ file.
+
+(Personal test build. assets\ contains your own game data - do not redistribute.)
