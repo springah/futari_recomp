@@ -33,53 +33,27 @@ the host app (`src/main.cpp`), the codegen inputs (`*.toml`), and the build.
 
 ## Game data
 
-You supply the game yourself — nothing here ships with it.
+You supply the game yourself, from a copy you own. Two pieces:
 
-### The disc (required)
-
-Extract your **Ver 1.5** disc image into `assets/`:
+**`assets/` — the disc (required).** Extract your **Ver 1.5** disc image:
 
 ```sh
 python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 ```
 
-On Windows you can instead drag the `.iso` onto
-[`extract_assets.bat`](extract_assets.bat), which finds Python and does the same.
-Either way you should end up with:
+On Windows you can drag the `.iso` onto
+[`extract_assets.bat`](extract_assets.bat) instead. You should end up with
+`assets/default.xex` and an `assets/media/` tree containing the 8 module XEXs.
+The game reads `assets/` next to the exe; `--game_data_root <path>` points
+elsewhere.
 
-```
-assets/default.xex                 # the shell / menu
-assets/media/Module/*.xex          # the 8 game modes
-assets/media/{Rom,Sound,motion,wall,font,text}/...
-```
+**`dlc/` — the marketplace DLC (optional).** Drop the Xbox 360 STFS packages into
+a `dlc/` folder next to the exe, filenames unchanged. They install themselves on
+first launch (`DLC: InstallContent(...) -> 0x00000000` in the log). No `dlc/`
+folder just means no extra content — the game runs fine without it.
 
-The game reads `assets/` next to the exe by default; `--game_data_root <path>`
-points it somewhere else.
-
-### Marketplace DLC (optional)
-
-Futari's DLC comes as Xbox 360 **STFS packages**. On a console they live under
-title ID `435A07D7`, in the marketplace-content folder:
-
-```
-Content\0000000000000000\435A07D7\00000002\<long hex filename>
-```
-
-Copy those files into a `dlc/` folder next to the exe. **Filenames don't matter** —
-on launch the port scans `dlc/` and installs every file that starts with `LIVE`,
-`CON `, or `PIRS`, so the console's hex names work as-is. The retail set is two
-packages, roughly 264 MB and 56 KB.
-
-Check the log to confirm:
-
-```
-DLC: InstallContent('496F816DD4B5...') -> 0x00000000
-```
-
-`0x00000000` means installed. Content is unpacked once into your user-data folder
-(`Documents\futari`), so later launches log `already installed, skipping` instead.
-If there's no `dlc/` folder the step is skipped silently and the game runs normally
-— you just won't have the extra content.
+📖 **[docs/DUMPING.md](docs/DUMPING.md)** walks through getting both off your own
+console, and lists checksums to verify the result.
 
 ## Build
 
@@ -170,5 +144,9 @@ out-of-range cases now fall back to faithful indirect dispatch rather than
 - [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) — reference PPC → C++ recompiler
 - [Xenia](https://github.com/xenia-project) — the emulator ReXGlue's runtime is rooted in
 - [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp) — recomp reference project
+
+Other Xbox 360 recomps worth a look:
+[SDOJ-Recomp](https://github.com/eandis/SDOJ-Recomp) (DoDonPachi SaiDaiOuJou) ·
+[SVR07-Recomp](https://github.com/HollywoodAkeem/SVR07-Recomp) (SmackDown vs. Raw 2007).
 
 Cave / CAVE Interactive Co., Ltd. own all rights to Mushihimesama Futari.
