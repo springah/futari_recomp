@@ -19,6 +19,16 @@ Space = A, Shift = B, Enter = Start, Tab = Back. The mouse cursor stays free
 (Input > Keybinds) or to turn keyboard mode off (Input > mnk_mode). Changes
 there are saved to futari.ini.
 
+DLC: the dlc\ folder holds the game's marketplace packages. They install
+themselves on first launch (look for "DLC: InstallContent(...) -> 0x00000000"
+in the log) and unpack into Documents\futari, after which the log just says
+"already installed, skipping". Keep the folder where it is. To add your own
+packages, copy them off an Xbox 360 from
+  Content\0000000000000000\435A07D7\00000002\
+into dlc\ - the filenames don't matter, anything starting with LIVE, CON or
+PIRS is picked up. With no dlc\ folder the game still runs, just without the
+extra content.
+
 ADVANCED: to point at a different game-data folder, launch from a terminal
 with  futari.exe --game_data_root "X:\path\to\assets"  (an explicit
 --game_data_root overrides the default .\assets).

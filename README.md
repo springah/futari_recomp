@@ -31,6 +31,56 @@ Almost none of that C++ is in this repo — it's generated into `generated/` by
 `scripts/regen.sh` from your own game dump, and gitignored. What's tracked here is
 the host app (`src/main.cpp`), the codegen inputs (`*.toml`), and the build.
 
+## Game data
+
+You supply the game yourself — nothing here ships with it.
+
+### The disc (required)
+
+Extract your **Ver 1.5** disc image into `assets/`:
+
+```sh
+python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
+```
+
+On Windows you can instead drag the `.iso` onto
+[`extract_assets.bat`](extract_assets.bat), which finds Python and does the same.
+Either way you should end up with:
+
+```
+assets/default.xex                 # the shell / menu
+assets/media/Module/*.xex          # the 8 game modes
+assets/media/{Rom,Sound,motion,wall,font,text}/...
+```
+
+The game reads `assets/` next to the exe by default; `--game_data_root <path>`
+points it somewhere else.
+
+### Marketplace DLC (optional)
+
+Futari's DLC comes as Xbox 360 **STFS packages**. On a console they live under
+title ID `435A07D7`, in the marketplace-content folder:
+
+```
+Content\0000000000000000\435A07D7\00000002\<long hex filename>
+```
+
+Copy those files into a `dlc/` folder next to the exe. **Filenames don't matter** —
+on launch the port scans `dlc/` and installs every file that starts with `LIVE`,
+`CON `, or `PIRS`, so the console's hex names work as-is. The retail set is two
+packages, roughly 264 MB and 56 KB.
+
+Check the log to confirm:
+
+```
+DLC: InstallContent('496F816DD4B5...') -> 0x00000000
+```
+
+`0x00000000` means installed. Content is unpacked once into your user-data folder
+(`Documents\futari`), so later launches log `already installed, skipping` instead.
+If there's no `dlc/` folder the step is skipped silently and the game runs normally
+— you just won't have the extra content.
+
 ## Build
 
 Needs CMake 3.25+, Ninja, **LLVM/clang-cl** 20+ (at `C:\Program Files\LLVM`), the
@@ -48,7 +98,7 @@ cmake -S thirdparty/rexglue-sdk -B thirdparty/rexglue-sdk/build -G Ninja \
   -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe"
 cmake --build thirdparty/rexglue-sdk/build --target rexglue
 
-# 3. Extract your game assets (or drag an .iso onto extract_assets.bat)
+# 3. Provide the game data — see "Game data" above (assets/, and dlc/ if you have it)
 python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 
 # 4. Generate the recompiled C++ into generated/
