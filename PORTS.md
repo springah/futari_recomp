@@ -8,8 +8,8 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 | OS | Build | Status |
 |----|-------|--------|
 | Windows (x64) | manual clang-cl configure → `out/build/win-amd64` (README) | ✅ v1.4.1 (SDK v0.9.3.1) |
-| Steam Deck / Linux (x64) | `linux-amd64-release` preset, built in WSL | ✅ v1.4.0 native (built; on-Deck test pending) |
-| macOS (arm64) | `mac-arm64-release` preset on the MBP, bundled by `mac-build/build_app.sh` | ✅ v1.4.0 (MoltenVK) |
+| Steam Deck / Linux (x64) | `linux-amd64-release` preset, built in WSL | ✅ v1.4.1 native, verified on-device |
+| macOS (arm64) | `mac-arm64-release` preset on the MBP, bundled by `mac-build/build_app.sh` | ✅ v1.4.1 (MoltenVK) |
 
 **Windows builds are not a preset.** The project compiles with clang-cl while the
 presets default to `clang++`, so releases come from a hand-configured
@@ -33,8 +33,9 @@ stale and still points at a live sibling checkout rather than the submodule.
 ## Releases
 
 One SemVer tag per release; per-OS zips (`Mushihimesama-Futari-PC-vX.Y.Z.zip`,
-`-Deck-`, `-macOS-`) go to the SHARED download share and the Drive mirror. The repo
-stays code + tags: no GitHub Releases, no game content.
+`-Deck-`, `-macOS-`) go to the SHARED download share. The Drive mirror carries
+**Windows and Deck only** — not macOS. The repo stays code + tags: no GitHub
+Releases, no game content.
 
 Packaging rules — each one is here because it broke once:
 
@@ -48,3 +49,11 @@ Packaging rules — each one is here because it broke once:
    .NET `Compress-Archive` writes non-spec backslash entries and no wrapper folder.
 4. **Diff the new zip's file list against the previous release** before publishing,
    and confirm every difference is intended.
+5. **Linux bundles: zip on Linux with `zip -X`**, never from Windows. A Windows
+   zipper drops the Unix mode bits, so the launcher arrives non-executable.
+6. **No absolute paths in anything that ships.** The v1.4.0 Deck launcher and
+   `futari.ini` both hardcoded the directory they were tested from, so the bundle
+   only ran on that one machine. The launcher must resolve its own location.
+7. **Check what a bundle actually contains, not what you meant to put in it.**
+   `strings <binary> | grep rexglue-v` reports the SDK each component was built
+   against; v1.4.0's Deck zip mixed a v0.8.3 runtime with a v0.9.0-dev binary.

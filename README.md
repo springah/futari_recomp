@@ -11,7 +11,7 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.4.1 (Windows) · v1.4.0 (macOS, Steam Deck) —
+**Latest release:** v1.4.1 (Windows, macOS, Steam Deck) —
 see [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging details:
 [PORTS.md](PORTS.md).
 
@@ -130,8 +130,15 @@ thirdparty/rexglue-sdk/ # submodule — the SDK, pinned at a tagged release
 
 ## Known issues
 
-- **Shell edge case `0x820816EC`** — a function with a backward branch into itself
-  that doesn't split cleanly. Only crashes if that path runs.
+- **Shell edge case `0x820816EC`.** The analyzer splits a block at `0x82081778`
+  into its own function, but that block is really a continuation of
+  `sub_82081658` — it restores registers from the parent's frame and branches
+  back into a loop at `0x820816EC`. A branch into another function's interior
+  can't be expressed, so codegen emits a fatal there instead. It's the only such
+  case in the shell, nothing calls the block directly (it's reachable only via
+  indirect dispatch), and the game has not been observed hitting it. The likely
+  fix is to declare the block a chunk of its parent, which the SDK's function
+  config supports via its `parent` field.
 
 Historically, entering a game mode host-crashed via under-sized jump tables. Fixed
 in the SDK: index-register copy tracing, manual `[[switch_tables]]` support, and
