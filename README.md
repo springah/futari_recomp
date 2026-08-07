@@ -13,10 +13,24 @@ for native PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/r
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.4.0 (Windows, macOS, and Steam Deck) — first release on
-the ReXGlue SDK v0.9 line (v0.9.2): upstream v0.9.0 merge with XMA audio fixes,
-manual switch-table support, DLL indirect-call fix, SDL3 windowing, and the
+**Latest release:** v1.4.1 (Windows) / v1.4.0 (macOS, Steam Deck) — the v1.4 line
+is the first on the ReXGlue SDK v0.9 branch: upstream v0.9.0 merge with XMA audio
+fixes, manual switch-table support, DLL indirect-call fix, SDL3 windowing, and the
 rexgpu-xenos GPU plugin split.
+
+**v1.4.1 (Windows)** is a maintenance rebuild on the current SDK pin (v0.9.3.1,
+up from the v0.9.2 that v1.4.0 shipped) plus a package cleanup:
+- The bundle no longer carries development leftovers — ~64 MB of superseded binary
+  backups (`*.orig`, `*.pre_*`, `futari.exe.oracle1`), the instrumented
+  `futari_ref.exe`, the Tracy profiler DLL, 212 of the developer's own run logs, and
+  a machine-local shortcut.
+- `RUN.txt` no longer shows `???` where dashes belong (it had been written in a
+  codepage that couldn't encode them).
+- SDK v0.9.3/v0.9.3.1 carry a cvar fix (`SetFlagByName` now defers values for cvars
+  a runtime-loaded GPU plugin hasn't registered yet) and a macOS `MenuItem` link fix.
+  An A/B of the two runtimes showed **no observable behaviour change for futari** —
+  its `futari.ini` keys are all core cvars — so this is a currency rebuild, not a
+  gameplay fix.
 
 Per-OS build/status details live in [PORTS.md](PORTS.md); the macOS bundle scripts
 are in [`mac-build/`](mac-build/).

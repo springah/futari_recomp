@@ -9,7 +9,7 @@ active build.)
 ## Platforms
 | OS | CMake preset | Status |
 |----|--------------|--------|
-| Windows (x64) | `win-amd64-release` | ✅ v1.4.0 (SDK v0.9.2, rexgpu-xenos plugin) |
+| Windows (x64) | `win-amd64-release` | ✅ v1.4.1 (SDK v0.9.3.1, rexgpu-xenos plugin) |
 | Steam Deck / Linux (x64) | `linux-amd64-release` | ✅ v1.4.0 native linux-amd64 (built; on-Deck test pending) |
 | macOS (arm64) | `mac-arm64-release` | ✅ v1.4.0 on the MBP (MoltenVK; see `mac-build/`) |
 
