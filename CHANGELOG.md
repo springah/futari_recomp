@@ -29,8 +29,25 @@ showed no behaviour change for futari — the value here is in the packaging.
   arrived non-executable and paths needed repairing by hand. Packed with `zip -X`
   now, which preserves both.
 
-**macOS** — rebuilt; no packaging problems found. `libTracyClient.dylib` stays, as
-the app and runtime link against it.
+**macOS** — this one turned out to be broken *before* v1.4.1, and the rebuild is
+what surfaced it:
+- **The GPU plugin was never in the bundle.** SDK v0.9 split the renderer out of
+  the runtime, but `mac-build/build_app.sh` predates that and never staged it, so
+  the app started and died with `Failed to load GPU plugin 'xenos'`. **v1.4.0
+  shipped this way** — macOS has had no working renderer since the v0.9 migration.
+  The plugin is staged now, deliberately renamed `.dylib` → `.so`, because the
+  SDK's `PluginFileName()` asks for `.so` on every non-Windows platform including
+  macOS. That rename is a workaround; the fix belongs in the SDK.
+- **The bundle shipped a mismatched runtime.** The script preferred the
+  `REXSDK_DIR` environment variable over the pinned submodule, so a v0.8.5.1
+  `librexruntime.dylib` landed next to a v0.9.3.1 executable and dyld refused to
+  launch it. The submodule now wins, and the build fails outright if the
+  executable and runtime report different SDK versions.
+
+`libTracyClient.dylib` stays — the app and runtime link against it.
+
+Verified on an M3 Max: GPU plugin loads, MoltenVK initialises, all 8 modules
+register, DLC installs, no errors in the log.
 
 ## v1.4.0 — 2026-08-05 (Windows, macOS, Steam Deck)
 
