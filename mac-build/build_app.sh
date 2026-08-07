@@ -6,9 +6,14 @@ set -euo pipefail
 PROJ="${PROJ:-$HOME/Desktop/projects}"
 VER="${VER:-1.4.0}"
 BUILD="${BUILD:-$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release}"
-# SDK source tree (the external shared rexglue-sdk). Defaults to $REXSDK_DIR, else
-# the legacy in-tree submodule path. Its runtime dylibs land in $SDK/out/mac-arm64/.
-SDK="${SDK:-${REXSDK_DIR:-$PROJ/futari-mac/futari_recomp/thirdparty/rexglue-sdk}}"
+# SDK source tree. Its runtime dylibs land in $SDK/out/mac-arm64/.
+# The PINNED SUBMODULE WINS: builds link the submodule, so the bundle must ship
+# that same SDK's dylibs. $REXSDK_DIR is a persistent user-profile value pointing
+# at a shared sibling checkout for the OTHER ports, and honouring it here shipped
+# a v0.8.5.1 librexruntime.dylib next to a v0.9.3.1 futari in v1.4.1 -- the app
+# died at launch with "Symbol not found: __Z28FLAGS_metadata_root_storage_v".
+# Set SDK=... explicitly to override.
+SDK="${SDK:-$PROJ/futari-mac/futari_recomp/thirdparty/rexglue-sdk}"
 # Assets default: an env-provided ASSETS_SRC always wins. Otherwise pick the
 # NEWEST Mushihimesama-Futari-PC-v* dir under $PROJ (highest version), so the
 # script doesn't pin a stale release. bash-3.2 safe; set -u safe (an unmatched
@@ -46,6 +51,18 @@ cp "$BUILD/futari" "$C/MacOS/"
 cp "$BUILD"/libfutari_*.dylib "$C/MacOS/"
 copy_first librexruntime.dylib "$C/MacOS/"
 copy_first libTracyClient.dylib "$C/MacOS/"
+
+# GPU plugin (SDK v0.9 split the renderer out of the runtime; without this the
+# app starts and then dies with "Failed to load GPU plugin 'xenos'").
+# NOTE THE RENAME: CMake builds it as librexgpu-xenos.dylib, but the SDK's
+# PluginFileName() asks for ".so" on every non-Windows platform, macOS included
+# (src/system/gpu_plugin_loader.cpp) -- even though dynlib_posix.cpp does know
+# about .dylib. dlopen ignores the extension, so staging it under the name the
+# loader wants works. Remove the rename once the SDK learns .dylib on Apple.
+for c in "$BUILD/librexgpu-xenos.dylib" "$SDK/out/mac-arm64/librexgpu-xenos.dylib"; do
+  if [ -f "$c" ]; then cp "$c" "$C/MacOS/librexgpu-xenos.so"; break; fi
+done
+[ -f "$C/MacOS/librexgpu-xenos.so" ] || { echo "  ERROR: librexgpu-xenos.dylib not found" >&2; exit 1; }
 
 echo "[3/7] bundled MoltenVK (self-contained, no Homebrew dependency)"
 # Resolve the real dylib (Homebrew symlink) so the copy is standalone.
@@ -112,6 +129,19 @@ PLIST
 
 echo "[7/7] ad-hoc code signature (required for arm64 launch)"
 codesign --force --deep --sign - "$APP" 2>&1 | tail -2 || echo "  (codesign warning, usually fine)"
+
+echo "[8/8] version consistency check"
+# Every shipped component must report the same SDK. A mismatch here is what
+# broke v1.4.1's first mac bundle, and it fails at launch, not at build time.
+exe_v="$(strings "$C/MacOS/futari" | grep -oE 'rexglue-v[0-9][0-9.]*' | sort -u | head -1)"
+rt_v="$(strings "$C/MacOS/librexruntime.dylib" | grep -oE 'rexglue-v[0-9][0-9.]*' | sort -u | head -1)"
+echo "  futari:            ${exe_v:-?}"
+echo "  librexruntime:     ${rt_v:-?}"
+if [ "$exe_v" != "$rt_v" ]; then
+  echo "  ERROR: SDK mismatch between the executable and the runtime -- this bundle will not launch." >&2
+  exit 1
+fi
+echo "  match"
 
 echo ""
 echo "DONE -> $APP"
