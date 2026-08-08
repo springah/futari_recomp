@@ -22,29 +22,48 @@ All builds link the `thirdparty/rexglue-sdk` submodule, pinned at a tagged relea
 (currently **v0.9.3.1**), so every build records an SDK SHA. `-DREXSDK_DIR=<path>`
 overrides it with a live checkout.
 
+The submodule points at [springah/rexglue-sdk](https://github.com/springah/rexglue-sdk),
+a fork of [rexglue/rexglue-sdk](https://github.com/rexglue/rexglue-sdk). The fork
+carries the clang-cl build fixes and the macOS fixes this port depends on; two of
+the latter are written up in [docs/upstream/](docs/upstream/) and have not been
+offered upstream yet. Pointing `REXSDK_DIR` at an upstream checkout will miss
+them — expect the macOS path in particular to fail there.
+
 To bump the pin: tag an SDK release, then
 `git -C thirdparty/rexglue-sdk fetch --tags && git -C thirdparty/rexglue-sdk checkout vX.Y.Z`,
 and commit the gitlink.
 
 ⚠️ Check what a build directory is pinned to before shipping from it —
-`grep REXSDK_DIR out/build/<dir>/CMakeCache.txt`. `out/build/win-amd64-release` is
-stale and still points at a live sibling checkout rather than the submodule.
+`grep REXSDK_DIR out/build/<dir>/CMakeCache.txt`. A directory configured with an
+explicit `-DREXSDK_DIR` keeps pointing at that checkout, not the submodule, until
+it is reconfigured.
+
+**macOS needs Homebrew LLVM.** The SDK's compiler gate rejects AppleClang by both
+ID and version, so the `mac-*` presets point at `/opt/homebrew/opt/llvm/bin/clang++`.
+MoltenVK is `dlopen`ed at runtime rather than vendored — `brew install molten-vk`
+to build and run from a build directory; `mac-build/build_app.sh` bundles a copy
+into the `.app` so the shipped bundle needs no Homebrew.
 
 ## Releases
 
-One SemVer tag per release; per-OS zips (`Mushihimesama-Futari-PC-vX.Y.Z.zip`,
-`-Deck-`, `-macOS-`) go to the SHARED download share. The Drive mirror carries
-**Windows and Deck only** — not macOS. The repo stays code + tags: no GitHub
-Releases, no game content.
+One SemVer tag per release; per-OS zips are named
+`Mushihimesama-Futari-PC-vX.Y.Z.zip`, `-Deck-`, `-macOS-`. The repository stays
+code + tags: no GitHub Releases, and no game content anywhere in a bundle or a
+tag. Bundles are distributed separately, and not every platform is mirrored to
+every location — check before pointing someone at a link.
 
 Packaging rules — each one is here because it broke once:
 
 1. **Stage into a fresh directory.** Don't repack the previous bundle in place; the
    working copy collects debug leftovers. v1.4.0 shipped 64 MB of them, including
    212 developer run logs.
-2. **Futari ships more than exe + DLLs + `assets/`** — also `dlc/` (two STFS
-   packages installed on launch), `icon1.ico`, `icon2.ico`, `futari.ini`, and
-   `RUN.txt` copied from [`dist/RUN.txt`](dist/RUN.txt).
+2. **A public bundle carries no game data.** Ship the exe, the 8 module DLLs, the
+   SDK runtime + GPU plugin, `icon1.ico`, `icon2.ico`, `futari.ini`,
+   `extract_assets.bat` + `extract_iso.py` (so the user can populate `assets/`
+   themselves), and `RUN.txt` copied from [`dist/RUN.txt`](dist/RUN.txt). An
+   empty `dlc/` with its `README.txt` is fine; the packages themselves are not.
+   `assets/` and `dlc/` contents are the game — they never go in a bundle that
+   leaves your machine. Grep the staged tree for `.xex` before zipping.
 3. **Zip with 7z**, under a single top-level `Mushihimesama-Futari-PC/` folder.
    .NET `Compress-Archive` writes non-spec backslash entries and no wrapper folder.
 4. **Diff the new zip's file list against the previous release** before publishing,

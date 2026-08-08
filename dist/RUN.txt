@@ -1,47 +1,43 @@
-futari_recomp v1.4.1 - self-contained test build
-Mushihimesama Futari Ver. 1.5 (Xbox 360) statically recompiled for PC.
+Mushihimesama Futari Ver. 1.5 (recompiled) - public build
+Xbox 360 (2006/2012) statically recompiled for PC. No game files are included;
+you must own the game and supply your own dump.
 
-TO PLAY: double-click  futari.exe
-  (it auto-loads the bundled .\assets folder next to the exe - no launcher
-   script needed)
+ADD YOUR GAME
+  Drag your Mushihimesama Futari Ver. 1.5 disc .iso onto extract_assets.bat
+  (needs Python 3). It extracts default.xex + the game modules into assets\.
+  Already have the files extracted? Just put them in assets\ so that
+  assets\default.xex and assets\media\ exist.
+
+TO PLAY
+  Once assets\ is populated, double-click futari.exe. It auto-loads the
+  .\assets folder next to it - no launcher script needed. A window opens; logs
+  go to logs\futari_NNN.log next to the exe.
+
+DLC (optional)
+  Own any add-on content? Drop the Xbox 360 STFS packages into the dlc\ folder
+  and they install automatically on launch. See dlc\README.txt for details.
 
 REQUIREMENTS
   - Windows 10/11 x64 with a Direct3D 12 GPU
   - Microsoft Visual C++ Redistributable (x64):
       https://aka.ms/vs/17/release/vc_redist.x64.exe
 
-A window opens; logs go to logs\futari_NNN.log next to the exe.
+CONTROLS
+  An Xbox controller works out of the box. Keyboard is also enabled (gameplay
+  and menus): arrows/WASD = move, Space = A, Shift = B, Escape = Start,
+  Tab = Back. Press F4 for the settings overlay to rebind keys or turn keyboard
+  mode off. The mouse cursor stays free.
 
-CONTROLS: an Xbox controller works out of the box. Keyboard is also enabled
-by default (gameplay AND menus) - defaults: arrows/WASD = d-pad/move,
-Space = A, Shift = B, Enter = Start, Tab = Back. The mouse cursor stays free
-(mouse capture is off). Press F4 for the settings overlay to rebind keys
-(Input > Keybinds) or to turn keyboard mode off (Input > mnk_mode). Changes
-there are saved to futari.ini.
+SETTINGS
+  Edit futari.ini (next to the exe) for resolution, fullscreen, vsync, upscaler,
+  and log level, then restart. Saves and shader cache default to Documents\futari;
+  set user_data_path / cache_path in futari.ini to relocate them (a relative path
+  like "saves" keeps everything next to the exe for a portable build).
 
-DLC: the dlc\ folder holds the game's marketplace packages. They install
-themselves on first launch (look for "DLC: InstallContent(...) -> 0x00000000"
-in the log) and unpack into Documents\futari, after which the log just says
-"already installed, skipping". Keep the folder where it is. To add your own
-packages, copy them off an Xbox 360 from
-  Content\0000000000000000\435A07D7\00000002\
-into dlc\ - the filenames don't matter, anything starting with LIVE, CON or
-PIRS is picked up. With no dlc\ folder the game still runs, just without the
-extra content.
+STATUS
+  Boots to title and full menu; all 8 game modes load and mode-switch. Some
+  deeper gameplay paths may still hit rare recompiler edge cases - report any
+  crash with its logs\ file.
 
-ADVANCED: to point at a different game-data folder, launch from a terminal
-with  futari.exe --game_data_root "X:\path\to\assets"  (an explicit
---game_data_root overrides the default .\assets).
-
-SETTINGS: edit futari.ini (next to the exe) for resolution, fullscreen, vsync,
-upscaler, log level, etc., then restart. Saves and shader cache default to
-Documents\futari; set user_data_path / cache_path in futari.ini to relocate
-them (a relative path like "saves" keeps everything next to the exe).
-
-STATUS: title, full menu, audio, controller, save (create + load), and all 8
-game modes load, run, and mode-switch cleanly. The recompiler jump-table
-under-sizing bug that crashed mode entry (STATUS_ILLEGAL_INSTRUCTION) is fixed.
-Deeper gameplay may still hit rarer jump-table edge cases - report any crash
-with its logs\ file.
-
-(Personal test build. assets\ contains your own game data - do not redistribute.)
+Built with heavy use of AI tooling. Hobby project, no warranty. Cave own all
+rights to Mushihimesama Futari.
