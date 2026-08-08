@@ -3,7 +3,9 @@
 Static recompilation of **Mushihimesama Futari** (Xbox 360, 2006/2012) for native
 PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk).
 
-> **No game files here.** You must own a copy and extract the assets yourself.
+> **No game files here.** This repository contains no game code, data, or
+> assets, and never will. You supply them yourself from a disc you own — see
+> [Game data](#game-data) and [docs/DUMPING.md](docs/DUMPING.md).
 
 > ⚠️ **Built with heavy use of AI.** Code, tooling, and docs in this repo were
 > written largely with LLM assistance. Hobby project — verify before relying on
@@ -13,7 +15,8 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 **Latest release:** v1.4.1 (Windows, macOS, Steam Deck) —
 see [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging details:
-[PORTS.md](PORTS.md).
+[PORTS.md](PORTS.md). This repository is source and tags only; prebuilt
+bundles are not published here, so the path below is to build it yourself.
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
 load, run, and mode-switch cleanly. Deeper gameplay can still hit rare recompiler
@@ -60,9 +63,15 @@ console, and lists checksums to verify the result.
 Needs CMake 3.25+, Ninja, **LLVM/clang-cl** 20+ (at `C:\Program Files\LLVM`), the
 Windows SDK (for `rc.exe`), Python 3.8+, and git + bash.
 
+The `thirdparty/rexglue-sdk` submodule points at
+[springah/rexglue-sdk](https://github.com/springah/rexglue-sdk), a fork of the
+[upstream SDK](https://github.com/rexglue/rexglue-sdk) pinned at **v0.9.3.1**.
+The fork carries the clang-cl and macOS fixes this port needs, some of which are
+not upstream yet; see [PORTS.md](PORTS.md#sdk).
+
 ```sh
 # 1. Clone with the SDK submodule (pinned at a tagged release)
-git clone -c core.symlinks=true --recurse-submodules <repo-url> futari_recomp
+git clone -c core.symlinks=true --recurse-submodules https://github.com/springah/futari_recomp
 cd futari_recomp
 
 # 2. Build the ReXGlue CLI
@@ -112,6 +121,9 @@ out/build/win-amd64/futari.exe --game_data_root assets
   `regen.sh` already handles this; don't collapse it into a single codegen pass.
 - **The SDK pin.** Builds use the `thirdparty/rexglue-sdk` submodule at a tagged
   release. Pass `-DREXSDK_DIR=<path>` to build against a live checkout instead.
+- **`generated/` must exist before you configure.** `CMakeLists.txt` includes
+  `generated/rexglue.cmake`, which step 4 produces. Configuring a fresh clone
+  without running `scripts/regen.sh` first fails immediately, by design.
 
 </details>
 
@@ -155,4 +167,30 @@ out-of-range cases now fall back to faithful indirect dispatch rather than
 Also worth a look: [SDOJ-Recomp](https://github.com/eandis/SDOJ-Recomp) — a recomp
 of another CAVE Xbox 360 shooter, DoDonPachi SaiDaiOuJou.
 
-Cave / CAVE Interactive Co., Ltd. own all rights to Mushihimesama Futari.
+## Legal
+
+Mushihimesama Futari, and all of its code, data, audio, and artwork, are the
+property of Cave Interactive Co., Ltd. This project is not affiliated with,
+endorsed by, or connected to Cave in any way.
+
+Nothing here is a substitute for owning the game:
+
+- **No game content is distributed.** Not in this repository, not in the release
+  bundles, not in any form. The port is inert without a dump you provide.
+- **The recompiled C++ is produced on your machine, from your own disc.** It is
+  a translation of Cave's executable code, so it belongs to you no more than the
+  disc does — don't redistribute it or anything built from it.
+- **Do not ask for game files.** Requests for dumps, links, or "where do I get
+  the ISO" will be closed. [docs/DUMPING.md](docs/DUMPING.md) covers the only
+  supported route: your own disc, read with your own console.
+
+## Licence
+
+The contents of this repository — the host app, the tooling, the codegen inputs,
+the build files, and the docs — are under the
+[BSD 3-Clause licence](LICENSE), matching the SDK's own licence and the Xenia
+lineage behind it. That licence covers **this repository only**; it grants no
+rights whatsoever to the game, or to the recompiled code generated from it. See
+[LICENSE](LICENSE) for the full scope.
+
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
