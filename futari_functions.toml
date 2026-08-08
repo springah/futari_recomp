@@ -1,14 +1,15 @@
 # Function-entry seeds for Mushihimesama Futari Ver. 1.5
 #
-# ReXGlue's analyzer discovers ~6065 functions; the reference XenonRecomp run
-# (legacy/generated/ppc_func_mapping.cpp) found more. The gap that matters is
+# ReXGlue's analyzer discovers ~6065 functions; a reference XenonRecomp run
+# (its generated ppc_func_mapping.cpp — see scripts/build_module_hints.sh, which
+# automates the same comparison for the game modules) found more. The gap that matters is
 # REAL functions (not XenonRecomp's many ".long 0x0" data/null slots) that
 # ReXGlue misses — indirect/computed-call targets with no PDATA or static call
 # edge, plus a few GapFill merged into neighbors. The game computes calls into
 # these and the runtime FATALs ("Call to invalid or unregistered function").
 #
-# This list is exactly: {legacy functions that ReXGlue can decode to real
-# instruction blocks} - {ReXGlue baseline}. Data/null addresses are excluded
+# This list is exactly: {XenonRecomp-reference functions that ReXGlue can decode
+# to real instruction blocks} - {ReXGlue baseline}. Data/null addresses are excluded
 # (seeding them as functions corrupts surrounding real code -> "Unresolved call"
 # regressions). All are bare entry seeds; the analyzer discovers each extent.
 [functions]
@@ -27,7 +28,7 @@
 # turns the internal `b` into an unresolvable cross-function tail-call, no
 # better than leaving it. It only FATALs if that code path runs; revisit with
 # a midasm hook or proper split if the game actually reaches it.
-# Real functions ReXGlue misses (computed from the legacy/ReXGlue map diff):
+# Real functions ReXGlue misses (computed from the XenonRecomp/ReXGlue map diff):
 "0x82061D60" = {}
 "0x82061D70" = {}
 "0x82061D80" = {}

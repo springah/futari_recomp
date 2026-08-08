@@ -9,15 +9,16 @@
 # one manifest. So each module is codegen-ed in ISOLATION (own single-module
 # manifest, placeholder guest_path — codegen only reads file_path), then the
 # module_registry.cpp + dll_targets.cmake covering ALL modules are assembled by
-# hand. See memory: futari-recomp-sdk-build.md.
+# hand. Don't collapse this into a single codegen pass.
 #
 # Usage: scripts/regen.sh   (run from repo root)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Default is the pinned submodule's Windows codegen binary, falling back to the
-# shared sibling checkout; override (e.g. on Linux/macOS) with
-# REXGLUE=<path to rexglue> scripts/regen.sh
+# Default is the pinned submodule's Windows codegen binary, falling back to a
+# sibling rexglue-sdk checkout if you keep one next to this repo. Override with
+# REXGLUE=<path to rexglue> scripts/regen.sh — required on Linux/macOS, where
+# the binary is ./rexglue rather than rexglue.exe.
 if [ -z "${REXGLUE:-}" ]; then
   if [ -x "thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe" ]; then
     REXGLUE="thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe"

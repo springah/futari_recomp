@@ -24,14 +24,44 @@
 # 0x82xxxxxx warnings in the logs are the shell (entrypoint) codegen and are
 # pre-existing; this script only ever acts on 0x88xxxxxx module addresses.
 #
+# REQUIRES XenonRecomp, which is NOT a submodule of this repo -- it is only
+# needed to regenerate the *_functions.toml hints, which are already committed,
+# so a normal build never touches it. To run this script, clone and build it
+# yourself and point XENON at the binary:
+#
+#   git clone --recursive https://github.com/hedge-dev/XenonRecomp thirdparty/XenonRecomp
+#   cmake -S thirdparty/XenonRecomp -B thirdparty/XenonRecomp/build && \
+#     cmake --build thirdparty/XenonRecomp/build
+#
 # Usage: scripts/build_module_hints.sh [module ...]   (default: all 8)
-#        run from repo root.
+#        run from repo root. Override XENON / CTXHDR / REXGLUE to point at
+#        binaries elsewhere.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-XENON="./thirdparty/XenonRecomp/build/XenonRecomp/XenonRecomp.exe"
-CTXHDR="thirdparty/XenonRecomp/XenonUtils/ppc_context.h"
-REXGLUE="./thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe"
+XENON="${XENON:-./thirdparty/XenonRecomp/build/XenonRecomp/XenonRecomp.exe}"
+CTXHDR="${CTXHDR:-thirdparty/XenonRecomp/XenonUtils/ppc_context.h}"
+REXGLUE="${REXGLUE:-./thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe}"
+
+# Preflight: fail with something actionable rather than a bare "not found" on
+# the first codegen call. XenonRecomp is a manual, non-submodule dependency.
+if [ ! -x "$XENON" ]; then
+  echo "ERROR: XenonRecomp not found at: $XENON" >&2
+  echo "       It is NOT a submodule -- see the header of this script for how to" >&2
+  echo "       build it, or set XENON=/path/to/XenonRecomp." >&2
+  echo "       You do not need it for a normal build: the *_functions.toml hints" >&2
+  echo "       this script produces are already committed." >&2
+  exit 1
+fi
+if [ ! -f "$CTXHDR" ]; then
+  echo "ERROR: ppc_context.h not found at: $CTXHDR (set CTXHDR=...)" >&2
+  exit 1
+fi
+if [ ! -x "$REXGLUE" ]; then
+  echo "ERROR: rexglue not found at: $REXGLUE" >&2
+  echo "       Build the SDK CLI first (see README), or set REXGLUE=/path/to/rexglue." >&2
+  exit 1
+fi
 WORK="scripts/module_maps"
 ALL_MODS=(reco_normal reco_abnormal palm_normal palm_abnormal hirow_normal hirow_abnormal kiniro_normal kiniro_abnormal)
 if [ "$#" -gt 0 ]; then MODS=("$@"); else MODS=("${ALL_MODS[@]}"); fi

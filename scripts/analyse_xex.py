@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Reads a decrypted/decompressed XEX2 binary and prints the values needed
-for ppc/ppc_config.h and config/futari_rexglue.toml.
+Reads a decrypted/decompressed XEX2 binary and prints its load address, entry
+point, and ABI helper addresses -- the values a recompiler manifest needs
+(futari_manifest.toml here, ppc_config.h if you are cross-checking against
+XenonRecomp).
 
 Requires the XEX to be already decrypted. If you have xextool or XenonUtils
 built, use those to decrypt first:
@@ -172,14 +174,14 @@ def main():
     abi = scan_for_abi_helpers(data, image_base, pe_offset)
     vmx = scan_for_vmx_helpers(data, image_base, pe_offset)
 
-    print(f"\n--- ppc/ppc_config.h values ---")
+    print(f"\n--- image layout (ppc_config.h form) ---")
     print(f"#define PPC_IMAGE_BASE  0x{image_base:08X}U")
     if hdr.get("image_size"):
         print(f"#define PPC_IMAGE_SIZE  0x{hdr['image_size']:08X}U")
     if hdr.get("entry_point"):
         print(f"// entry_point     0x{hdr['entry_point']:08X}")
 
-    print(f"\n--- config/futari_rexglue.toml ABI addresses ---")
+    print(f"\n--- ABI helper addresses (manifest form) ---")
     for name, addr in {**abi, **vmx}.items():
         if addr:
             print(f"{name}_address = 0x{addr:08X}")
@@ -188,10 +190,10 @@ def main():
     print(f"# savevmx_64 / restvmx_64 (VMX128, v64-v127) not scanned — use XenonAnalyse")
 
     print("\n--- Next step ---")
-    print("1. Fill in the values above into ppc/ppc_config.h and config/futari_rexglue.toml")
-    print("2. Run XenonAnalyse on the XEX to generate switch tables:")
-    print("   XenonAnalyse assets/default.xex config/futari_switch_tables.toml")
-    print("3. Then run CMake configure + codegen.")
+    print("This is a cross-check tool: ReXGlue reads these values out of the XEX")
+    print("itself, so futari_manifest.toml does not need them. Use the output when")
+    print("a codegen result looks wrong, or when comparing against XenonRecomp,")
+    print("whose ppc_config.h does want them filled in by hand.")
 
 
 if __name__ == "__main__":

@@ -16,6 +16,19 @@ if(NOT REXSDK_DIR AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk
         CACHE PATH "Path to rexglue-sdk source tree" FORCE)
 endif()
 
+# generated/ is codegen output and is gitignored, so a fresh clone does not have
+# it. Say so plainly -- the bare include() failure is an unhelpful place for a
+# first-time builder to land.
+if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/generated/rexglue.cmake")
+    message(FATAL_ERROR
+        "generated/rexglue.cmake is missing -- the recompiled sources have not "
+        "been generated yet.\n"
+        "Supply your own game dump in assets/ (see README: \"Game data\"), then "
+        "run:\n"
+        "    bash scripts/regen.sh\n"
+        "and re-run this configure step.")
+endif()
+
 include(generated/rexglue.cmake)
 
 # Sources
