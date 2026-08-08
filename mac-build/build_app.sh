@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
 # Assemble a self-contained Futari.app from the mac-arm64 build + extracted assets.
-# Output: ~/Desktop/projects/Futari.app
+#
+# This is the maintainer's packaging script, and its defaults describe one
+# machine's layout: it expects the repo, the SDK, and a directory of extracted
+# game data to sit side by side under $PROJ. Every path is overridable by
+# environment variable, so it works anywhere you point it:
+#
+#   PROJ=...        parent directory holding the checkout + asset dirs
+#   BUILD=...       cmake build dir containing futari + libfutari_*.dylib
+#   SDK=...         SDK source tree (its dylibs come from $SDK/out/mac-arm64/)
+#   ASSETS_SRC=...  directory containing assets/ and (optionally) dlc/
+#   APP=...         output bundle path
+#   VER=...         CFBundleShortVersionString (keep in sync with CMakeLists.txt)
+#   SKIP_ASSETS=1   build the bundle without game data
+#
+# The bundle it produces contains YOUR game data. It is for your own machines;
+# do not redistribute it. See PORTS.md for what a public bundle may contain.
 set -euo pipefail
 
 PROJ="${PROJ:-$HOME/Desktop/projects}"
-VER="${VER:-1.4.0}"
+VER="${VER:-1.4.1}"
 BUILD="${BUILD:-$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release}"
 # SDK source tree. Its runtime dylibs land in $SDK/out/mac-arm64/.
 # The PINNED SUBMODULE WINS: builds link the submodule, so the bundle must ship
