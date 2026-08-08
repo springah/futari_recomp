@@ -24,7 +24,7 @@ REQUIREMENTS
 
 CONTROLS
   An Xbox controller works out of the box. Keyboard is also enabled (gameplay
-  and menus): arrows/WASD = move, Space = A, Shift = B, Escape = Start,
+  and menus): arrows/WASD = move, Space = A, Shift = B, Enter = Start,
   Tab = Back. Press F4 for the settings overlay to rebind keys or turn keyboard
   mode off. The mouse cursor stays free.
 
