@@ -3,6 +3,28 @@
 Versions are per-repo; each release is a tag, with per-OS zips on the download
 share. Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## v1.5.3 — 2026-10-21 (source release; bundles remain v1.5.2 until restaged)
+
+The port's first outside contribution. One shell-side change, no SDK, renderer
+or game-logic changes, and no codegen regen needed.
+
+- **Exit from the title screen with B or Esc.** The console title screen only
+  accepts START/A, so on PC the only way out was the window's close button or a
+  window-manager shortcut — awkward in fullscreen and with a controller. Like
+  CAVE's own PC ports, the idle title now shows "Press B or Esc to exit." in the
+  bottom-right corner and quits on **B** from any connected pad or on **Escape**
+  on the keyboard. Escape is rebindable as `bind_title_exit` in the F4 settings
+  overlay, and the hint follows the bind live. Exit takes the same shutdown path
+  as the title-bar close button. B only fires on a fresh press (a B held over
+  from backing out of the menus is ignored), and while an interactive SDK
+  overlay is open (settings, console, debug, achievements) B and Esc belong to
+  the overlay and the hint is hidden. Everything else on the title, in the menus
+  and in gameplay is unchanged. Implemented by overriding the title's idle-state
+  function (`sub_821CBFF0`) from `main.cpp`: generated guest functions are weak,
+  so a strong definition takes over the dispatch entry without touching the
+  recompiler output. Contributed by itemzer0 (#3); tested on Linux by the
+  author, build-verified on macOS.
+
 ## v1.5.2 — 2026-08-11 (Windows, macOS, Steam Deck)
 
 Clears the README's last known issue. Bundles for all three platforms were

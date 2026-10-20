@@ -15,10 +15,10 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.2 (Windows, macOS, Steam Deck). See
-[CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging details:
-[PORTS.md](PORTS.md). Prebuilt bundles are not published here, so the path below
-is to build it yourself.
+**Latest release:** v1.5.3 — source only; the current player bundles are v1.5.2
+(Windows, macOS, Steam Deck). See [CHANGELOG.md](CHANGELOG.md). Per-OS build and
+packaging details: [PORTS.md](PORTS.md). Prebuilt bundles are not published here,
+so the path below is to build it yourself.
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
 load, run, and mode-switch cleanly. Deeper gameplay can still hit rare recompiler

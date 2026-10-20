@@ -19,7 +19,7 @@
 set -euo pipefail
 
 PROJ="${PROJ:-$HOME/Desktop/projects}"
-VER="${VER:-1.4.2}"
+VER="${VER:-1.5.3}"
 BUILD="${BUILD:-$PROJ/futari-mac/futari_recomp/out/build/mac-arm64-release}"
 # SDK source tree. Its runtime dylibs land in $SDK/out/mac-arm64/.
 # THE VENDORED TREE WINS: builds link thirdparty/rexglue-sdk, so the bundle must
