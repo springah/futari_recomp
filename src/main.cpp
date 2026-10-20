@@ -14,15 +14,27 @@
 
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
+#include <rex/input/input.h>
+#include <rex/input/input_system.h>
 #include <rex/logging.h>
 #include <rex/rex_app.h>
 #include <rex/version.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/content_manager.h>
+#include <rex/ui/imgui_dialog.h>
+#include <rex/ui/imgui_drawer.h>
+#include <rex/ui/keybinds.h>
+#include <rex/ui/window.h>
+
+#include <imgui.h>
+#include <imgui_internal.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -433,6 +445,117 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
   REXLOG_INFO("Settings saved to {}", ini_path.string());
 }
 
+// Title-screen exit (PC quality-of-life).
+//
+// On the console the idle title screen accepts only START/A. Like CAVE's own PC
+// ports, the port also lets the player quit from there: B on any pad, or Escape
+// on the keyboard (rebindable as bind_title_exit). A hint is drawn while the
+// title is idle.
+//
+// "Idle title" is the title scene's per-frame state function that blinks PRESS
+// START BUTTON and polls for START (sub_821CBFF0, installed in the scene's
+// next-state pointer at +72). Both routes to the title -- boot, and Main Menu ->
+// Exit -- run through it, and it stops running as soon as START is accepted.
+// It is wrapped at the bottom of this file.
+constexpr uint32_t kTitleIdleState = 0x821CBFF0;
+constexpr uint32_t kTitleStateOffset = 72;
+// The idle state runs every frame; if it has not run for this long, the title
+// is gone (or hidden behind another scene) and the hint comes down.
+constexpr std::chrono::milliseconds kTitleIdleTimeout{250};
+
+// steady_clock time of the most recent idle-title frame; 0 when not on it.
+std::atomic<int64_t> g_title_idle_ns{0};
+std::atomic<bool> g_title_hint_shown{false};
+std::atomic<bool> g_exit_requested{false};
+// Whether an interactive SDK overlay (F4 settings, console, ...) is up; while
+// it is, B and Escape belong to the overlay, not to the title. Refreshed every
+// frame by the hint dialog, which exists exactly while the title is idle.
+std::atomic<bool> g_overlay_open{false};
+// Guest-thread only: pad buttons as of the previous idle-title frame, so B
+// fires on a fresh press and not on a B still held from the menu.
+std::array<uint16_t, 4> g_title_prev_buttons{};
+
+int64_t SteadyNowNs() {
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+bool TitleScreenIdle() {
+  const int64_t last = g_title_idle_ns.load(std::memory_order_acquire);
+  return last != 0 && SteadyNowNs() - last < std::chrono::nanoseconds(kTitleIdleTimeout).count();
+}
+
+std::string TitleExitKeyName() {
+  const std::string key = rex::cvar::Query<std::string>("bind_title_exit");
+  return key == "Escape" ? "Esc" : key;
+}
+
+// True if any interactive ImGui window is showing. The SDK's interactive
+// overlays (settings, console, debug, achievements) are ordinary windows, while
+// its passive ones (toasts, achievement pop-ups, the watermark) and the hint
+// below are NoInputs. UI thread, inside an ImGui frame. The public ImGui API
+// cannot enumerate windows, hence imgui_internal.h. Windows drawn later in the
+// current frame are covered by WasActive (last frame).
+bool InteractiveOverlayOpen() {
+  const ImGuiContext* context = ImGui::GetCurrentContext();
+  if (!context) {
+    return false;
+  }
+  for (const ImGuiWindow* window : context->Windows) {
+    if ((window->Active || window->WasActive) && !window->Hidden && !window->IsFallbackWindow &&
+        !(window->Flags & ImGuiWindowFlags_NoInputs)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Bottom-right hint, shown only while the title is idle. It deletes itself
+// (ImGuiDialog::Close) once the title goes away, so no dialog -- and no
+// continuous UI repaint -- lingers for the rest of the session.
+class TitleExitHintDialog final : public rex::ui::ImGuiDialog {
+ public:
+  explicit TitleExitHintDialog(rex::ui::ImGuiDrawer* drawer) : ImGuiDialog(drawer) {}
+
+ protected:
+  void OnDraw(ImGuiIO& io) override {
+    if (!TitleScreenIdle() || g_exit_requested.load(std::memory_order_acquire)) {
+      Close();
+      return;
+    }
+    const bool overlay_open = InteractiveOverlayOpen();
+    g_overlay_open.store(overlay_open, std::memory_order_release);
+    if (overlay_open) {
+      return;  // exiting is off while an overlay is up, so hide the hint too
+    }
+    // Re-read the bind each frame so a rebind in the F4 overlay shows at once.
+    std::string key = TitleExitKeyName();
+    if (text_.empty() || key != key_) {
+      key_ = std::move(key);
+      text_ = key_.empty() ? "Press B to exit." : "Press B or " + key_ + " to exit.";
+    }
+    constexpr float kMargin = 16.0f;
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - kMargin, io.DisplaySize.y - kMargin),
+                            ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.5f);
+    constexpr ImGuiWindowFlags kFlags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::Begin("##futari_title_exit_hint", nullptr, kFlags)) {
+      ImGui::TextUnformatted(text_.c_str());
+    }
+    ImGui::End();
+  }
+
+  void OnClose() override { g_title_hint_shown.store(false, std::memory_order_release); }
+
+ private:
+  std::string key_;
+  std::string text_;
+};
+
 }  // namespace
 
 class FutariApp : public rex::ReXApp {
@@ -443,7 +566,62 @@ class FutariApp : public rex::ReXApp {
     return std::unique_ptr<FutariApp>(new FutariApp(ctx, "futari", PPCImageConfig));
   }
 
+  // Called on the guest thread for every idle-title frame (see the wrapper at
+  // the bottom of this file). still_idle is false on the frame START was
+  // accepted, i.e. the title is being left.
+  static void OnTitleIdleFrame(bool still_idle) {
+    if (!still_idle) {
+      g_title_idle_ns.store(0, std::memory_order_release);
+      return;
+    }
+    const int64_t now = SteadyNowNs();
+    const int64_t last = g_title_idle_ns.exchange(now, std::memory_order_acq_rel);
+    const bool entered =
+        last == 0 || now - last >= std::chrono::nanoseconds(kTitleIdleTimeout).count();
+
+    FutariApp* app = instance_;
+    if (!app) {
+      return;
+    }
+    using rex::X_RESULT;  // X_ERROR_SUCCESS expands to an unqualified X_RESULT
+    bool b_pressed = false;
+    auto* runtime = app->runtime();
+    auto* input =
+        runtime ? static_cast<rex::input::InputSystem*>(runtime->input_system()) : nullptr;
+    for (uint32_t user = 0; input && user < g_title_prev_buttons.size(); ++user) {
+      rex::input::X_INPUT_STATE state = {};
+      const uint16_t buttons =
+          input->GetState(user, &state) == X_ERROR_SUCCESS ? uint16_t(state.gamepad.buttons) : 0;
+      const uint16_t newly_down = buttons & ~g_title_prev_buttons[user];
+      g_title_prev_buttons[user] = buttons;
+      // On the first idle frame only record what is held, so a B carried over
+      // from the menu does not quit the moment the title appears. The SDK keeps
+      // feeding pads to the game while an overlay is open, so check for one.
+      if (!entered && (newly_down & rex::input::X_INPUT_GAMEPAD_B) &&
+          !g_overlay_open.load(std::memory_order_acquire)) {
+        b_pressed = true;
+      }
+    }
+    if (b_pressed) {
+      app->RequestExit("B");
+    } else if (entered) {
+      app->ShowTitleExitHint();
+    }
+  }
+
  protected:
+  void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
+    (void)drawer;
+    instance_ = this;
+    rex::ui::RegisterBind(
+        "bind_title_exit", "Escape", "Exit the game from the title screen", [this] {
+          // Leave Escape to an open overlay (it may be using it itself).
+          if (TitleScreenIdle() && !g_overlay_open.load(std::memory_order_acquire)) {
+            RequestExit(TitleExitKeyName());
+          }
+        });
+  }
+
   void OnConfigurePaths(rex::PathConfig& paths) override {
     const auto exe_dir = rex::filesystem::GetExecutableFolder();
     LoadFutariIni(exe_dir, paths);
@@ -508,6 +686,33 @@ class FutariApp : public rex::ReXApp {
   }
 
  private:
+  // Close the window exactly as the title-bar close button does, so shutdown
+  // takes the SDK's normal OnClosing path. Safe from any thread.
+  void RequestExit(std::string_view source) {
+    if (g_exit_requested.exchange(true, std::memory_order_acq_rel)) {
+      return;
+    }
+    REXLOG_INFO("Title screen: exit requested ({})", source);
+    app_context().CallInUIThread([this] {
+      if (auto* wnd = window()) {
+        wnd->RequestClose();
+      }
+    });
+  }
+
+  void ShowTitleExitHint() {
+    app_context().CallInUIThread([this] {
+      auto* drawer = imgui_drawer();
+      if (!drawer || !TitleScreenIdle() ||
+          g_title_hint_shown.exchange(true, std::memory_order_acq_rel)) {
+        return;
+      }
+      new TitleExitHintDialog(drawer);  // owned by the drawer; deletes itself
+    });
+  }
+
+  static inline FutariApp* instance_ = nullptr;
+
   static void InstallBundledDlc() {
     const auto dlc_dir = rex::filesystem::GetExecutableFolder() / "dlc";
     std::error_code ec;
@@ -559,5 +764,17 @@ class FutariApp : public rex::ReXApp {
     }
   }
 };
+
+// Wrap the idle-title state (see "Title-screen exit" above). Generated guest
+// functions are weak aliases of __imp__sub_*, so this strong definition takes
+// over the dispatch entry without any codegen change; the original still runs
+// first, unmodified. Afterwards the scene's next-state pointer tells whether
+// the title is still idle or START was just accepted.
+REX_EXTERN(__imp__sub_821CBFF0);
+extern "C" REX_FUNC(sub_821CBFF0) {
+  const uint32_t scene = ctx.r3.u32;
+  __imp__sub_821CBFF0(ctx, base);
+  FutariApp::OnTitleIdleFrame(REX_LOAD_U32(scene + kTitleStateOffset) == kTitleIdleState);
+}
 
 REX_DEFINE_APP(futari, FutariApp::Create)
