@@ -17,12 +17,21 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 **Latest release:** v1.5.3 — source only; the current player bundles are v1.5.2
 (Windows, macOS, Steam Deck). See [CHANGELOG.md](CHANGELOG.md). Per-OS build and
-packaging details: [PORTS.md](PORTS.md). Prebuilt bundles are not published here,
-so the path below is to build it yourself.
+packaging details: [PORTS.md](PORTS.md).
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
 load, run, and mode-switch cleanly. Deeper gameplay can still hit rare recompiler
 edge cases — see [Known issues](#known-issues).
+
+## Just want to play?
+
+Prebuilt bundles for Windows, macOS and Steam Deck are attached to the
+[GitHub Releases](https://github.com/springah/futari_recomp/releases). They
+contain the game's own program code, recompiled, and are **for people who own
+the game only** — see [Legal](#legal). They contain no game data: unzip one and
+follow `RUN.txt` inside to add your own dump (on Windows, drag your disc ISO or
+console install folder onto `extract_assets.bat`, then double-click
+`futari.exe`). Everything below is for building it yourself.
 
 ## How it works
 
@@ -73,6 +82,21 @@ Needs CMake 3.25+, Ninja, **LLVM/clang-cl** 20+ (at `C:\Program Files\LLVM`),
 the MSVC ABI, so it needs those headers and libs — plus `rc.exe` from the bundled
 Windows SDK), Python 3.8+, and git + bash.
 
+**Quick start (Windows):** [`build.ps1`](build.ps1) does all of the below in one
+go. It installs whatever is missing from that list via winget, enters the Visual
+Studio developer environment, builds the SDK CLI, extracts your game data, runs
+codegen, configures and builds:
+
+```powershell
+git -c core.symlinks=true -c core.longpaths=true clone --recurse-submodules https://github.com/springah/futari_recomp
+cd futari_recomp
+.\build.ps1 -GameSource "D:\Mushihimesama Futari Ver 1.5.iso" -Run
+```
+
+`build.bat` is the same thing for a double-click. Git symlinks need **Developer
+Mode** (Settings → System → For developers) or an elevated shell; the script
+says so if it hits that.
+
 The SDK at `thirdparty/rexglue-sdk` is **vendored** — this port owns and
 maintains its own copy, taken from a fork of the
 [upstream SDK](https://github.com/rexglue/rexglue-sdk) at v0.9.3.1 and carrying
@@ -80,6 +104,8 @@ the clang-cl and macOS fixes this port needs; see
 [thirdparty/rexglue-sdk/VENDORED.md](thirdparty/rexglue-sdk/VENDORED.md) and
 [PORTS.md](PORTS.md#sdk). Only the SDK's third-party dependencies are git
 submodules, all pointing at their public upstreams.
+
+The manual steps `build.ps1` automates:
 
 ```sh
 # 1. Clone with the SDK's third-party submodules (~1 GB of dependency history;
@@ -103,25 +129,25 @@ python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 # 4. Generate the recompiled C++ into generated/
 bash scripts/regen.sh
 
-# 5. Configure
-cmake -S . -B out/build/win-amd64 -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
-  -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" \
-  -DCMAKE_RC_COMPILER="C:/Program Files (x86)/Windows Kits/10/bin/<sdk-ver>/x64/rc.exe"
+# 5. Configure. Run from a "Developer PowerShell for VS 2022" so rc.exe is on
+#    PATH; otherwise add -DCMAKE_RC_COMPILER="C:/Program Files (x86)/Windows Kits/10/bin/<sdk-ver>/x64/rc.exe".
+#    The win-amd64-* presets use clang-cl from C:/Program Files/LLVM; pass
+#    -DCMAKE_C_COMPILER/-DCMAKE_CXX_COMPILER if yours lives elsewhere.
+cmake --preset win-amd64-release
 
 # 6. Build everything — the exe plus all 8 module DLLs
-cmake --build out/build/win-amd64
+cmake --build --preset win-amd64-release
 
 # 7. Run (GUI app; logs to logs/futari_NNN.log next to the exe)
-out/build/win-amd64/futari.exe --game_data_root assets
+out/build/win-amd64-release/futari.exe --game_data_root assets
 ```
 
 <details>
 <summary><b>Gotchas worth knowing before you hit them</b></summary>
 
-- **clang-cl, not clang++.** This builds against the MSVC ABI. The CMake presets
-  default to `clang++`, which is why the configure line above is explicit — and why
-  Windows releases don't come from a preset.
+- **clang-cl, not clang++.** This builds against the MSVC ABI. The `win-*`
+  presets name clang-cl for that reason; the SDK's own presets still default to
+  `clang++`, which is why step 2 spells the compiler out.
 - **`git -c core.symlinks=true` (before `clone`) matters.** The SDK's libmspack submodule uses
   git symlinks. Without it (plus Developer Mode), those files check out as text
   stubs and the SDK build fails with `lzxd.c(1,1): error: expected identifier`. Fix
@@ -203,8 +229,9 @@ Nothing here is a substitute for owning the game:
 - **The recompiled C++ is produced on your machine, from your own disc.** It is
   a translation of Cave's executable code, so it belongs to you no more than the
   disc does. Don't redistribute it. The release bundles necessarily contain it,
-  compiled — which is why they go only to people who already own the game, and
-  are not published here.
+  compiled, and are inert without a dump you provide. They are published on the
+  same footing as other recompilation projects: for people who already own the
+  game. If you don't own it, don't download them.
 - **Do not ask for game files.** Requests for dumps, links, or "where do I get
   the ISO" will be closed. [docs/DUMPING.md](docs/DUMPING.md) covers the only
   supported route: your own disc, read with your own console.

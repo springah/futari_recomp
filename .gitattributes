@@ -16,3 +16,5 @@
 scripts/** linguist-detectable=false
 mac-build/** linguist-detectable=false
 extract_assets.bat linguist-detectable=false
+build.ps1 linguist-detectable=false
+build.bat linguist-detectable=false

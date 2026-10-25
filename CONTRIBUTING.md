@@ -18,8 +18,8 @@ publicly.
 
 ## 2. Bug reports need a build and a dump you can describe
 
-Because everyone builds from their own dump, "it crashes" is not actionable on
-its own. Useful reports include:
+Because every copy runs on its owner's own dump, "it crashes" is not actionable
+on its own. Useful reports include:
 
 - the release version or commit you built from, and your OS;
 - the SDK the binary reports — `strings <binary> | grep rexglue-v`;

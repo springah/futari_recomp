@@ -3,6 +3,7 @@ Xbox 360 (2006/2012) statically recompiled for PC. No game data is included -
 no disc image, no game executable, no media, no audio; you must own the game and
 supply your own dump. This build does contain the game's own program code,
 recompiled, so it is only for people who own the game: do not redistribute it.
+Releases, source and bug reports: https://github.com/springah/futari_recomp
 
 ADD YOUR GAME
   Drag either of these onto extract_assets.bat (needs Python 3):

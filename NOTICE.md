@@ -21,8 +21,8 @@ The licence does NOT cover, and this project does not grant any rights to:
     the game's own executable code, produced on your machine from a copy you
     own. It is a derivative of Cave's copyrighted work, not of this repository,
     and it is neither distributed here nor licensed by this project. The release
-    bundles contain it in compiled form, which is why they are distributed only
-    to people who own the game and are not published in this repository.
+    bundles contain it in compiled form, which is why they are offered only to
+    people who own the game, and why nothing in them is covered by the licence.
   * **`screenshots/title.png`** — a screenshot of the game, included for
     identification purposes only.
   * **`src/futari.ico`** — the application icon, taken from the game's own

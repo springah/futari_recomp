@@ -5,8 +5,8 @@ share. Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
 ## v1.5.3 — 2026-10-21 (source release; bundles remain v1.5.2 until restaged)
 
-The port's first outside contribution. One shell-side change, no SDK, renderer
-or game-logic changes, and no codegen regen needed.
+The port's first outside contribution, plus a much shorter road to a build. No
+SDK, renderer or game-logic changes, and no codegen regen needed.
 
 - **Exit from the title screen with B or Esc.** The console title screen only
   accepts START/A, so on PC the only way out was the window's close button or a
@@ -24,6 +24,21 @@ or game-logic changes, and no codegen regen needed.
   so a strong definition takes over the dispatch entry without touching the
   recompiler output. Contributed by itemzer0 (#3); tested on Linux by the
   author, build-verified on macOS.
+- **Bundles are published on GitHub Releases.** Until now the per-OS zips went
+  only to a private download share and everyone else was told to build from
+  source. The zips are now attached to each release, with the condition they
+  always carried: they contain the game's own program code, recompiled, so they
+  are for people who own the game. No game *data* is in them, as before. See the
+  README's Legal section and PORTS.md.
+- **One-shot Windows build: `build.ps1`.** Installs the missing toolchain via
+  winget (Git, Python, CMake, Ninja, LLVM, VS 2022 Build Tools), enters the VS
+  developer environment, checks out the submodules and fixes the libmspack
+  symlink gotcha, builds the SDK CLI, extracts your ISO or console dump, runs
+  `regen.sh`, configures and builds. `build.bat` wraps it for a double-click.
+- **`win-amd64-*` presets now use clang-cl.** They used to name `clang++`, which
+  does not build this project, so Windows was the one platform with no working
+  preset. `cmake --preset win-amd64-release` replaces the hand-typed configure
+  line; the build lands in `out/build/win-amd64-release/`.
 
 ## v1.5.2 — 2026-08-11 (Windows, macOS, Steam Deck)
 

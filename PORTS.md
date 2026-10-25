@@ -7,14 +7,16 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 
 | OS | Build | Status |
 |----|-------|--------|
-| Windows (x64) | manual clang-cl configure → `out/build/win-amd64` (README) | ✅ v1.5.2 (SDK v0.9.3.1) |
+| Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.2 (SDK v0.9.3.1) |
 | Steam Deck / Linux (x64) | `linux-amd64-release` preset, built in WSL | ✅ v1.5.2 (boot-verified on device) |
 | macOS (arm64) | `mac-arm64-release` preset on the MBP, bundled by `mac-build/build_app.sh` | ✅ v1.5.2 (MoltenVK) |
 
-**Windows builds are not a preset.** The project compiles with clang-cl while the
-presets default to `clang++`, so releases come from a hand-configured
-`out/build/win-amd64`. Build with no `--target` so the 8 module DLLs get the same
-optimisation flags as the exe.
+**Windows builds use the `win-amd64-*` presets**, which name clang-cl from
+`C:/Program Files/LLVM` (the SDK's own presets still default to `clang++`, so the
+SDK CLI is configured by hand; `build.ps1` does both). Configure from a VS
+developer shell so `rc.exe` is found. Build with no `--target`, or with the build
+preset, so the 8 module DLLs get the same optimisation flags as the exe. The
+`win-arm64-*` presets target `arm64-pc-windows-msvc` and are untested.
 
 ## SDK
 
@@ -53,11 +55,12 @@ One SemVer tag per release; per-OS zips are named
 `Mushihimesama-Futari-PC-vX.Y.Z.zip`, `-Deck-`, `-macOS-`. No game content goes
 into a bundle or a tag, ever.
 
-Each tag also gets a **GitHub Release carrying notes only** — no binaries
-attached. The release is the changelog entry people can link to; the bundles
-stay on the download share, because a release asset is the one place a bundle
-could be mirrored without anyone re-checking rule 2 first. Not every platform is
-mirrored to every location — check before pointing someone at a link.
+Each tag gets a **GitHub Release with the per-OS zips attached** (from v1.5.3
+on; earlier bundles went only to a private download share). The release notes
+are the changelog entry people can link to. A release asset is public the moment
+it is uploaded, so rules 2–7 below run on a zip *before* it is attached, never
+after. A platform whose bundle is not restaged yet is simply absent from that
+release; say so in the notes rather than linking an older zip.
 
 A tag must be an ancestor of `main`. If history is ever rewritten, re-point every
 tag at its counterpart commit and confirm the trees match before pushing:
@@ -103,9 +106,9 @@ Packaging rules — each one is here because it broke once:
 
    ⚠️ Note what "no game data" does and does not mean: the exe and the 8 module
    DLLs *are* the game's own program code, recompiled. That is unavoidable in a
-   binary port and is why bundles go only to owners and are never published on
-   GitHub — but do not describe a bundle as containing no game content. Rule 2 is
-   about *data*: no disc image, no `media/`, no audio, no artwork.
+   binary port, and it is why `RUN.txt` and the README say the bundles are for
+   owners only — do not describe a bundle as containing no game content. Rule 2
+   is about *data*: no disc image, no `media/`, no audio, no artwork.
 
 2b. **Licence text travels with the binary.** The runtime statically links FFmpeg
    and libmspack (both LGPL-2.1), plus ~20 permissive components, every one of
