@@ -55,8 +55,9 @@ SDK, renderer or game-logic changes, and no codegen regen needed.
   offer in `THIRD-PARTY-NOTICES.txt` now points at this repository's vendored
   SDK rather than upstream, which lacks the fixes the bundles need. Removed the
   unused `futari_manifest.toml` (`regen.sh` writes its own manifests) and the
-  private family-and-friends `RUN.ff.txt`; added `dist/dlc/README.txt`, which
-  `RUN.txt` had referred to without it existing; README gains the macOS/Linux
+  private family-and-friends `RUN.ff.txt`; added `dist/dlc-README.txt` (ships
+  as `dlc/README.txt`), which `RUN.txt` had referred to without it existing;
+  README gains the macOS/Linux
   build steps and a truthful release line.
 
 ## v1.5.2 — 2026-08-11 (Windows, macOS, Steam Deck)

@@ -87,7 +87,8 @@ Packaging rules — each one is here because it broke once:
    [`dist/gamecontrollerdb.txt`](dist/gamecontrollerdb.txt) (SDL's community
    gamepad-mapping database — the SDL input driver loads it from beside the exe
    for pads SDL doesn't know natively), an empty `dlc/` holding
-   [`dist/dlc/README.txt`](dist/dlc/README.txt), and
+   [`dist/dlc-README.txt`](dist/dlc-README.txt) as `dlc/README.txt` (the CI
+   guard rejects any tracked `dlc/` path, hence the flat name here), and
    [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt). Everything on that list
    is in this repo or produced by the build, so the rule can be executed from a
    clean clone. The exe carries its icon itself (`src/futari.ico`, embedded on

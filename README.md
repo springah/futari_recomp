@@ -214,7 +214,7 @@ scripts/                  # extract_iso.py, regen.sh, build_module_hints.sh, ana
 build.ps1, build.bat      # one-shot Windows build
 extract_assets.bat        # drag-and-drop wrapper around extract_iso.py (also ships in the bundles)
 mac-build/build_app.sh    # macOS .app packaging
-dist/                     # files that ship inside release zips: RUN.txt, gamecontrollerdb.txt, dlc/README.txt
+dist/                     # files that ship inside release zips: RUN.txt, gamecontrollerdb.txt, dlc-README.txt
 docs/                     # DUMPING.md (getting your own game data), upstream/ (SDK notes)
 PORTS.md, CHANGELOG.md    # per-OS build/release notes; version history
 thirdparty/rexglue-sdk/   # the SDK, vendored (VENDORED.md); its deps are submodules
