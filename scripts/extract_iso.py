@@ -472,6 +472,9 @@ def main():
         if not candidates:
             sys.exit("No .iso file found. Pass a path explicitly: an .iso, or a "
                      "folder copied off your console (see docs/DUMPING.md).")
+        if len(candidates) > 1:
+            names = ", ".join(str(c) for c in candidates)
+            sys.exit(f"Several .iso files found ({names}); pass the right one explicitly.")
         god_header, iso_path, dlc = None, candidates[0], []
         print(f"Auto-detected ISO: {iso_path}")
 
@@ -540,7 +543,7 @@ def main():
 
     xex = out_dir / "default.xex"
     if not xex.exists():
-        # Check one level deep
+        # Search the whole extracted tree for it
         for candidate in out_dir.rglob("default.xex"):
             xex = candidate
             break
@@ -551,8 +554,8 @@ def main():
         if xex != target:
             shutil.copy2(xex, target)
         print(f"\ndefault.xex -> {target}")
-        print("Extraction complete. Run next steps:")
-        print("  python3 scripts/analyse_xex.py assets/default.xex")
+        print("Extraction complete. Next: generate the recompiled C++ and build --")
+        print("  bash scripts/regen.sh      (or build.ps1 on Windows, which runs it for you)")
     else:
         print("\nWARNING: default.xex not found in extracted files.")
         sys.exit(1)

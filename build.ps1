@@ -60,6 +60,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
+# -GameSource is relative to where the user ran us from, not to the repo root
+# we are about to cd into.
+if ($GameSource -and -not [System.IO.Path]::IsPathRooted($GameSource)) {
+    $GameSource = Join-Path (Get-Location).Path $GameSource
+}
 Set-Location $Root
 
 # ---------------------------------------------------------------- helpers ---
@@ -161,6 +166,11 @@ function Find-VsWithCpp {
 Step 'Checking the repository'
 if (-not (Test-Path (Join-Path $Root 'scripts\regen.sh'))) {
     Fail 'Run this from the futari_recomp checkout (scripts\regen.sh not found next to build.ps1).'
+}
+if (-not (Test-Path (Join-Path $Root '.git'))) {
+    Fail ('This folder is not a git checkout (no .git), so the SDK''s dependency submodules cannot be fetched. ' +
+          'A GitHub ZIP download does not work; clone instead: ' +
+          'git -c core.symlinks=true -c core.longpaths=true clone --recurse-submodules https://github.com/springah/futari_recomp')
 }
 
 $git = Find-Exe 'git'
@@ -272,6 +282,16 @@ if (-not (Find-Exe 'rc')) {
           'Add a Windows 10/11 SDK in Visual Studio Installer and re-run.')
 }
 Note "rc.exe: $(Find-Exe 'rc')"
+# The developer environment puts Visual Studio's own bundled CMake and Ninja
+# ahead of the ones found above, so re-check what will actually run: the
+# presets need CMake 3.25+ and older Build Tools bundle less than that.
+$cmakeVer = ((& cmake --version | Select-Object -First 1) -replace '^cmake version\s*', '') -replace '[^0-9.].*$', ''
+if (-not $cmakeVer -or [version]$cmakeVer -lt [version]'3.25') {
+    Fail ("cmake inside the developer environment is '$cmakeVer' at $(Find-Exe 'cmake'); the presets need 3.25 or newer. " +
+          'Update Visual Studio Build Tools, or put a newer CMake first on PATH, and re-run.')
+}
+Note "CMake (in dev shell): $(Find-Exe 'cmake') ($cmakeVer)"
+Note "Ninja (in dev shell): $(Find-Exe 'ninja')"
 
 # ------------------------------------------------------------ 4. SDK CLI ---
 

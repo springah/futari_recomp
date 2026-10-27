@@ -16,14 +16,15 @@ FFmpeg (libavcodec, libavutil) and libmspack are licensed under the LGPL,
 version 2.1, and are linked statically into the ReXGlue runtime shipped here.
 You are entitled to the complete corresponding source for those libraries, and
 to the object code needed to relink the runtime against a modified version of
-them. Both are obtainable from:
+them. Both are obtainable from this port's source repository:
 
-    https://github.com/rexglue/rexglue-sdk
+    https://github.com/springah/futari_recomp
 
-which vendors them under thirdparty/FFmpeg and thirdparty/libmspack at the
-tagged SDK release this build was made from, together with the build files
-used to produce the runtime. If you cannot obtain them there, open an issue at
-https://github.com/springah/futari_recomp and they will be provided.
+The exact SDK this runtime was built from is vendored there under
+thirdparty/rexglue-sdk at the release tag matching this build, with FFmpeg and
+libmspack as its thirdparty/FFmpeg and thirdparty/libmspack submodules and the
+build files used to produce the runtime. If you cannot obtain them there, open
+an issue in that repository and they will be provided.
 
 COMPONENTS
 ----------
@@ -58,7 +59,6 @@ COMPONENTS
   reference only -- this gap should be closed in the SDK):
     - picosha2 (MIT upstream)
     - stb (MIT / public domain upstream)
-    - tiny-aes-c (MIT upstream)
     - DirectXShaderCompiler / dxc (Apache-2.0 with LLVM exceptions upstream)
     - disruptorplus, o1heap-adjacent helpers, disasm, dxbc, pe, ffmpeg-overlay (SDK-local)
 

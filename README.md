@@ -15,23 +15,26 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.3 — source only; the current player bundles are v1.5.2
-(Windows, macOS, Steam Deck). See [CHANGELOG.md](CHANGELOG.md). Per-OS build and
-packaging details: [PORTS.md](PORTS.md).
+**Latest release:** v1.5.2 (Windows, macOS, Steam Deck). `main` is at v1.5.3,
+not yet released. See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging
+details: [PORTS.md](PORTS.md).
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
-load, run, and mode-switch cleanly. Deeper gameplay can still hit rare recompiler
-edge cases — see [Known issues](#known-issues).
+load, run, and mode-switch cleanly. Nothing is known to be broken right now; the
+recompiler edge cases found so far, all fixed, are under
+[Known issues](#known-issues). Deeper gameplay may still turn up new ones.
 
 ## Just want to play?
 
-Prebuilt bundles for Windows, macOS and Steam Deck are attached to the
-[GitHub Releases](https://github.com/springah/futari_recomp/releases). They
-contain the game's own program code, recompiled, and are **for people who own
-the game only** — see [Legal](#legal). They contain no game data: unzip one and
-follow `RUN.txt` inside to add your own dump (on Windows, drag your disc ISO or
-console install folder onto `extract_assets.bat`, then double-click
-`futari.exe`). Everything below is for building it yourself.
+From v1.5.3 on, prebuilt bundles for Windows, macOS and Steam Deck are attached
+to the [GitHub Releases](https://github.com/springah/futari_recomp/releases).
+**v1.5.3 has not been cut yet, so there is nothing to download at the moment**
+(the v1.5.2 bundles were only ever shared privately); until it lands, build it
+yourself as described below. The bundles contain the game's own program code,
+recompiled, and are **for people who own the game only** — see [Legal](#legal).
+They contain no game data: unzip one and follow `RUN.txt` inside to add your own
+dump (on Windows, drag your disc ISO or console install folder onto
+`extract_assets.bat`, then double-click `futari.exe`).
 
 ## How it works
 
@@ -170,17 +173,51 @@ out/build/win-amd64-release/futari.exe --game_data_root assets
 
 </details>
 
+### macOS and Linux
+
+The same seven steps, with a different compiler and preset. Needs CMake 3.25+,
+Ninja, Python 3 and a recent clang: on macOS that is **Homebrew LLVM**
+(`brew install llvm molten-vk`; the SDK rejects Apple's clang), on Linux the
+distribution's clang 20+ plus the Vulkan headers and loader.
+
+```sh
+# 2. Build the ReXGlue CLI with the SDK's own preset for your platform
+#    (linux-amd64 or mac-arm64). The binary lands in thirdparty/rexglue-sdk/out/<platform>/,
+#    which is where regen.sh looks for it.
+cmake --preset mac-arm64 -S thirdparty/rexglue-sdk      # or: linux-amd64
+cmake --build --preset mac-arm64 --target rexglue       # or: linux-amd64
+
+# 3.–4. as above
+python3 scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
+bash scripts/regen.sh
+
+# 5.–7. configure, build, run
+cmake --preset mac-arm64-release                        # or: linux-amd64-release
+cmake --build --preset mac-arm64-release
+out/build/mac-arm64-release/futari --game_data_root assets
+```
+
+On macOS, `mac-build/build_app.sh` turns that build directory into a
+self-contained `Futari.app` (bundled MoltenVK, ad-hoc signed); its header lists
+the paths it takes. [PORTS.md](PORTS.md) has the per-platform notes.
+
 ## Layout
 
 ```
-assets/                 # gitignored — your extracted game files
-generated/              # gitignored — codegen output (scripts/regen.sh)
-futari_manifest.toml    # entrypoint + the 8 game-mode modules
-futari_functions.toml   # function-entry hints for the shell
-src/main.cpp            # host app: ReXApp subclass + futari.ini config
-scripts/                # extract_iso.py, analyse_xex.py, regen.sh
-dist/RUN.txt            # the readme that ships inside release zips
-thirdparty/rexglue-sdk/ # the SDK, vendored (VENDORED.md); its deps are submodules
+assets/                   # gitignored — your extracted game files
+dlc/                      # gitignored — your DLC packages
+generated/                # gitignored — codegen output (scripts/regen.sh)
+futari_functions.toml     # function-entry hints for the shell (default.xex)
+<module>_functions.toml   # the same for each of the 8 game-mode modules
+src/                      # host app: main.cpp (ReXApp subclass, futari.ini, title exit), ini_merge.h, icon
+scripts/                  # extract_iso.py, regen.sh, build_module_hints.sh, analyse_xex.py, notices generator
+build.ps1, build.bat      # one-shot Windows build
+extract_assets.bat        # drag-and-drop wrapper around extract_iso.py (also ships in the bundles)
+mac-build/build_app.sh    # macOS .app packaging
+dist/                     # files that ship inside release zips: RUN.txt, gamecontrollerdb.txt, dlc/README.txt
+docs/                     # DUMPING.md (getting your own game data), upstream/ (SDK notes)
+PORTS.md, CHANGELOG.md    # per-OS build/release notes; version history
+thirdparty/rexglue-sdk/   # the SDK, vendored (VENDORED.md); its deps are submodules
 ```
 
 ## Known issues

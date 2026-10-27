@@ -2,7 +2,9 @@
 # Regenerate all recompiled C++ for futari (shell + 8 game-mode modules).
 #
 # generated/ is gitignored (large, derived). This script reproduces it from the
-# XEX assets + the committed manifest/function hints.
+# XEX assets + the committed function hints (futari_functions.toml for the
+# shell, <module>_functions.toml for each game module). The codegen manifests
+# are written here, per module, not kept in the repo.
 #
 # IMPORTANT: the 8 game-mode modules all load at base 0x88000000 and the SDK
 # analyzer (v0.8.0) corrupts cross-module analysis when codegen-ed together in
@@ -15,32 +17,59 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Default is the vendored SDK's Windows codegen binary, falling back to a
-# sibling rexglue-sdk checkout if you keep one next to this repo. Override with
-# REXGLUE=<path to rexglue> scripts/regen.sh — required on Linux/macOS, where
-# the binary is ./rexglue rather than rexglue.exe.
+# The codegen CLI comes from the vendored SDK: the SDK's CMake puts it under
+# thirdparty/rexglue-sdk/out/<platform>/ (README: Build, step 2). Override
+# with REXGLUE=<path to rexglue> scripts/regen.sh.
 if [ -z "${REXGLUE:-}" ]; then
-  if [ -x "thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe" ]; then
-    REXGLUE="thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe"
-  else
-    REXGLUE="../rexglue-sdk/out/win-amd64/rexglue.exe"
-  fi
+  for c in thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe \
+           thirdparty/rexglue-sdk/out/linux-amd64/rexglue \
+           thirdparty/rexglue-sdk/out/mac-arm64/rexglue \
+           thirdparty/rexglue-sdk/out/mac-arm64/Release/rexglue; do
+    if [ -x "$c" ]; then REXGLUE="$c"; break; fi
+  done
+fi
+if [ -z "${REXGLUE:-}" ] || [ ! -x "$REXGLUE" ]; then
+  echo "ERROR: rexglue CLI not found${REXGLUE:+ at $REXGLUE}." >&2
+  echo "       Build it from the vendored SDK first (README: Build, step 2), or set" >&2
+  echo "       REXGLUE=/path/to/rexglue." >&2
+  exit 1
 fi
 MODS=(reco_normal reco_abnormal palm_normal palm_abnormal hirow_normal hirow_abnormal kiniro_normal kiniro_abnormal)
 
-# 1. Entrypoint (default.xex) — uses futari_functions.toml hints. A
-#    single-module manifest also (re)generates default/. Use reco_normal's.
+# Emit a one-module manifest. $1=module $2=includes TOML array.
+# sdk_version is metadata only: codegen echoes it into the project header and
+# restamps it, never validates it, so the stale value is harmless.
+solo_manifest() {
+  cat > .regen_solo.toml <<EOF
+[project]
+name = "futari"
+sdk_version = "0.8.0.0"
+game_root = "assets"
+
+[entrypoint]
+file_path = "assets/default.xex"
+out_directory_path = "generated/default"
+includes = ["futari_functions.toml"]
+
+[[modules]]
+guest_path = "x"
+file_path = "assets/media/Module/$1.xex"
+out_directory_path = "generated/$1"
+includes = $2
+EOF
+}
+
+# 1. One isolated codegen pass per module. Every manifest also names the
+#    entrypoint (default.xex, with futari_functions.toml), so generated/default/
+#    is regenerated on each pass; its inputs are identical every time, so the
+#    last pass simply rewrites the same output.
 echo "[regen] entrypoint + modules (isolated)"
 for m in "${MODS[@]}"; do
-  # Per-module function-entry hints (analyzer misses indirect-call targets, same
-  # as the shell). Use <module>_functions.toml if present.
+  # Per-module function-entry hints (the analyzer misses indirect-call targets,
+  # same as for the shell). Use <module>_functions.toml if present.
   mod_inc="[]"
   if [ -f "${m}_functions.toml" ]; then mod_inc="[\"${m}_functions.toml\"]"; fi
-  # NOTE: sdk_version below is metadata-only — rexglue codegen parses it but only
-  # echoes it in the project header; it never validates or drives codegen (the SDK
-  # helper uses the binary's own REXGLUE_VERSION_FLOOR), and codegen restamps it.
-  # So this value is cosmetic and harmless if stale; left as-is to avoid churn.
-  printf '[project]\nname = "futari"\nsdk_version = "0.8.0.0"\ngame_root = "assets"\n\n[entrypoint]\nfile_path = "assets/default.xex"\nout_directory_path = "generated/default"\nincludes = ["futari_functions.toml"]\n\n[[modules]]\nguest_path = "x"\nfile_path = "assets/media/Module/%s.xex"\nout_directory_path = "generated/%s"\nincludes = %s\n' "$m" "$m" "$mod_inc" > .regen_solo.toml
+  solo_manifest "$m" "$mod_inc"
   "$REXGLUE" codegen .regen_solo.toml >/dev/null
   echo "  [ok] $m"
 done
@@ -80,4 +109,4 @@ EOF
   done
 } > generated/default/dll_targets.cmake
 
-echo "[regen] done. Now reconfigure + build (see README / memory)."
+echo "[regen] done. Now configure and build (README: Build, steps 5-6)."

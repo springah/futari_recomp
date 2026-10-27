@@ -8,8 +8,8 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 | OS | Build | Status |
 |----|-------|--------|
 | Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.2 (SDK v0.9.3.1) |
-| Steam Deck / Linux (x64) | `linux-amd64-release` preset, built in WSL | ✅ v1.5.2 (boot-verified on device) |
-| macOS (arm64) | `mac-arm64-release` preset on the MBP, bundled by `mac-build/build_app.sh` | ✅ v1.5.2 (MoltenVK) |
+| Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) | ✅ v1.5.2 (boot-verified on device) |
+| macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.2 (MoltenVK) |
 
 **Windows builds use the `win-amd64-*` presets**, which name clang-cl from
 `C:/Program Files/LLVM` (the SDK's own presets still default to `clang++`, so the
@@ -36,7 +36,7 @@ expect the macOS path in particular to fail there.
 
 There is no pin to bump. To take an SDK change, apply it to the tree and commit
 it like any other change; when pulling a batch from the fork or upstream, diff
-against the recorded provenance tag and update `VERSION` + VENDORED.md.
+against the recorded provenance tag and update `REXGLUE_VERSION` + VENDORED.md.
 
 ⚠️ Check what a build directory is pinned to before shipping from it —
 `grep REXSDK_DIR out/build/<dir>/CMakeCache.txt`. A directory configured with an
@@ -67,20 +67,13 @@ tag at its counterpart commit and confirm the trees match before pushing:
 `git merge-base --is-ancestor <tag> main` is the check, and a release cut from an
 orphaned tag silently publishes a tree that is on no branch.
 
-One known exception: `main` begins at v1.3.0, because the identity-scrub rewrite
-dropped the 42 commits before it (pre-rewrite `main` had 93; the rewrite kept 51).
-**`v1.0.0`–`v1.1.0` therefore point into history that is no longer on any
-branch**, and no counterpart exists on `main` to re-point them at. They resolve
-and fetch normally; they simply are not reachable from `main`. Everything from
-v1.3.1 on is.
-
-Deleting those tags would **not** remove that history from GitHub. `refs/pull/1/head`
-reaches all 27 of those commits too, and PR refs cannot be deleted by the
-repository owner — only GitHub Support can remove them. Any future scrub has to
-account for that: a rewrite cleans `main`, the tags and every clone, while the PR
-refs keep the pre-rewrite objects fetchable by anyone who asks for them by name.
-If that residue is unacceptable, the answer is a fresh repository, not another
-rewrite.
+One known exception: `main` begins at v1.3.0 (a 2026-08 history rewrite dropped
+the commits before it), so `v1.0.0`–`v1.1.0` point into history that is on no
+branch and have no counterpart to re-point at. They stay for the record; nothing
+is released from them. Everything from v1.3.1 on is reachable from `main`. Note
+for any future rewrite: GitHub's `refs/pull/N/head` refs keep the old objects
+fetchable and only GitHub Support can delete them, so a scrub that must be
+complete means a fresh repository, not another rewrite.
 
 Packaging rules — each one is here because it broke once:
 
@@ -88,21 +81,20 @@ Packaging rules — each one is here because it broke once:
    working copy collects debug leftovers. v1.4.0 shipped 64 MB of them, including
    212 developer run logs.
 2. **A public bundle carries no game data.** Ship the exe, the 8 module DLLs, the
-   SDK runtime + GPU plugin, `icon1.ico`, `icon2.ico`, `futari.ini`,
-   `extract_assets.bat` + `extract_iso.py` (so the user can populate `assets/`
-   themselves), `RUN.txt` copied from [`dist/RUN.txt`](dist/RUN.txt),
-   `gamecontrollerdb.txt` copied from
+   SDK runtime + GPU plugin, `futari.ini`, `extract_assets.bat` +
+   `extract_iso.py` (so the user can populate `assets/` themselves), `RUN.txt`
+   copied from [`dist/RUN.txt`](dist/RUN.txt), `gamecontrollerdb.txt` copied from
    [`dist/gamecontrollerdb.txt`](dist/gamecontrollerdb.txt) (SDL's community
    gamepad-mapping database — the SDL input driver loads it from beside the exe
-   for pads SDL doesn't know natively), and
-   [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt). An empty `dlc/` with its
-   `README.txt` is fine; the packages themselves are not. `assets/` and `dlc/`
-   contents are the game — they never go in a bundle that leaves your machine.
-   Grep the staged tree for `.xex` before zipping.
-
-   ⚠️ `icon1.ico`, `icon2.ico` and `dlc/README.txt` are **not tracked in this
-   repo** — they live only in the staging tree, so this rule cannot be executed
-   from a clean clone. Track them under `dist/`, or drop them from the list.
+   for pads SDL doesn't know natively), an empty `dlc/` holding
+   [`dist/dlc/README.txt`](dist/dlc/README.txt), and
+   [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt). Everything on that list
+   is in this repo or produced by the build, so the rule can be executed from a
+   clean clone. The exe carries its icon itself (`src/futari.ico`, embedded on
+   Windows; `build_app.sh` turns it into the `.app` icon), so the dump's loose
+   `icon*.ico` files are not needed. `assets/` and `dlc/` contents are the game —
+   they never go in a bundle that leaves your machine. Grep the staged tree for
+   `.xex` before zipping.
 
    ⚠️ Note what "no game data" does and does not mean: the exe and the 8 module
    DLLs *are* the game's own program code, recompiled. That is unavoidable in a
@@ -113,15 +105,17 @@ Packaging rules — each one is here because it broke once:
 2b. **Licence text travels with the binary.** The runtime statically links FFmpeg
    and libmspack (both LGPL-2.1), plus ~20 permissive components, every one of
    which requires its notice to accompany a binary distribution. Regenerate the
-   notices whenever the SDK pin moves:
+   notices whenever the vendored SDK tree changes (`build_app.sh` does this
+   itself and tells you when the committed copy was stale):
 
    ```sh
    bash scripts/gen_third_party_notices.sh > THIRD-PARTY-NOTICES.txt
    ```
 
    The LGPL also obliges a written offer of source and relinkable objects; that
-   offer is in the file's header and points at the SDK repo. If the bundles ever
-   stop being buildable from a public SDK tag, that offer stops being true.
+   offer is in the file's header and points at this repository's vendored SDK
+   tree at the release tag. That is one more reason a tag must carry exactly the
+   SDK the bundle was built from.
 3. **Zip with 7z**, under a single top-level `Mushihimesama-Futari-PC/` folder.
    .NET `Compress-Archive` writes non-spec backslash entries and no wrapper folder.
 4. **Diff the new zip's file list against the previous release** before publishing,

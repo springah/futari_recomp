@@ -30,6 +30,23 @@ REQUIREMENTS
   - Microsoft Visual C++ Redistributable (x64):
       https://aka.ms/vs/17/release/vc_redist.x64.exe
 
+macOS AND STEAM DECK / LINUX
+  The sections above are written for the Windows zip; the other bundles work
+  the same way with these differences:
+  - There is no extract_assets.bat. Run the extractor from a terminal:
+      python3 extract_iso.py "<your .iso or 435A07D7 folder>" --out assets --dlc-out dlc
+    (python3 comes with macOS and every Linux distribution).
+  - macOS: the bundle is Futari.app. The game looks for assets/ (and dlc/)
+    next to its executable INSIDE the app: right-click Futari.app -> Show
+    Package Contents, and put them in Contents/MacOS/. Logs land there too.
+    The app is ad-hoc signed; if macOS refuses to open it, right-click ->
+    Open once, or allow it under System Settings -> Privacy & Security.
+    Settings are in futari.ini next to the executable, as on Windows.
+  - Steam Deck / Linux: unzip, put assets/ (and dlc/) next to the futari
+    binary, and start the launcher script beside it (it resolves its own
+    directory, so it can live anywhere). Needs a Vulkan driver. On the Deck,
+    add the launcher to Steam as a non-Steam game to run it from Game Mode.
+
 CONTROLS
   An Xbox controller works out of the box. Keyboard is also enabled (gameplay
   and menus): arrows/WASD = move, Space = A, Shift = B, Enter = Start,

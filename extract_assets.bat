@@ -34,11 +34,15 @@ if not defined EXTRACTOR (
 )
 
 rem Find a Python 3 interpreter: prefer the py launcher, then python on PATH.
+rem Each one is actually run: on a fresh PC "python" on PATH can be the
+rem Microsoft Store alias stub, which exists but exits 9009 and does nothing.
 set "PY="
-where py >nul 2>&1
-if %errorlevel%==0 set "PY=py -3"
-where python >nul 2>&1
-if %errorlevel%==0 if not defined PY set "PY=python"
+py -3 --version >nul 2>&1
+if not errorlevel 1 set "PY=py -3"
+if not defined PY (
+    python --version >nul 2>&1
+    if not errorlevel 1 set "PY=python"
+)
 if not defined PY (
     echo [ERROR] Python 3 was not found on this PC.
     echo         Install it from https://www.python.org/downloads/
@@ -51,9 +55,10 @@ if "%~1"=="" (
     echo Nothing was dragged on - looking for a .iso in this folder...
     echo ^(You can also drag on your disc ISO, or the game folder copied off
     echo your console - see docs\DUMPING.md.^)
-) else (
-    echo Extracting from: %~1
 )
+rem Kept outside the if-block above: a dragged path containing ")" -- think
+rem "Program Files (x86)" -- would otherwise close the block early.
+if not "%~1"=="" echo Extracting from: %~1
 echo Output folders:  %~dp0assets  and  %~dp0dlc
 echo.
 
@@ -63,8 +68,11 @@ set "RC=%errorlevel%"
 echo.
 if not "%RC%"=="0" (
     echo [FAILED] Extraction did not complete - see the messages above.
+) else if exist "%~dp0futari.exe" (
+    echo [DONE] See the summary above. You can now double-click futari.exe.
 ) else (
-    echo [DONE] See the summary above. You can now run futari.exe.
+    echo [DONE] Game data is in place. Next, build the port: run build.bat, or
+    echo        follow the Build section of README.md.
 )
 
 :end

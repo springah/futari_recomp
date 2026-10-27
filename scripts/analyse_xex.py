@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Reads a decrypted/decompressed XEX2 binary and prints its load address, entry
-point, and ABI helper addresses -- the values a recompiler manifest needs
-(futari_manifest.toml here, ppc_config.h if you are cross-checking against
-XenonRecomp).
+point, and ABI helper addresses -- the values a recompiler configuration wants
+(ReXGlue reads them from the XEX itself; XenonRecomp's ppc_config.h needs them
+filled in by hand, so this is mainly for cross-checking against it).
 
 Requires the XEX to be already decrypted. If you have xextool or XenonUtils
 built, use those to decrypt first:
@@ -191,9 +191,9 @@ def main():
 
     print("\n--- Next step ---")
     print("This is a cross-check tool: ReXGlue reads these values out of the XEX")
-    print("itself, so futari_manifest.toml does not need them. Use the output when")
-    print("a codegen result looks wrong, or when comparing against XenonRecomp,")
-    print("whose ppc_config.h does want them filled in by hand.")
+    print("itself, so the manifests scripts/regen.sh writes do not need them. Use")
+    print("the output when a codegen result looks wrong, or when comparing against")
+    print("XenonRecomp, whose ppc_config.h does want them filled in by hand.")
 
 
 if __name__ == "__main__":

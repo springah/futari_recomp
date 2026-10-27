@@ -53,7 +53,7 @@ COMPONENTS=(
 UNRESOLVED=(
   "picosha2 (MIT upstream)"
   "stb (MIT / public domain upstream)"
-  "tiny-aes-c (MIT upstream)"
+
   "DirectXShaderCompiler / dxc (Apache-2.0 with LLVM exceptions upstream)"
   "disruptorplus, o1heap-adjacent helpers, disasm, dxbc, pe, ffmpeg-overlay (SDK-local)"
 )
@@ -77,14 +77,15 @@ emit() {
   echo "version 2.1, and are linked statically into the ReXGlue runtime shipped here."
   echo "You are entitled to the complete corresponding source for those libraries, and"
   echo "to the object code needed to relink the runtime against a modified version of"
-  echo "them. Both are obtainable from:"
+  echo "them. Both are obtainable from this port's source repository:"
   echo
-  echo "    https://github.com/rexglue/rexglue-sdk"
+  echo "    https://github.com/springah/futari_recomp"
   echo
-  echo "which vendors them under thirdparty/FFmpeg and thirdparty/libmspack at the"
-  echo "tagged SDK release this build was made from, together with the build files"
-  echo "used to produce the runtime. If you cannot obtain them there, open an issue at"
-  echo "https://github.com/springah/futari_recomp and they will be provided."
+  echo "The exact SDK this runtime was built from is vendored there under"
+  echo "thirdparty/rexglue-sdk at the release tag matching this build, with FFmpeg and"
+  echo "libmspack as its thirdparty/FFmpeg and thirdparty/libmspack submodules and the"
+  echo "build files used to produce the runtime. If you cannot obtain them there, open"
+  echo "an issue in that repository and they will be provided."
   echo
   echo "COMPONENTS"
   echo "----------"
@@ -122,7 +123,8 @@ emit() {
     echo
   done
   if [ "$missing" -gt 0 ]; then
-    echo "WARNING: $missing licence text(s) were missing from the SDK tree." >&2
+    echo "ERROR: $missing licence text(s) were missing from the SDK tree; the output is incomplete." >&2
+    return 1
   fi
 }
 

@@ -1,7 +1,8 @@
 # Changelog
 
-Versions are per-repo; each release is a tag, with per-OS zips on the download
-share. Ports can sit on different versions — see [PORTS.md](PORTS.md).
+Versions are per-repo; each release is a tag with a GitHub Release, and from
+v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
+download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
 ## v1.5.3 — 2026-10-21 (source release; bundles remain v1.5.2 until restaged)
 
@@ -39,6 +40,24 @@ SDK, renderer or game-logic changes, and no codegen regen needed.
   does not build this project, so Windows was the one platform with no working
   preset. `cmake --preset win-amd64-release` replaces the hand-typed configure
   line; the build lands in `out/build/win-amd64-release/`.
+- **Script and doc fixes from a readability review.** `build.ps1` resolves a
+  relative `-GameSource` before changing directory, refuses a ZIP download (no
+  `.git`, so no submodules) with a hint, and re-checks the CMake version after
+  entering the VS developer shell. `extract_assets.bat` runs each Python
+  candidate instead of trusting `where` (the Microsoft Store stub exits 9009),
+  survives a dragged path containing `)`, and no longer claims `futari.exe` is
+  ready when there is nothing built. `build_module_hints.sh` no longer overwrites
+  the committed hint files with unfiltered seeds mid-run. `build_app.sh` fails
+  on a failed codesign, regenerates the third-party notices every time instead
+  of only when missing, derives the build and SDK dirs from the checkout it lives
+  in, and uses the repo's own icon. `regen.sh` finds the SDK CLI for every
+  platform and no longer falls back to a sibling SDK checkout. The LGPL written
+  offer in `THIRD-PARTY-NOTICES.txt` now points at this repository's vendored
+  SDK rather than upstream, which lacks the fixes the bundles need. Removed the
+  unused `futari_manifest.toml` (`regen.sh` writes its own manifests) and the
+  private family-and-friends `RUN.ff.txt`; added `dist/dlc/README.txt`, which
+  `RUN.txt` had referred to without it existing; README gains the macOS/Linux
+  build steps and a truthful release line.
 
 ## v1.5.2 — 2026-08-11 (Windows, macOS, Steam Deck)
 
