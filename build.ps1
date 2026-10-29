@@ -261,13 +261,18 @@ Note "Visual Studio: $vsPath"
 
 # bash comes with Git for Windows. Not System32\bash.exe: that is WSL, and
 # regen.sh would then run inside Linux with none of these paths.
-$gitRoot = Split-Path (Split-Path $git -Parent) -Parent
+# git.exe may be found as <Git>\cmd\git.exe or <Git>\mingw64\bin\git.exe
+# depending on which directory PATH names, so walk up until bash shows up.
 $bash = $null
-foreach ($rel in @('bin\bash.exe', 'usr\bin\bash.exe')) {
-    $p = Join-Path $gitRoot $rel
-    if (Test-Path $p) { $bash = $p; break }
+$gitRoot = Split-Path $git -Parent
+for ($i = 0; $i -lt 4 -and $gitRoot -and -not $bash; $i++) {
+    $gitRoot = Split-Path $gitRoot -Parent
+    foreach ($rel in @('bin\bash.exe', 'usr\bin\bash.exe')) {
+        $p = Join-Path $gitRoot $rel
+        if (Test-Path $p) { $bash = $p; break }
+    }
 }
-if (-not $bash) { Fail "Git's bash.exe was not found under $gitRoot. Install Git for Windows (winget id Git.Git)." }
+if (-not $bash) { Fail "Git's bash.exe was not found above $git. Install Git for Windows (winget id Git.Git)." }
 Note "bash: $bash"
 
 # ----------------------------------------------------------- 3. dev shell ---
