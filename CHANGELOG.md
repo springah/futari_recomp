@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## v1.5.3 — 2026-10-21 (source release; bundles remain v1.5.2 until restaged)
+## v1.5.3 — 2026-10-29
 
 The port's first outside contribution, plus a much shorter road to a build. No
 SDK, renderer or game-logic changes, and no codegen regen needed.
@@ -59,6 +59,10 @@ SDK, renderer or game-logic changes, and no codegen regen needed.
   as `dlc/README.txt`), which `RUN.txt` had referred to without it existing;
   README gains the macOS/Linux
   build steps and a truthful release line.
+- **`build.ps1` finds Git's `bash.exe` whichever `git.exe` PATH names.** Its
+  first real run stopped at the toolchain check on a machine whose PATH put
+  `Git\mingw64\bin\git.exe` ahead of `Git\cmd\git.exe`; it now walks up the
+  parents until bash appears.
 
 ## v1.5.2 — 2026-08-11 (Windows, macOS, Steam Deck)
 

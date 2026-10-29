@@ -15,8 +15,9 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.2 (Windows, macOS, Steam Deck). `main` is at v1.5.3,
-not yet released. See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging
+**Latest release:** v1.5.3 (Windows, macOS, Steam Deck), with the bundles
+attached to the [GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.3).
+See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging
 details: [PORTS.md](PORTS.md).
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
@@ -27,10 +28,8 @@ recompiler edge cases found so far, all fixed, are under
 ## Just want to play?
 
 From v1.5.3 on, prebuilt bundles for Windows, macOS and Steam Deck are attached
-to the [GitHub Releases](https://github.com/springah/futari_recomp/releases).
-**v1.5.3 has not been cut yet, so there is nothing to download at the moment**
-(the v1.5.2 bundles were only ever shared privately); until it lands, build it
-yourself as described below. The bundles contain the game's own program code,
+to the [GitHub Releases](https://github.com/springah/futari_recomp/releases)
+(the v1.5.2 bundles were only ever shared privately). The bundles contain the game's own program code,
 recompiled, and are **for people who own the game only** — see [Legal](#legal).
 They contain no game data: unzip one and follow `RUN.txt` inside to add your own
 dump (on Windows, drag your disc ISO or console install folder onto
