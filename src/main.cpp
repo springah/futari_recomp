@@ -199,6 +199,10 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# still renders at its native resolution and is scaled to fit.\n"
        << "resolution = 1920x1080\n"
        << "fullscreen = false\n"
+       << "# vsync locks the game to refresh_rate and makes the window present\n"
+       << "# in step with your monitor (no tearing). On a variable refresh rate\n"
+       << "# display you can keep the game at 60 but let the window present\n"
+       << "# immediately again with \"present_vsync = false\" in the F4 cvar list.\n"
        << "vsync = true\n"
        << "refresh_rate = 60\n"
        << "letterbox = true\n"
@@ -280,8 +284,13 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
       SetCvarBool("fullscreen", *b);
   }
   if (auto* v = find("display.vsync")) {
-    if (auto b = ParseBool(*v))
+    if (auto b = ParseBool(*v)) {
+      // Guest vblank pacing and host presentation together: "vsync = true" is
+      // what players mean by no tearing. The SDK's managed overlay block is
+      // loaded after this, so a saved "present_vsync = false" (VRR) still wins.
       SetCvarBool("vsync", *b);
+      SetCvarBool("present_vsync", *b);
+    }
   }
   if (auto* v = find("display.refresh_rate")) {
     if (auto d = ParseDouble(*v)) {

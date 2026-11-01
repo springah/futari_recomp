@@ -4,6 +4,26 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- **VSync now actually syncs the window to the monitor.** `vsync = true` paced
+  the game at 60 but never reached the host swap chain: the SDK presenter always
+  presented immediately with tearing allowed (sync interval 0 plus
+  `DXGI_PRESENT_ALLOW_TEARING`, chosen upstream for variable refresh rate
+  displays). On a fixed 60Hz monitor that showed as a tear line near the top of
+  the screen, and while any overlay was drawn (the title-screen exit hint, a
+  toast) the UI thread re-presented every vblank on top of the guest frames, so
+  external counters read about 120 FPS (#5). A new SDK cvar `present_vsync`
+  (default on) makes Direct3D 12 present on the vertical blank without the
+  tearing flag, and Vulkan skip the immediate and FIFO-relaxed present modes;
+  `DXGI_PRESENT_RESTART` keeps late guest frames from queueing behind a UI
+  re-present. The `vsync` line in `futari.ini` and the F4 VSync checkbox set
+  both the guest pacing and the host present. Players on variable refresh rate
+  displays can keep 60 fps pacing but restore immediate presentation with
+  `present_vsync = false` in the F4 cvar list (it persists in the managed block
+  of `futari.ini`). SDK change, in-tree; upstream note in
+  [docs/upstream/host-vsync.md](docs/upstream/host-vsync.md).
+
 ## v1.5.3 — 2026-10-29
 
 The port's first outside contribution, plus a much shorter road to a build. No

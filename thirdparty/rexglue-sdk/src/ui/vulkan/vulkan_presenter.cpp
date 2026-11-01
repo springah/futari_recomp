@@ -24,6 +24,7 @@
 #include <rex/logging.h>
 #include <rex/math.h>
 #include <rex/platform.h>
+#include <rex/ui/flags.h>
 #include <rex/ui/vulkan/presenter.h>
 #include <rex/ui/vulkan/util.h>
 
@@ -1438,7 +1439,11 @@ VkSwapchainKHR VulkanPresenter::PaintContext::CreateSwapchainForVulkanSurface(
   // interfering with GPU command processing, and also to allow tearing so
   // variable refresh rate may be used where it's available.
   // Note: If the priorities here are changes, update the cvar descriptions.
-  if (REXCVAR_GET(vulkan_allow_present_mode_immediate) &&
+  // With present_vsync, the modes that can tear (immediate, FIFO relaxed) are
+  // skipped: mailbox still drops stale frames for latency but never tears, and
+  // FIFO is the fallback.
+  const bool host_vsync = REXCVAR_GET(present_vsync);
+  if (!host_vsync && REXCVAR_GET(vulkan_allow_present_mode_immediate) &&
       std::find(present_modes.cbegin(), present_modes.cend(), VK_PRESENT_MODE_IMMEDIATE_KHR) !=
           present_modes.cend()) {
     // Allowing tearing to reduce latency, and possibly variable refresh rate
@@ -1450,7 +1455,7 @@ VkSwapchainKHR VulkanPresenter::PaintContext::CreateSwapchainForVulkanSurface(
                  present_modes.cend()) {
     // Allowing dropping frames to reduce latency, but no tearing.
     swapchain_create_info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-  } else if (REXCVAR_GET(vulkan_allow_present_mode_fifo_relaxed) &&
+  } else if (!host_vsync && REXCVAR_GET(vulkan_allow_present_mode_fifo_relaxed) &&
              std::find(present_modes.cbegin(), present_modes.cend(),
                        VK_PRESENT_MODE_FIFO_RELAXED_KHR) != present_modes.cend()) {
     // Limiting the frame rate, but lets too long frames cause tearing not to

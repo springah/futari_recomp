@@ -267,7 +267,11 @@ void SettingsDialog::DrawDisplaySection() {
     }
   }
 
-  // VSync: read per-present by the command processor, applies immediately.
+  // VSync: one checkbox for both halves. `vsync` paces the guest vblank (read
+  // every frame by the GPU vsync worker); `present_vsync` makes the host wait
+  // for the display's vertical blank instead of presenting immediately with
+  // tearing. Both apply immediately. Players on variable refresh rate displays
+  // can turn only `present_vsync` back off in the cvar list below.
   ImGui::TableNextRow();
   ImGui::TableNextColumn();
   ImGui::AlignTextToFramePadding();
@@ -275,8 +279,10 @@ void SettingsDialog::DrawDisplaySection() {
   ImGui::TableNextColumn();
   {
     bool vsync = rex::cvar::Query<bool>("vsync");
-    if (ImGui::Checkbox("##vsync", &vsync))
+    if (ImGui::Checkbox("##vsync", &vsync)) {
       rex::cvar::SetFlagByName("vsync", vsync ? "true" : "false");
+      rex::cvar::SetFlagByName("present_vsync", vsync ? "true" : "false");
+    }
   }
 
   ImGui::EndTable();

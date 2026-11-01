@@ -29,6 +29,19 @@
 REXCVAR_DEFINE_BOOL(host_present_from_non_ui_thread, true, "UI/Presenter",
                     "Allow presentation from non-UI thread");
 
+// Host-side vertical sync: whether presenting to the window waits for the
+// display's vertical blank. Distinct from the GPU `vsync` cvar, which paces the
+// guest's vblank interrupt (and thus the game's frame rate) and never touched
+// the host swap chain: without this, every present was immediate with tearing
+// allowed, which on a fixed-refresh monitor shows as a tear line and, while an
+// overlay is drawn, as roughly twice the refresh rate in presents per second.
+// Off restores the immediate/tearing presentation that variable refresh rate
+// displays want. Direct3D 12 applies it per present; Vulkan picks the
+// swapchain present mode from it at (re)creation.
+REXCVAR_DEFINE_BOOL(present_vsync, true, "UI/Presenter",
+                    "Synchronize host presentation to the display refresh (no tearing). "
+                    "Turn off for variable refresh rate displays");
+
 REXCVAR_DEFINE_BOOL(present_letterbox, true, "UI/Presenter",
                     "Enable letterboxing for non-native aspect ratios");
 

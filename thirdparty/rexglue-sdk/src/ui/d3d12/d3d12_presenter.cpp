@@ -22,6 +22,7 @@
 #include <rex/ui/d3d12/d3d12_presenter.h>
 #include <rex/ui/d3d12/d3d12_provider.h>
 #include <rex/ui/d3d12/d3d12_util.h>
+#include <rex/ui/flags.h>
 #include <rex/ui/surface_win.h>
 
 #if defined(REX_HAS_FIDELITYFX_RUNTIME) && REX_HAS_FIDELITYFX_RUNTIME
@@ -350,7 +351,7 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
   if (paint_context_.swap_chain) {
     if (was_paintable && paint_context_.swap_chain_width == new_swap_chain_width &&
         paint_context_.swap_chain_height == new_swap_chain_height) {
-      is_vsync_implicit_out = false;
+      is_vsync_implicit_out = REXCVAR_GET(present_vsync);
       return SurfacePaintConnectResult::kSuccessUnchanged;
     }
     paint_context_.AwaitSwapChainUsageCompletion();
@@ -478,7 +479,13 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
         provider_.OffsetRTVDescriptor(rtv_heap_start, PaintContext::kRTVIndexSwapChainBuffer0 + i));
   }
 
-  is_vsync_implicit_out = false;
+  // With present_vsync, Present(1) may block until the vertical blank once the
+  // present queue fills up. Report that so the presenter paints from the UI
+  // thread on request rather than letting the guest output thread stall in
+  // Present (the same arrangement as a FIFO Vulkan swapchain). Read here, at
+  // (re)connection; a runtime toggle changes the Present call immediately and
+  // the thread arrangement at the next reconnect.
+  is_vsync_implicit_out = REXCVAR_GET(present_vsync);
   return SurfacePaintConnectResult::kSuccess;
 }
 
@@ -1147,17 +1154,27 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
     ui_submission_tracker_.NextSubmission();
   }
   paint_context_.paint_submission_tracker.NextSubmission();
-  // Present as soon as possible, without waiting for vsync (the host refresh
-  // rate may be something like 144 Hz, which is not a multiple of the common
-  // 30 Hz or 60 Hz guest refresh rate), and allowing dropping outdated queued
-  // frames for lower latency. Also, if possible, allowing tearing to use
-  // variable refresh rate in borderless fullscreen (note that if DXGI
-  // fullscreen is ever used in, the allow tearing flag must not be passed in
-  // fullscreen, but DXGI fullscreen is largely unneeded with the flip
-  // presentation model used in Direct3D 12).
+  // With present_vsync (the default), present on the next vertical blank with
+  // tearing disallowed, so a fixed-refresh display never shows a tear line.
+  // DXGI_PRESENT_RESTART still drops queued-but-undisplayed frames, so a guest
+  // frame arriving after the UI thread has re-presented the previous one
+  // replaces it instead of waiting behind it, keeping guest frames on time.
+  // Without present_vsync, present as soon as possible, without waiting for
+  // vsync (the host refresh rate may be something like 144 Hz, which is not a
+  // multiple of the common 30 Hz or 60 Hz guest refresh rate), and allowing
+  // dropping outdated queued frames for lower latency. Also, if possible,
+  // allowing tearing to use variable refresh rate in borderless fullscreen
+  // (note that if DXGI fullscreen is ever used in, the allow tearing flag must
+  // not be passed in fullscreen, but DXGI fullscreen is largely unneeded with
+  // the flip presentation model used in Direct3D 12). The swap chain is created
+  // with DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING either way (it only permits the
+  // per-present flag), so toggling at runtime needs no swap chain recreation.
+  const bool host_vsync = REXCVAR_GET(present_vsync);
   HRESULT present_result = paint_context_.swap_chain->Present(
-      0, DXGI_PRESENT_RESTART |
-             (paint_context_.swap_chain_allows_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0));
+      host_vsync ? 1 : 0,
+      DXGI_PRESENT_RESTART | ((!host_vsync && paint_context_.swap_chain_allows_tearing)
+                                  ? DXGI_PRESENT_ALLOW_TEARING
+                                  : 0));
   // Even if presentation has failed, work might have been enqueued anyway
   // internally before the failure according to Jesse Natalie from the DirectX
   // Discord server.
