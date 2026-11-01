@@ -23,7 +23,7 @@
 set -euo pipefail
 
 PROJ="${PROJ:-$HOME/Desktop/projects}"
-VER="${VER:-1.5.3}"
+VER="${VER:-1.5.4}"
 # The checkout is wherever this script lives; the build dir and the SDK are
 # derived from it so one bundle never mixes two trees.
 REPO="${REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"

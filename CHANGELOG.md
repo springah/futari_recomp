@@ -4,7 +4,13 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.4 — unreleased (bundles remain v1.5.3 until restaged)
+
+One renderer fix, prompted by the first bug report from a player. SDK change in
+the vendored tree, no game-logic changes, and no codegen regen needed. Boot-checked
+on all three platforms: Direct3D 12 now presents on the vertical blank, the Steam
+Deck swapchain moved from immediate to mailbox, and macOS (MoltenVK) from immediate
+to FIFO.
 
 - **VSync now actually syncs the window to the monitor.** `vsync = true` paced
   the game at 60 but never reached the host swap chain: the SDK presenter always

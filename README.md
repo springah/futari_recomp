@@ -17,8 +17,8 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 **Latest release:** v1.5.3 (Windows, macOS, Steam Deck), with the bundles
 attached to the [GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.3).
-See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging
-details: [PORTS.md](PORTS.md).
+`main` is at v1.5.4, not yet released. See [CHANGELOG.md](CHANGELOG.md). Per-OS
+build and packaging details: [PORTS.md](PORTS.md).
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
 load, run, and mode-switch cleanly. Nothing is known to be broken right now; the
