@@ -20,6 +20,12 @@ attached to the [GitHub release](https://github.com/springah/futari_recomp/relea
 `main` is at v1.5.4, not yet released. See [CHANGELOG.md](CHANGELOG.md). Per-OS
 build and packaging details: [PORTS.md](PORTS.md).
 
+**Linux and Steam Deck players: use [futari-linux](https://github.com/cerroverb/futari-linux)** instead.
+From v1.5.4 on this project ships Windows and macOS only. futari-linux is a
+native-renderer port of the same game maintained by cerroverb, and on a Steam
+Deck it runs the game at a fraction of the CPU and power this one needs ([#6](https://github.com/springah/futari_recomp/issues/6)). The `linux-amd64` preset stays in the tree for anyone who wants
+to build this version, but it is no longer a supported target.
+
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
 load, run, and mode-switch cleanly. Nothing is known to be broken right now; the
 recompiler edge cases found so far, all fixed, are under
@@ -27,9 +33,11 @@ recompiler edge cases found so far, all fixed, are under
 
 ## Just want to play?
 
-From v1.5.3 on, prebuilt bundles for Windows, macOS and Steam Deck are attached
-to the [GitHub Releases](https://github.com/springah/futari_recomp/releases)
-(the v1.5.2 bundles were only ever shared privately). The bundles contain the game's own program code,
+Prebuilt bundles for Windows and macOS are attached to the
+[GitHub Releases](https://github.com/springah/futari_recomp/releases) (from
+v1.5.3 on; the v1.5.2 bundles were only ever shared privately, and v1.5.3 was
+the last release with a Steam Deck zip; Linux and Steam Deck players should use
+[futari-linux](https://github.com/cerroverb/futari-linux)). The bundles contain the game's own program code,
 recompiled, and are **for people who own the game only** — see [Legal](#legal).
 They contain no game data: unzip one and follow `RUN.txt` inside to add your own
 dump (on Windows, drag your disc ISO or console install folder onto
@@ -174,7 +182,9 @@ out/build/win-amd64-release/futari.exe --game_data_root assets
 
 ### macOS and Linux
 
-The same seven steps, with a different compiler and preset. Needs CMake 3.25+,
+Linux is build-from-source only and unsupported from v1.5.4 on (Linux and Steam
+Deck players: see [futari-linux](https://github.com/cerroverb/futari-linux)); the preset is kept because it still
+builds. The same seven steps, with a different compiler and preset. Needs CMake 3.25+,
 Ninja, Python 3 and a recent clang: on macOS that is **Homebrew LLVM**
 (`brew install llvm molten-vk`; the SDK rejects Apple's clang), on Linux the
 distribution's clang 20+ plus the Vulkan headers and loader.

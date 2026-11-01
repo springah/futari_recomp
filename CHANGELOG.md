@@ -6,11 +6,21 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## v1.5.4 — unreleased (bundles remain v1.5.3 until restaged)
 
-One renderer fix, prompted by the first bug report from a player. SDK change in
-the vendored tree, no game-logic changes, and no codegen regen needed. Boot-checked
-on all three platforms: Direct3D 12 now presents on the vertical blank, the Steam
-Deck swapchain moved from immediate to mailbox, and macOS (MoltenVK) from immediate
-to FIFO.
+One renderer fix, prompted by the first bug report from a player, and one platform
+decision. SDK change in the vendored tree, no game-logic changes, and no codegen
+regen needed. The fix was boot-checked on all three platforms: Direct3D 12 now
+presents on the vertical blank, the Steam Deck swapchain moved from immediate to
+mailbox, and macOS (MoltenVK) from immediate to FIFO.
+
+- **Linux and Steam Deck are handed over to [futari-linux](https://github.com/cerroverb/futari-linux).** cerroverb
+  maintains a native-renderer port of the same game (reNut's Direct3D-level
+  renderer on Vulkan, from ChanseyIsTheBest's futari-nx) and measured it against
+  this port's v1.5.3 Deck bundle: 23 % of one core versus 324 %, 5.4 W versus
+  13.8 W, both at 60 fps. The emulated Xenos GPU path was never the right thing
+  for a handheld, so from this version the releases carry Windows and macOS
+  bundles only and the docs point Linux and Steam Deck players at futari-linux
+  (#6). The `linux-amd64` preset stays in the tree and still builds; it is just
+  no longer a supported target.
 
 - **VSync now actually syncs the window to the monitor.** `vsync = true` paced
   the game at 60 but never reached the host swap chain: the SDK presenter always

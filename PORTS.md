@@ -8,7 +8,7 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 | OS | Build | Status |
 |----|-------|--------|
 | Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.3 (SDK v0.9.3.1) |
-| Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) | ✅ v1.5.3 (boot-verified on device) |
+| Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) — still builds, no longer shipped | ⏹ handed over to [futari-linux](https://github.com/cerroverb/futari-linux) from v1.5.4 ([#6](https://github.com/springah/futari_recomp/issues/6)); last bundle here v1.5.3 |
 | macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.3 (MoltenVK) |
 
 **Windows builds use the `win-amd64-*` presets**, which name clang-cl from
@@ -52,8 +52,9 @@ into the `.app` so the shipped bundle needs no Homebrew.
 ## Releases
 
 One SemVer tag per release; per-OS zips are named
-`Mushihimesama-Futari-PC-vX.Y.Z.zip`, `-Deck-`, `-macOS-`. No game content goes
-into a bundle or a tag, ever.
+`Mushihimesama-Futari-PC-vX.Y.Z.zip` and `-macOS-` (and `-Deck-` up to v1.5.3;
+Linux and Steam Deck are served by [futari-linux](https://github.com/cerroverb/futari-linux) since v1.5.4). No game
+content goes into a bundle or a tag, ever.
 
 Each tag gets a **GitHub Release with the per-OS zips attached** (from v1.5.3
 on; earlier bundles went only to a private download share). The release notes
