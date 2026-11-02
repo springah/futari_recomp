@@ -15,10 +15,10 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.3 (Windows, macOS, Steam Deck), with the bundles
-attached to the [GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.3).
-`main` is at v1.5.4, not yet released. See [CHANGELOG.md](CHANGELOG.md). Per-OS
-build and packaging details: [PORTS.md](PORTS.md).
+**Latest release:** v1.5.4 (Windows, macOS), with the bundles attached to the
+[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.4).
+See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging details:
+[PORTS.md](PORTS.md).
 
 **Linux and Steam Deck players: use [futari-linux](https://github.com/cerroverb/futari-linux)** instead.
 From v1.5.4 on this project ships Windows and macOS only. futari-linux is a

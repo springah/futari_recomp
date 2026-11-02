@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## v1.5.4 — unreleased (bundles remain v1.5.3 until restaged)
+## v1.5.4 — 2026-11-02 (Windows, macOS)
 
 One renderer fix, prompted by the first bug report from a player, and one platform
 decision. SDK change in the vendored tree, no game-logic changes, and no codegen
