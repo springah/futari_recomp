@@ -423,8 +423,17 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
         continue;
       }
       const std::string key = Trim(std::string_view(line).substr(0, eq));
-      const bool excluded = std::any_of(std::begin(kExcluded), std::end(kExcluded),
-                                        [&](std::string_view e) { return e == key; });
+      bool excluded = std::any_of(std::begin(kExcluded), std::end(kExcluded),
+                                  [&](std::string_view e) { return e == key; });
+      // present_vsync normally mirrors the [Display] vsync line (the F4 VSync
+      // checkbox sets both), and the managed block loads after that line, so
+      // persisting it here would pin the host present to a value a later hand
+      // edit of "vsync = ..." cannot change: save with VSync off, edit vsync =
+      // true back in, and the window would still tear. Keep it only when it
+      // deliberately differs (the VRR case: vsync = true, present_vsync = false).
+      if (!excluded && key == "present_vsync") {
+        excluded = GetCvarByName("present_vsync") == GetCvarByName("vsync");
+      }
       if (!excluded) {
         raw_block += line;
         raw_block += '\n';

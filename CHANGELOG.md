@@ -4,6 +4,26 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
+for the log line, a save-path change in `main.cpp`, no codegen regen needed.
+
+- **A saved VSync-off setting no longer sticks when `vsync = true` is edited
+  back in.** The F4 VSync checkbox sets both `vsync` and `present_vsync`, and
+  "Save to config" wrote the second into the managed block of `futari.ini` as
+  well. The managed block is read last, so after saving with VSync off and
+  later hand-editing `vsync = true` under `[Display]`, the game paced at 60 but
+  the window still presented immediately and tore. `present_vsync` is now
+  written only when it deliberately differs from `vsync` (the variable refresh
+  rate case). An existing `present_vsync = false` line in the managed block
+  keeps working; delete it, or save once from F4, to follow `vsync` again.
+- **The log shows the Direct3D 12 present path.** One line when the swap chain
+  is created (size, buffer count, whether tearing is supported) and one whenever
+  the present path changes (sync interval and present flags), so a tearing or
+  frame rate report can be read off the log. Vulkan already logged its
+  presentation mode.
+
 ## v1.5.4 — 2026-11-02 (Windows, macOS)
 
 One renderer fix, prompted by the first bug report from a player, and one platform

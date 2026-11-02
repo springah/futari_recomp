@@ -451,6 +451,10 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
     paint_context_.swap_chain_height = new_swap_chain_height;
     paint_context_.swap_chain_allows_tearing =
         (swap_chain_desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) != 0;
+    paint_context_.last_logged_present_vsync = -1;
+    REXLOG_INFO("D3D12Presenter: Created {}x{} swap chain with {} buffers, tearing {}",
+                new_swap_chain_width, new_swap_chain_height, PaintContext::kSwapChainBufferCount,
+                paint_context_.swap_chain_allows_tearing ? "supported" : "unsupported");
     for (uint32_t i = 0; i < PaintContext::kSwapChainBufferCount; ++i) {
       if (FAILED(paint_context_.swap_chain->GetBuffer(
               i, IID_PPV_ARGS(&paint_context_.swap_chain_buffers[i])))) {
@@ -1170,11 +1174,18 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
   // with DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING either way (it only permits the
   // per-present flag), so toggling at runtime needs no swap chain recreation.
   const bool host_vsync = REXCVAR_GET(present_vsync);
+  const bool allow_tearing_flag = !host_vsync && paint_context_.swap_chain_allows_tearing;
+  if (paint_context_.last_logged_present_vsync != int8_t(host_vsync)) {
+    // Once per swap chain and on every runtime toggle, so a player's log says
+    // which present path was in use (a tearing report used to be invisible
+    // in the log).
+    paint_context_.last_logged_present_vsync = int8_t(host_vsync);
+    REXLOG_INFO("D3D12Presenter: Presenting with sync interval {}, DXGI_PRESENT_RESTART{}",
+                host_vsync ? 1 : 0, allow_tearing_flag ? " | DXGI_PRESENT_ALLOW_TEARING" : "");
+  }
   HRESULT present_result = paint_context_.swap_chain->Present(
       host_vsync ? 1 : 0,
-      DXGI_PRESENT_RESTART | ((!host_vsync && paint_context_.swap_chain_allows_tearing)
-                                  ? DXGI_PRESENT_ALLOW_TEARING
-                                  : 0));
+      DXGI_PRESENT_RESTART | (allow_tearing_flag ? DXGI_PRESENT_ALLOW_TEARING : 0));
   // Even if presentation has failed, work might have been enqueued anyway
   // internally before the failure according to Jesse Natalie from the DirectX
   // Discord server.
