@@ -6,6 +6,9 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+v1.5.5-rc1 (2026-11-03): a Windows pre-release of the state below, for
+testers of the Renut renderer (opt-in; the default renderer is unchanged).
+
 Groundwork for the native renderer (issue #8, `docs/NOTES_renut_port_scoping.md`),
 leg 1 of 6: the SDK additions the Renut renderer compiles against, ported from
 cerroverb/futari-linux's SDK fork onto the vendored v0.9.3.1. No renderer code
