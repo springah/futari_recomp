@@ -6,6 +6,24 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+Groundwork for the native renderer (issue #8, `docs/NOTES_renut_port_scoping.md`),
+leg 1 of 6: the SDK additions the Renut renderer compiles against, ported from
+cerroverb/futari-linux's SDK fork onto the vendored v0.9.3.1. No renderer code
+yet; the xenos path is unchanged in behaviour.
+
+- **Frame latency probe** (`rex/frame_latency.h`): input read, guest swap,
+  present, GPU done and display vsync timestamps, a one-line report and an
+  event trace. `VdSwap` now feeds its swap counter.
+- **`GuestSwapCount` / `vblank_per_swap`** in the kernel video exports: a
+  swap counter any renderer can follow, and a deterministic one-vblank-per-swap
+  mode (`vblank_per_swap`, `vblank_per_swap_timeout_ms`, `vblank_per_swap_min_us`)
+  for lockstep comparisons between renderers. Off by default.
+- **Late input read** (`input_frame_read_delay_us`, default 0, and
+  `rex::input::SetFrameReadDelayFunction`): the first controller read after each
+  swap can be delayed, so a game that polls right after its swap samples closer
+  to the frame that shows it. No effect unless set.
+- `rex::memory::MarkStoreCardsAt` no-op, for Renut's draw path.
+
 Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
 for the log line, a save-path change in `main.cpp`, no codegen regen needed.
 

@@ -68,6 +68,15 @@ it is the Switch/Horizon layer, codegen options and console tuning. What Renut i
 | `resources/templates/codegen/dll_targets_cmake.inja` | +9/-2 | app-side source per module (we do this in regen.sh instead) |
 | `src/ui/vulkan/vulkan_presenter.cpp` | +592 | NO (SDK presenter; Renut presents through plume itself) |
 
+**Leg 1 result (11-03, branch `renderer/renut`).** Measured against the fork's shipped `sdk/` tree with CRLF
+noise removed, the drift in the 26 headers Renut includes is ~500 lines, and Renut references exactly ONE symbol that
+exists only in v0.10.0: `rex::memory::MarkStoreCardsAt` (a no-op in Futari). Of the fork deltas in the table, Renut
+needs frame_latency (new, verbatim), the video.h trio (`GuestSwapCount` reads the latency probe's counter; `VdSwap`
+calls `NoteGuestSwap`, so a renderer that replaces Swap keeps the count honest), and from input_system the late-read
+block + `SetFrameReadDelayFunction` (Renut's render_thread.cpp installs its `LateInputDelay`). NOT needed and NOT
+ported: hook.h (`REX_EXPORT_CENSUS`, sys_counters), cvar.h (`LoadConfigString`), the presenter own-thread work
+(Switch), kernel_state static modules, the ppc/context.h diet. Ported as 6 edited files + 2 new, 385 lines.
+
 Every other header Renut includes (`rex/cvar.h`, `types.h`, `hook.h`, `logging.h`, `ppc.h`, `system/*`, `ui/*`,
 `platform.h`, `thread.h`, `runtime.h`, `filesystem.h`) **exists in our vendored v0.9.3.1**. Two routes:
 (a) port the ~800 lines above onto our v0.9.3.1; (b) bump the vendored SDK to v0.10.0 first (cleaner, and the
@@ -129,7 +138,7 @@ dump + XenosRecomp + dxc there and write the cache beside the exe. Windows D3D12
 | Leg | What | Est. |
 |---|---|---|
 | 0 | Licence: reNut permission GRANTED (issue #74, 11-03); decide GPL-3 for the renderer build | done |
-| 1 | SDK deltas onto v0.9.3.1: frame_latency, video.h, hook.h, presenter bits (~800 lines) | 1 |
+| 1 | SDK deltas onto v0.9.3.1: frame_latency, video.h, input late-read, MarkStoreCardsAt (116 lines + 269 new; hook.h / presenter / cvar deltas NOT needed, see §3) | done 11-03 (branch `renderer/renut`) |
 | 2 | Vendor renut_engine + plume reconcile + reblue-XenosRecomp ExternalProject; shim the 5 futari-nx headers; strip deko3d; compile on win-amd64 | 1-2 |
 | 3 | Hooks: `futari_d3d_functions.txt` + `renut_futari_hooks.py` as-is; regen.sh adds the core hook source per DLL; vblank thread; boot surface in main.cpp | 1 |
 | 4 | Shader cache at extract time (dump -> XenosRecomp -> dxc SPIR-V), `vulkan_spirv.bin` beside the exe; Vulkan-only | 1 |

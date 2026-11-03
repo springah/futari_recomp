@@ -51,6 +51,11 @@ inline T GuestPtr(u8* base, u32 guest_address) noexcept {
   return reinterpret_cast<T>(base + guest_address + detail::PhysicalHostOffset(guest_address));
 }
 
+// futari-nx (2026-10-19): banjo-nx's store cards (a byte per 4 KB guest page that every guest store and host writer
+// zeroes) need its codegen pass; Futari's generated code marks none, so a host writer has nothing to mark. The
+// function stays for Renut's renderer, which calls it (banjo_renut_store_cards is off in Futari). Ported 2026-11-03.
+inline void MarkStoreCardsAt(u8* /*cards*/, u32 /*guest_address*/, u32 /*length*/) noexcept {}
+
 class Memory;
 
 enum SystemHeapFlag : uint32_t {

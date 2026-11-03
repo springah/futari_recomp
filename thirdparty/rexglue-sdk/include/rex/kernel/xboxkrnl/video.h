@@ -11,6 +11,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+
 #include <rex/system/xtypes.h>
 #include <rex/system/xvideo.h>
 
@@ -30,5 +33,16 @@ void VdQueryVideoMode(system::X_VIDEO_MODE* video_mode);
 // Must be called during kernel initialization before XEX modules are loaded.
 void RegisterVideoExports(rex::runtime::ExportResolver* export_resolver,
                           system::KernelState* kernel_state);
+
+// Number of VdSwap calls so far: one per frame the game presents, whatever its own Direct3D looks like. For tools
+// that follow the game's frames (video recorders, frame pacing logs) without a game-specific hook on its flip.
+// (futari-linux SDK fork, 2026-10; ported for the Renut renderer.)
+uint64_t GuestSwapCount();
+
+// vblank_per_swap (deterministic runs): the vblank thread raises one vblank per guest swap instead of one per 1/60 s.
+bool VblankPerSwap();
+// For VblankPerSwap(): waits until the guest swapped since `last_swap` (updated) or the timeout passed (a guest that
+// waits for vblanks without swapping, e.g. a loading screen); false when `running` went false.
+bool WaitSwapForVblank(uint64_t& last_swap, const std::atomic<bool>& running);
 
 }  // namespace rex::kernel::xboxkrnl
