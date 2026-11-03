@@ -396,6 +396,11 @@ function(renut_gpu_setup TARGET)
     # every ImGui symbol. The console uses the SDK's copy, and Renut's overlay is not started there (app_integration).
     if(NOT REXGLUE_PLATFORM_SWITCH)
         target_sources(${TARGET} PRIVATE ${renut_imgui_sources})
+        # futari_recomp (2026-11-03): on Windows the executable's own sources (main.cpp's dialogs, drawn by the SDK's
+        # drawer on either renderer) linked to THIS copy instead of rexruntime.dll's, whose context is the one those
+        # dialogs run in: null context, crash on the first dialog when Renut is not the renderer. The copy and every
+        # Renut source see the namespace as ImGuiRenut, so rexruntime's is the only ImGui:: in the link.
+        target_compile_definitions(${TARGET} PRIVATE ImGui=ImGuiRenut)
         set_source_files_properties(${renut_imgui_sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
         # futari-nx (2026-10-26, Linux): an executable exports every symbol a shared library it links references, so
         # these definitions would be exported and would interpose librexruntime.so's own ImGui (one context for the

@@ -60,6 +60,14 @@ grep -q "no game shaders built in" "${LOG:-/dev/null}" ||
 grep -q "Renderer: Vulkan" "$LOG" || { echo "REFUSED: the staged exe did not bring Renut up; see $LOG"; exit 1; }
 rm -rf "$STAGE/logs" "$STAGE/shader_capture"
 echo "  boot check: release shader table, Renut up"
+# The default renderer must survive its first dialogs (the title hint appears a few seconds in): a crash there leaves a
+# log identical to a healthy run's, so judge by the exit: 124 = still running when timeout killed it.
+xenos_rc=0
+( cd "$STAGE" && timeout 20 ./futari.exe --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" >/dev/null 2>&1 ) || xenos_rc=$?
+taskkill //F //IM futari.exe >/dev/null 2>&1 || true
+[ "$xenos_rc" = "124" ] || { echo "REFUSED: the staged exe died within 20 s on the default renderer (exit $xenos_rc)"; exit 1; }
+rm -rf "$STAGE/logs"
+echo "  boot check: default renderer alive at 20 s"
 
 rm -f "$ZIP"
 python3 - "$ROOT/out/_stage" "$NAME" "$ZIP" <<'EOF'

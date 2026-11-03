@@ -118,7 +118,15 @@ no misses, and without the package Renut logs what to do and draws nothing.
 - `renut_gpu_backend` defaults to Vulkan: the package is SPIR-V only, so the
   D3D12 backend would have nothing to draw with.
 - `scripts/stage_win_zip.sh <version>`: the public Windows zip from a clean
-  clone, with the shipping checks (release table, no game data, boots).
+  clone, with the shipping checks (release table, no game data, boots on both
+  renderers).
+- **Fix (leg 5): the default renderer crashed a few seconds after boot** in
+  every Renut-era build (legs 2 to 4b), on the title hint dialog. Renut's
+  overlay compiles its own Dear ImGui into the exe, and `main.cpp`'s dialogs
+  had linked to that copy instead of the SDK's, whose context they run in.
+  The copy now lives in its own namespace (`ImGuiRenut`), so the SDK's is the
+  only `ImGui::` in the link. The crash leaves a log identical to a healthy
+  run's, which is why "boots unchanged" held through three legs.
 
 Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
 for the log line, a save-path change in `main.cpp`, no codegen regen needed.
