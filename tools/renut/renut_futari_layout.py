@@ -35,8 +35,9 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GPU = os.path.join(ROOT, 'app', 'src', 'renut_engine', 'gpu')
+# futari_recomp (2026-11-03): this script lives at tools/renut/; ROOT is the repository.
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+GPU = os.path.join(ROOT, 'src', 'renut_engine', 'gpu')
 MARK = '// futari-nx: device offsets translated to Futari\'s XDK (tools/renut_futari_layout.py)'
 
 

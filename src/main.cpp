@@ -31,9 +31,21 @@
 // init-only cvar futari_renderer = "renut"; every call below is gated on that, and with any other value the SDK's
 // xenos plugin renders exactly as before.
 #include "renut_engine/futari_renut_vblank.h"
+#include "renut_engine/gpu/banjo_renut_capture.h"
 #include "renut_engine/gpu/banjo_renut_select.h"
 #include "renut_engine/gpu/overlay/app_integration.h"
 #include <rex/ui/immediate_drawer.h>
+
+// Dev aid (the Renut gates): write the presented frame once, N seconds after the runtime is up, as a binary PPM
+// (P6; convert with any image tool). Empty path = off. Init-only, meant for the command line:
+//   --futari_renut_capture_path=out/frame.ppm --futari_renut_capture_after_s=25
+REXCVAR_DEFINE_STRING(futari_renut_capture_path, "", "Futari",
+                      "Renut: write the presented frame to this .ppm file once (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_INT32(futari_renut_capture_after_s, 20, "Futari",
+                     "Renut: seconds after the runtime is up to take futari_renut_capture_path")
+    .range(1, 600)
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 #endif
 
 #include <imgui.h>
@@ -54,6 +66,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -736,8 +749,47 @@ class FutariApp : public rex::ReXApp {
   void OnPostSetup() override {
     if (banjo::renut_gpu::Active()) {
       futari::renut_vblank::Start();
+      StartRenutCapture();
     }
   }
+
+  // The dev capture (futari_renut_capture_path): one frame, written on its own thread.
+  void StartRenutCapture() {
+    const std::string path = REXCVAR_GET(futari_renut_capture_path);
+    if (path.empty()) {
+      return;
+    }
+    const int after_s = REXCVAR_GET(futari_renut_capture_after_s);
+    renut_capture_thread_ = std::thread([this, path, after_s] {
+      for (int i = 0; i < after_s * 10 && !renut_capture_stop_.load(std::memory_order_acquire); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      if (renut_capture_stop_.load(std::memory_order_acquire)) {
+        return;
+      }
+      rex::ui::RawImage image;
+      if (!renut::gpu::CaptureFrame(image, 2000)) {
+        REXLOG_ERROR("Renut capture: no frame within 2 s");
+        return;
+      }
+      std::ofstream out(path, std::ios::binary);
+      out << "P6\n" << image.width << ' ' << image.height << "\n255\n";
+      std::vector<char> row(size_t(image.width) * 3);
+      for (uint32_t y = 0; y < image.height; ++y) {
+        const uint8_t* src = image.data.data() + size_t(y) * image.stride;
+        for (uint32_t x = 0; x < image.width; ++x) {
+          row[size_t(x) * 3 + 0] = char(src[size_t(x) * 4 + 0]);
+          row[size_t(x) * 3 + 1] = char(src[size_t(x) * 4 + 1]);
+          row[size_t(x) * 3 + 2] = char(src[size_t(x) * 4 + 2]);
+        }
+        out.write(row.data(), std::streamsize(row.size()));
+      }
+      REXLOG_INFO("Renut capture: {}x{} frame at {} s written to {}", image.width, image.height, after_s, path);
+    });
+  }
+
+  std::thread renut_capture_thread_;
+  std::atomic<bool> renut_capture_stop_{false};
 
   void OnWindowPixelSizeChanged(uint32_t pixel_width, uint32_t pixel_height) override {
     rex::ReXApp::OnWindowPixelSizeChanged(pixel_width, pixel_height);
@@ -748,6 +800,10 @@ class FutariApp : public rex::ReXApp {
 
   void OnShutdown() override {
     if (banjo::renut_gpu::Active()) {
+      renut_capture_stop_.store(true, std::memory_order_release);
+      if (renut_capture_thread_.joinable()) {
+        renut_capture_thread_.join();
+      }
       futari::renut_vblank::Stop();
       renut::gpu::ShutdownRenderer();
     }

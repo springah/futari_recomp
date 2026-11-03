@@ -133,6 +133,32 @@ no flags boots unchanged. Leg 4 needs: the real shader pipeline (`FUTARI_RENUT_S
 ExternalProject + dxc-bin Windows binaries, absent from the vendored tree) fed by the capture folder, or the futari-linux
 `renut_dump_shaders.py` route; then a full-game capture pass (every stage, every mode) so the shipped cache is complete.
 
+**Leg 4 result (11-03).** Renut draws the game: the title screen on Vulkan, captured from the renderer's own present
+28 s after boot. Facts:
+- No capture pass is needed: Futari's shaders are all in its executables (the dump tool's docstring was right): 42
+  unique from 76 occurrences, found statically. The 38 the first boot captured are a subset. The images come from the
+  codegen CLI: `REXGLUE_DUMP_IMAGE` ported from the futari-linux SDK fork into
+  `thirdparty/rexglue-sdk/src/codegen/project_recompiler.cpp` (entrypoint + each DLL; our codegen keeps the DLLs
+  loaded, so one isolated manifest per core as regen.sh; codegen output to out/imgdump/, generated/ untouched, 3 s a
+  module). `scripts/renut_shader_dump.sh` does both steps.
+- The real pipeline runs unchanged from futari-linux: XenosRecomp (XENOS_RECOMP_RENUT, DXIL on) built as an
+  ExternalProject with this tree's clang-cl, the early-alpha pass (copied 13, little 11), shader_cache.cpp 262 KB,
+  42 entries, layout 7. dxc-bin's Windows binaries (hedge-dev dxc-bin 737ac9f: dxc.exe, dxcompiler.dll, dxil.dll,
+  dxcompiler.lib) copied from projects/_tools/XenosRecomp and git-ignored; a fresh clone needs that copy (README owed).
+- Run: 0 shader misses, no warnings, 60 fps, draws live (19k in a 10 s window at the title). The capture aid
+  (`futari_renut_capture_path` / `_after_s`, main.cpp) writes a P6 PPM from `renut::gpu::CaptureFrame`.
+- Tools patched for this tree's layout: renut_dump_shaders.py, renut_futari_layout.py (ROOT one level up; src/ not
+  app/src/).
+- DISTRIBUTION CAVEAT: this build compiles the TRANSLATED GAME SHADERS into futari.exe. That is game data, which the
+  public zips do not carry (asset-free rule). A release build must take futari-linux's route instead: the shader
+  table without the shaders (`tools/linux/release_shader_table.py` -> shader_cache_release.cpp,
+  FUTARI_LINUX_RELEASE_SHADERS) and `vulkan_spirv.bin` made from the player's own executables at extract time (the
+  wizard), which needs XenosRecomp + dxc on the player's machine or a translation step that ships with the zip. Until
+  that lands, Renut builds are DEV ONLY and must not be uploaded. Sized separately (leg 4b).
+- Open for leg 5 (Windows gate): hands on the whole game (stages, boss, both modes, Black Label DLC, Arrange), the
+  overlay (F3/F4) on Renut's drawer, resolution/fullscreen, d3d12 backend, the xenos A/B of pictures and feel; then
+  packaging (THIRD-PARTY-NOTICES, README renderer section, ini key). Leg 6 = macOS (Metal via plume).
+
 ## 5. plume and XenosRecomp
 
 - plume: their `app/thirdparty/plume` vs our springah/plume fork (daytona, d3d12 fixes) differ in 26 paths, of
@@ -183,7 +209,7 @@ dump + XenosRecomp + dxc there and write the cache beside the exe. Windows D3D12
 | 1 | SDK deltas onto v0.9.3.1: frame_latency, video.h, input late-read, MarkStoreCardsAt (116 lines + 269 new; hook.h / presenter / cvar deltas NOT needed, see §3) | done 11-03 (branch `renderer/renut`) |
 | 2 | Vendor renut_engine + plume + reblue-XenosRecomp; shim the futari-nx headers; compile + link on win-amd64 (stub shader cache); xenos still boots | done 11-03 (same session as leg 1, 3 agents) |
 | 3 | Hooks: `futari_d3d_functions.txt` + `renut_futari_hooks.py` as-is; regen.sh adds the core hook source per DLL; vblank thread; boot surface in main.cpp | done 11-03 (first Renut boot: Vulkan, 60 fps, 0 draws on the stub cache; 38 shaders captured) |
-| 4 | Shader cache at extract time (dump -> XenosRecomp -> dxc SPIR-V), `vulkan_spirv.bin` beside the exe; Vulkan-only | 1 |
+| 4 | Shader cache at extract time (dump -> XenosRecomp -> dxc SPIR-V), `vulkan_spirv.bin` beside the exe; Vulkan-only | done 11-03 (42 shaders from the static dump; FIRST PICTURE: title on Vulkan) |
 | 5 | First light + gates on Windows: lockstep vs xenos (their `compare_frames.py` / lockstep scripts exist), all 9 images, DLC modes, present_vsync parity, F4 overlay through Renut's drawer | 1-2 |
 | 6 | macOS via MoltenVK; risk unknown | 1-2 |
 | | **Total** | **6-9 sessions** + licence wait |

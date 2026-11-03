@@ -72,6 +72,28 @@ stays black. Leg 4 fills the cache. The default (xenos) path boots unchanged.
   the exe (`vs_<hash>.bin` / `ps_<hash>.bin`, one warning each): the first boot
   wrote 38, which is leg 4's input.
 
+Leg 4 of 6: **Renut draws the game.** The shader cache is real: the game's 42
+shaders (24 pixel, 18 vertex; 22 + 22 in default.xex and 2 + 2 in each core,
+76 occurrences) translated by XenosRecomp to DXIL and SPIR-V and compiled into
+the exe. First picture 11-03: the title screen, Vulkan, from the renderer's own
+present.
+
+- `scripts/renut_shader_dump.sh`: the dump the real pipeline needs. The codegen
+  CLI gained futari-linux's `REXGLUE_DUMP_IMAGE` aid (writes the decrypted,
+  decompressed image of each module), the script runs it per module into a
+  scratch folder, then `tools/renut/renut_dump_shaders.py` lifts the shader
+  containers out of the nine images into `out/renut_shader_dump/`. Game data:
+  never committed. The build adds any run-time capture to it.
+- `FUTARI_RENUT_STUB_SHADER_CACHE` now defaults OFF: a configure without the
+  dump stops with the script's name. The real pipeline builds XenosRecomp as an
+  ExternalProject with this tree's clang and needs the dxc-bin Windows binaries
+  (dxc.exe, dxcompiler.dll, dxil.dll, dxcompiler.lib) under
+  `thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/`, which are not in the
+  repository (ignored; copy them from a XenosRecomp checkout).
+- Dev aid: `--futari_renut_capture_path=<file.ppm>` with
+  `--futari_renut_capture_after_s=<n>` writes one presented frame, for the
+  gates.
+
 Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
 for the log line, a save-path change in `main.cpp`, no codegen regen needed.
 

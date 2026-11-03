@@ -42,7 +42,8 @@ try:
 except ImportError:
     sys.exit("error: the 'xxhash' module is required (pip install xxhash)")
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# futari_recomp (2026-11-03): this script lives at tools/renut/; ROOT is the repository.
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MODULES = ("default", "palm_normal", "palm_abnormal", "reco_normal", "reco_abnormal",
            "hirow_normal", "hirow_abnormal", "kiniro_normal", "kiniro_abnormal")
 EXPECTED_BASE = {"default": 0x82000000}  # the game cores: 0x88000000

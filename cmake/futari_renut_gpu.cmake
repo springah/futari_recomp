@@ -30,7 +30,7 @@ endif()
 # Renut's XenosRecomp (an ExternalProject) -> shader_cache.cpp with every translated shader. Leg 4 moves that pipeline
 # to extract time (docs/NOTES_renut_port_scoping.md section 7): translated game shaders in the binary would break the
 # no-bundled-game-data rule.
-option(FUTARI_RENUT_STUB_SHADER_CACHE "Renut: an empty shader cache (no dump / XenosRecomp run); the real pipeline when OFF" ON)
+option(FUTARI_RENUT_STUB_SHADER_CACHE "Renut: an empty shader cache (no dump / XenosRecomp run); the real pipeline when OFF" OFF)
 # OFF (this leg): src/renut_engine/futari_renut_core_hooks.cpp is futari-linux's output of
 # tools/renut/renut_futari_hooks.py and has not been regenerated for this tree yet (leg 3 does, and turns this on).
 option(FUTARI_RENUT_CORE_HOOKS "Renut: compile the per-core forwarding hooks (futari_renut_core_hooks.cpp) into the eight cores" ON)
@@ -52,8 +52,10 @@ set(RENUT_TOOLS_DIR "${CMAKE_SOURCE_DIR}/tools/renut")
 # it by the build. The game's assets (default.xex) are in assets/ here, gpu.cmake's own RENUT_ASSETS_DIR default.
 set(RENUT_SHADER_DUMP_DIR "${CMAKE_SOURCE_DIR}/out/renut_shader_dump")
 if(NOT FUTARI_RENUT_STUB_SHADER_CACHE AND NOT EXISTS "${RENUT_SHADER_DUMP_DIR}/manifest.csv")
-    message(FATAL_ERROR "No ${RENUT_SHADER_DUMP_DIR}/manifest.csv: run tools/renut/renut_dump_shaders.py first, "
-                        "or configure with -DFUTARI_RENUT_STUB_SHADER_CACHE=ON (an empty shader cache)")
+    message(FATAL_ERROR "No ${RENUT_SHADER_DUMP_DIR}/manifest.csv: run scripts/renut_shader_dump.sh first (it needs "
+                        "the rexglue CLI from a previous build of this tree, python3 + xxhash, and the game data in "
+                        "assets/), or configure with -DFUTARI_RENUT_STUB_SHADER_CACHE=ON (an empty shader cache: "
+                        "the renderer draws nothing)")
 endif()
 
 # ---------------------------------------------------------------------------------------------------------------------
