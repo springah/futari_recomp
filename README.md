@@ -49,14 +49,15 @@ v1.5.3 on; the v1.5.2 bundles were only ever shared privately, and v1.5.3 was
 the last release with a Steam Deck zip; Linux and Steam Deck players should use
 [futari-linux](https://github.com/cerroverb/futari-linux)). The bundles contain the game's own program code,
 recompiled, and are **for people who own the game only** — see [Legal](#legal).
-They contain no game data: unzip one and follow `RUN.txt` inside to add your own
-dump (on Windows, drag your disc ISO, console install folder or an
-already-extracted game folder onto `extract_assets.bat`, then double-click
-`futari.exe`). The extractor also translates your game's shaders for the
-optional Renut renderer (`RUN.txt`, "RENDERER"); the zip carries the
-translator, not the shaders. Upgrading: copy your `assets/` and `dlc/` folders
-(and `futari.ini`) into the new version's folder and double-click
-`extract_assets.bat` with nothing dragged on.
+They contain no game data: unzip one, double-click `futari.exe`, and its setup
+screen asks for your own dump (your disc ISO, the install folder copied off
+your console, or an already-extracted game folder), puts it in place, prepares
+the shaders for the optional Renut renderer and starts the game; F2 in the
+game is the settings screen. Nothing else is needed (no Python; the
+`extract_assets.bat` command-line route is still in the zip). `RUN.txt` inside
+has the details. Upgrading: copy your `assets/` and `dlc/` folders (and
+`futari.ini`) into the new version's folder, start it, and redo the shaders
+from the settings screen.
 
 ## How it works
 

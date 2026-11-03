@@ -34,7 +34,15 @@ include(generated/rexglue.cmake)
 # Sources
 set(FUTARI_SOURCES
     src/main.cpp
+    # The launcher (2026-11-03): first-run setup + settings inside the exe (docs/NOTES_launcher.md).
+    src/launcher/game_source.cpp
+    src/launcher/shader_pipeline.cpp
+    src/launcher/launcher_dialog.cpp
+    src/launcher/file_picker.cpp
 )
+if(APPLE)
+    list(APPEND FUTARI_SOURCES src/launcher/file_picker_mac.mm)
+endif()
 
 if(WIN32)
     # Embed the application icon via a Windows resource script. The .rc is
@@ -54,6 +62,13 @@ endif()
 rexglue_setup_target(futari GPU_PLUGINS xenos)
 
 target_compile_definitions(futari PRIVATE FUTARI_VERSION_STRING="${PROJECT_VERSION}")
+target_include_directories(futari PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+if(WIN32)
+    # The launcher's file dialogs (IFileOpenDialog) and its child processes.
+    target_link_libraries(futari PRIVATE ole32 uuid)
+elseif(APPLE)
+    target_link_libraries(futari PRIVATE "-framework Cocoa")
+endif()
 
 # Renut's Direct3D-level renderer (src/renut_engine, GPL-3; cmake/futari_renut_gpu.cmake), beside the SDK's xenos
 # plugin, which stays the fallback: futari_renderer = "renut" selects it at boot. After rexglue_setup_target: it links

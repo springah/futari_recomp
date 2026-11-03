@@ -8,6 +8,37 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 v1.5.5-rc1 (2026-11-03): a Windows pre-release of the state below, for
 testers of the Renut renderer (opt-in; the default renderer is unchanged).
+v1.5.5-rc2 (2026-11-03): the same with the shader translator built into the
+exe and the extractor fixes under "After rc1".
+
+After rc2 (2026-11-03), the launcher (`src/launcher/`, `docs/NOTES_launcher.md`):
+
+- **A setup screen inside `futari.exe`.** With no `assets/default.xex` the exe
+  opens a screen instead of the game (an ImGui dialog from the SDK's
+  `OnFinalizePaths` wizard hook): the player picks their disc `.iso`, their
+  console install folder or an already-extracted game folder with the OS's own
+  file dialog (or types the path), the game data is extracted into `assets/`
+  and the DLC into `dlc/`, the Renut shaders are prepared, and Play starts the
+  game. No Python and no batch file on the player's PC: the extractor is a C++
+  port of `scripts/extract_iso.py` (`game_source.cpp`: XDVDFS, the console
+  install's SHA-1 hash tree, the DLC packages, the loose folder; the same
+  refusals), and the shaders come from the exe's own tool modes run as child
+  processes (`shader_pipeline.cpp`, one translation pass: the early-alpha
+  rewrite stays with `make_shaders.py`, it is an optimisation, not a
+  correctness pass). `extract_assets.bat` and the scripts stay as the
+  command-line route.
+- **A settings screen (F2)**, also reachable from setup: renderer (default /
+  Renut), fullscreen, vsync, window size, the DLC found in `dlc/`, the shader
+  package with a "Redo the shaders" button; Save writes `futari.ini` (the
+  display lines through the existing merge, and the top-level
+  `futari_renderer = renut` line itself).
+- Scripted use: `--futari_setup` opens the setup screen with game data in
+  place (`--futari_setup_settings` the settings page), and
+  `--futari_setup_source=<path>` extracts that source without a click and
+  plays, which is how the routes are tested.
+- Not done: macOS has the file picker (`file_picker_mac.mm`, NSOpenPanel) but
+  no build of it yet (leg 6); gamepad navigation of the screens; an update
+  check against GitHub releases.
 
 After rc1 (2026-11-03), from a scripted player-path test of the rc1 zip:
 

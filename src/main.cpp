@@ -26,6 +26,21 @@
 #include <rex/ui/keybinds.h>
 #include <rex/ui/window.h>
 
+// The launcher (src/launcher, 2026-11-03): the first-run setup screen when assets/default.xex is missing (the
+// player's own disc image, console install or extracted folder goes into assets/ and dlc/, the Renut shaders are
+// translated, then the game starts), and the settings screen (F2 in the game). No Python, no batch file.
+#include "launcher/launcher_dialog.h"
+
+REXCVAR_DEFINE_BOOL(futari_setup, false, "Futari",
+                    "Open the setup screen at start even when the game data is in place")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_setup_source, "", "Futari",
+                      "Setup: extract this disc image or folder at start without asking, then play (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_BOOL(futari_setup_settings, false, "Futari",
+                    "With futari_setup: open on the settings page instead of the setup page")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
 #if FUTARI_RENUT_RENDERER
 // Renut's Direct3D-level renderer (src/renut_engine, GPL-3.0; docs/NOTES_renut_port_scoping.md). Chosen by the
 // init-only cvar futari_renderer = "renut"; every call below is gated on that, and with any other value the SDK's
@@ -697,6 +712,69 @@ class FutariApp : public rex::ReXApp {
             RequestExit(TitleExitKeyName());
           }
         });
+    rex::ui::RegisterBind("bind_launcher", "F2", "Open the settings screen (renderer, display, DLC)", [this] {
+      if (auto* open = futari::launcher::LauncherDialog::instance()) {
+        (void)open;
+        return;  // one at a time; its own Close button ends it
+      }
+      if (auto* drawer = imgui_drawer()) {
+        auto env = MakeLauncherEnv();
+        env.in_game = runtime() != nullptr;
+        new futari::launcher::LauncherDialog(drawer, std::move(env),
+                                             futari::launcher::LauncherDialog::Mode::kSettings);
+      }
+    });
+  }
+
+  // What the launcher needs to know about this install. game_data_root_ is empty before the paths are final
+  // (OnFinalizePaths passes the pending root in explicitly).
+  futari::launcher::LauncherDialog::Env MakeLauncherEnv(std::filesystem::path assets_dir = {}) {
+    futari::launcher::LauncherDialog::Env env;
+    env.exe_dir = rex::filesystem::GetExecutableFolder();
+    env.exe = rex::filesystem::GetExecutablePath();
+    env.assets_dir = assets_dir.empty() ? (game_data_root().empty() ? env.exe_dir / "assets" : game_data_root())
+                                        : assets_dir;
+    env.dlc_dir = env.exe_dir / "dlc";
+    env.version = FUTARI_VERSION_STRING;
+    env.native_window = window() ? window()->GetNativeWindowHandle() : nullptr;
+#if FUTARI_RENUT_RENDERER && FUTARI_RENUT_TRANSLATOR
+    env.renut_available = true;
+#else
+    env.renut_available = false;
+#endif
+    env.on_quit = [this] { RequestExit("launcher"); };
+    env.save_display_settings = [] { SaveFutariIni(rex::filesystem::GetExecutableFolder()); };
+    return env;
+  }
+
+  // The first-run route: with no assets/default.xex (or --futari_setup / --futari_setup_source) the setup screen
+  // takes over before the SDK loads the executable, and its Play hands the paths back through `resume`.
+  std::optional<rex::PathConfig> FinalizePathsThroughLauncher(const rex::PathConfig& defaults,
+                                                              std::function<void(rex::PathConfig)> resume) {
+    const std::string auto_source = REXCVAR_GET(futari_setup_source);
+    std::error_code ec;
+    const bool have_game = std::filesystem::is_regular_file(defaults.game_data_root / "default.xex", ec);
+    if (have_game && !REXCVAR_GET(futari_setup) && auto_source.empty()) {
+      return defaults;
+    }
+    auto* drawer = imgui_drawer();
+    if (!drawer) {
+      REXLOG_WARN("Launcher: no overlay drawer, so no setup screen; the SDK reports the missing game data");
+      return defaults;
+    }
+    REXLOG_INFO("Launcher: setup screen ({})",
+                have_game ? "asked for" : "no default.xex in " + rex::path_to_utf8(defaults.game_data_root));
+    auto env = MakeLauncherEnv(defaults.game_data_root);
+    env.auto_source = rex::to_path(auto_source);
+    env.on_play = [this, resume = std::move(resume), paths = defaults]() {
+      // Deferred: the runtime is constructed outside the ImGui frame that pressed Play.
+      app_context().CallInUIThreadDeferred([resume, paths] { resume(paths); });
+    };
+    new futari::launcher::LauncherDialog(drawer, std::move(env),
+                                         REXCVAR_GET(futari_setup_settings)
+                                             ? futari::launcher::LauncherDialog::Mode::kSettings
+                                             : futari::launcher::LauncherDialog::Mode::kSetup);
+    return std::nullopt;
   }
 
   void OnConfigurePaths(rex::PathConfig& paths) override {
@@ -826,17 +904,24 @@ class FutariApp : public rex::ReXApp {
     return rex::ReXApp::OnCreateImmediateDrawer();
   }
 
-  // UI thread, the window exists, the game has not started: create the host
-  // device and start presenting (overlay-only frames until the guest draws).
+#endif
+
+  // UI thread, the window exists, the game has not started. Renut: create the host device and start presenting
+  // (overlay-only frames until the guest draws). Then the launcher's first-run route, which may hold the paths
+  // back until its setup is done (either renderer draws its screen).
   std::optional<rex::PathConfig> OnFinalizePaths(
       const rex::PathConfig& defaults, std::function<void(rex::PathConfig)> resume) override {
+#if FUTARI_RENUT_RENDERER
     if (banjo::renut_gpu::Active()) {
       if (!renut::gpu::StartRenderer(app_context(), [this] { return imgui_drawer(); })) {
         REXLOG_ERROR("Renut: StartRenderer failed; the game will run without a picture");
       }
     }
-    return rex::ReXApp::OnFinalizePaths(defaults, std::move(resume));
+#endif
+    return FinalizePathsThroughLauncher(defaults, std::move(resume));
   }
+
+#if FUTARI_RENUT_RENDERER
 
   void OnPostSetup() override {
     if (banjo::renut_gpu::Active()) {

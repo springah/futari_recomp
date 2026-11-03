@@ -6,7 +6,20 @@ recompiled, so it is only for people who own the game: do not redistribute it.
 Releases, source and bug reports: https://github.com/springah/futari_recomp
 
 ADD YOUR GAME
-  Drag one of these onto extract_assets.bat (needs Python 3):
+  Double-click futari.exe. With no game data in place it opens its setup
+  screen: pick your disc .iso, the game's install folder copied off your own
+  console's storage (the 435A07D7 folder, or anything above it; it installs
+  your DLC too and is checked against the console's own integrity hashes), or
+  an already-extracted game folder (default.xex and media\ at its top). The
+  game data goes into assets\ and dlc\ next to futari.exe, the shaders for the
+  Renut renderer are prepared (see RENDERER below), and Play starts the game.
+  Nothing else is needed: no Python, no batch file. F2 in the game opens the
+  settings screen (renderer, fullscreen, vsync, window size, the DLC found,
+  the shaders), saved into futari.ini for the next start. To open the setup
+  screen again with game data already in place, start the exe with
+  --futari_setup.
+  The command-line route is still there: drag one of the sources above onto
+  extract_assets.bat (needs Python 3):
     - your Mushihimesama Futari Ver. 1.5 disc .iso, or
     - the game's install folder copied off your own console's storage (the
       435A07D7 folder - easiest route; no disc drive or conversion tools
@@ -24,25 +37,26 @@ ADD YOUR GAME
 
 TO PLAY
   Once assets\ is populated, double-click futari.exe. It auto-loads the
-  .\assets folder next to it - no launcher script needed. A window opens; logs
-  go to logs\futari_NNN.log next to the exe.
+  .\assets folder next to it and goes straight to the game. A window opens;
+  logs go to logs\futari_NNN.log next to the exe.
 
 RENDERER (Renut)
   Two renderers are built in. The default emulates the Xbox 360's GPU
   (Direct3D 12). The other, Renut, draws the game's Direct3D calls directly
   through Vulkan, with the game's own shaders: lighter, and with less input
-  lag. Those shaders are game data, so the zip carries none: extract_assets.bat
-  translates them from YOUR game files at the end of the extraction (seconds;
-  the translator is built into futari.exe, it needs nothing but Python) into
-  vulkan_spirv.bin next to futari.exe. The file must match the build, so redo
-  that step after every update of the port: copy your assets\ and dlc\
-  folders into the new version's folder, then double-click extract_assets.bat
-  there with nothing dragged on (if no .iso is in that folder; or run
-  python make_shaders.py there, py make_shaders.py where python is not on the
-  PATH). Copy your futari.ini across too (or add the renderer line below
-  again): the zip's own futari.ini does not have it.
-  To play with Renut, add this line at the top of futari.ini (above the first
-  [section]), or start the exe with --futari_renderer=renut:
+  lag. Those shaders are game data, so the zip carries none: the setup screen
+  prepares them from YOUR game files (seconds; the translator is built into
+  futari.exe) into vulkan_spirv.bin next to futari.exe, and the settings
+  screen (F2) has a button to redo them. The file must match the build, so
+  redo that step after every update of the port: copy your assets\ and dlc\
+  folders and your futari.ini into the new version's folder, start it, press
+  F2 and "Redo the shaders" (or double-click extract_assets.bat there with
+  nothing dragged on, which does the same with Python and also runs the
+  early-alpha optimisation pass on a few pixel shaders; the picture is the
+  same either way).
+  To play with Renut, pick it on the settings screen (F2) and save, which
+  writes this line at the top of futari.ini (above the first [section]); or
+  add it by hand, or start the exe with --futari_renderer=renut:
     futari_renderer = renut
   Without vulkan_spirv.bin Renut shows a black game; the default renderer does
   not need it. Renut needs a Vulkan 1.2 GPU driver.
@@ -59,8 +73,10 @@ REQUIREMENTS
 macOS
   The sections above are written for the Windows zip; the macOS bundle works
   the same way with these differences:
-  - Renut is Windows-only for now; the macOS bundle uses the default renderer.
-  - There is no extract_assets.bat. Run the extractor from a terminal:
+  - Renut is Windows-only for now; the macOS bundle uses the default renderer,
+    and the setup screen has no shader step.
+  - The setup screen is the same (it opens when the app finds no game data).
+    There is no extract_assets.bat; the terminal route is
       python3 extract_iso.py "<your .iso or 435A07D7 folder>" --out assets --dlc-out dlc
     (python3 comes with Apple's Command Line Tools).
   - macOS: the bundle is Futari.app. The game looks for assets/ (and dlc/)
@@ -84,9 +100,12 @@ CONTROLS
   START. F3 opens an empty debug window (no fps).
 
 SETTINGS
-  Edit futari.ini (next to the exe) for resolution, fullscreen, vsync, upscaler,
-  and log level, then restart. The F4 overlay's "Save to config" writes into the
-  same futari.ini, updating those lines in place (your comments survive). vsync
+  F2 opens the settings screen (renderer, fullscreen, vsync, window size, DLC,
+  shaders); Save writes futari.ini, and the renderer and window size apply at
+  the next start. Or edit futari.ini (next to the exe) for resolution,
+  fullscreen, vsync, upscaler, and log level, then restart. The F4 overlay's
+  "Save to config" writes into the same futari.ini, updating those lines in
+  place (your comments survive). vsync
   (on by default) locks the game to refresh_rate and presents in step with your
   monitor, so there is no tearing; on a variable refresh rate display you can
   set present_vsync = false in the F4 cvar list to present immediately again
