@@ -33,7 +33,7 @@ endif()
 option(FUTARI_RENUT_STUB_SHADER_CACHE "Renut: an empty shader cache (no dump / XenosRecomp run); the real pipeline when OFF" ON)
 # OFF (this leg): src/renut_engine/futari_renut_core_hooks.cpp is futari-linux's output of
 # tools/renut/renut_futari_hooks.py and has not been regenerated for this tree yet (leg 3 does, and turns this on).
-option(FUTARI_RENUT_CORE_HOOKS "Renut: compile the per-core forwarding hooks (futari_renut_core_hooks.cpp) into the eight cores" OFF)
+option(FUTARI_RENUT_CORE_HOOKS "Renut: compile the per-core forwarding hooks (futari_renut_core_hooks.cpp) into the eight cores" ON)
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Tools. Python only runs in the real pipeline (the dump and the early-alpha pass); gpu.cmake's own check for the

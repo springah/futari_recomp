@@ -9,8 +9,8 @@
 
 #if defined(FUTARI_CORE_palm_normal)
 FUTARI_RENUT_CORE_HOOK(88078318, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8807ECB0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8807D508, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807ECB0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8807D508, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8807D3E0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88075130, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88079980, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -18,7 +18,7 @@ FUTARI_RENUT_CORE_HOOK(880750B0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88075318, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8807F148, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8807ECA0, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8807DD98, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807DD98, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88074C18, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88077E88, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880779C0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -35,11 +35,11 @@ FUTARI_RENUT_CORE_HOOK(8807C0B8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88079B38, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88078450, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88078330, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88081310, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8807FE08, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88081310, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8807FE08, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88080B10, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8807FEF0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88080A10, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88080A10, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88080888, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88078570, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88078278, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -48,7 +48,7 @@ FUTARI_RENUT_CORE_HOOK(880788E0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880781E0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880795C8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8807FBD8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_88075408, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88075408, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88077DF8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88077B10, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88074BE0, XGRegisterPixelShader)  // default.xex sub_8209AB48
@@ -57,8 +57,8 @@ FUTARI_RENUT_CORE_HOOK(88075220, XGRegisterVertexShader)  // default.xex sub_820
 
 #if defined(FUTARI_CORE_palm_abnormal)
 FUTARI_RENUT_CORE_HOOK(88088308, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8808ECA0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8808D4F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8808ECA0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8808D4F8, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8808D3D0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88085120, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88089970, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -66,7 +66,7 @@ FUTARI_RENUT_CORE_HOOK(880850A0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88085308, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8808F138, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8808EC90, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8808DD88, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8808DD88, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88084C08, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88087E78, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880879B0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -83,11 +83,11 @@ FUTARI_RENUT_CORE_HOOK(8808C0A8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88089B28, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88088440, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88088320, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88091300, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8808FDF8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88091300, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8808FDF8, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88090B00, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8808FEE0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88090A00, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88090A00, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88090878, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88088560, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88088268, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -96,7 +96,7 @@ FUTARI_RENUT_CORE_HOOK(880888D0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880881D0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880895B8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8808FBC8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_880853F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(880853F8, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88087DE8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88087B00, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88084BD0, XGRegisterPixelShader)  // default.xex sub_8209AB48
@@ -105,8 +105,8 @@ FUTARI_RENUT_CORE_HOOK(88085210, XGRegisterVertexShader)  // default.xex sub_820
 
 #if defined(FUTARI_CORE_reco_normal)
 FUTARI_RENUT_CORE_HOOK(88078308, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8807ECA0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8807D4F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807ECA0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8807D4F8, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8807D3D0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88075120, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88079970, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -114,7 +114,7 @@ FUTARI_RENUT_CORE_HOOK(880750A0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88075308, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8807F138, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8807EC90, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8807DD88, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807DD88, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88074C08, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88077E78, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880779B0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -131,11 +131,11 @@ FUTARI_RENUT_CORE_HOOK(8807C0A8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88079B28, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88078440, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88078320, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88081300, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8807FDF8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88081300, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8807FDF8, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88080B00, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8807FEE0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88080A00, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88080A00, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88080878, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88078560, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88078268, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -144,7 +144,7 @@ FUTARI_RENUT_CORE_HOOK(880788D0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880781D0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880795B8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8807FBC8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_880753F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(880753F8, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88077DE8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88077B00, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88074BD0, XGRegisterPixelShader)  // default.xex sub_8209AB48
@@ -153,8 +153,8 @@ FUTARI_RENUT_CORE_HOOK(88075210, XGRegisterVertexShader)  // default.xex sub_820
 
 #if defined(FUTARI_CORE_reco_abnormal)
 FUTARI_RENUT_CORE_HOOK(88078308, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8807ECA0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8807D4F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807ECA0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8807D4F8, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8807D3D0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88075120, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88079970, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -162,7 +162,7 @@ FUTARI_RENUT_CORE_HOOK(880750A0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88075308, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8807F138, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8807EC90, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8807DD88, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807DD88, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88074C08, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88077E78, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880779B0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -179,11 +179,11 @@ FUTARI_RENUT_CORE_HOOK(8807C0A8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88079B28, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88078440, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88078320, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88081300, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8807FDF8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88081300, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8807FDF8, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88080B00, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8807FEE0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88080A00, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88080A00, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88080878, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88078560, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88078268, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -192,7 +192,7 @@ FUTARI_RENUT_CORE_HOOK(880788D0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880781D0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880795B8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8807FBC8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_880753F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(880753F8, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88077DE8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88077B00, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88074BD0, XGRegisterPixelShader)  // default.xex sub_8209AB48
@@ -201,8 +201,8 @@ FUTARI_RENUT_CORE_HOOK(88075210, XGRegisterVertexShader)  // default.xex sub_820
 
 #if defined(FUTARI_CORE_hirow_normal)
 FUTARI_RENUT_CORE_HOOK(88078318, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8807ECB0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8807D508, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807ECB0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8807D508, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8807D3E0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88075130, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88079980, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -210,7 +210,7 @@ FUTARI_RENUT_CORE_HOOK(880750B0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88075318, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8807F148, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8807ECA0, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8807DD98, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807DD98, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88074C18, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88077E88, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880779C0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -227,11 +227,11 @@ FUTARI_RENUT_CORE_HOOK(8807C0B8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88079B38, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88078450, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88078330, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88081310, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8807FE08, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88081310, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8807FE08, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88080B10, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8807FEF0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88080A10, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88080A10, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88080888, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88078570, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88078278, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -240,7 +240,7 @@ FUTARI_RENUT_CORE_HOOK(880788E0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880781E0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880795C8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8807FBD8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_88075408, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88075408, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88077DF8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88077B10, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88074BE0, XGRegisterPixelShader)  // default.xex sub_8209AB48
@@ -249,8 +249,8 @@ FUTARI_RENUT_CORE_HOOK(88075220, XGRegisterVertexShader)  // default.xex sub_820
 
 #if defined(FUTARI_CORE_hirow_abnormal)
 FUTARI_RENUT_CORE_HOOK(88078318, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8807ECB0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8807D508, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807ECB0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8807D508, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8807D3E0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88075130, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88079980, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -258,7 +258,7 @@ FUTARI_RENUT_CORE_HOOK(880750B0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88075318, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8807F148, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8807ECA0, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8807DD98, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807DD98, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88074C18, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88077E88, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880779C0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -275,11 +275,11 @@ FUTARI_RENUT_CORE_HOOK(8807C0B8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88079B38, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88078450, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88078330, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88081310, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8807FE08, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88081310, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8807FE08, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88080B10, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8807FEF0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88080A10, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88080A10, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88080888, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88078570, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88078278, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -288,7 +288,7 @@ FUTARI_RENUT_CORE_HOOK(880788E0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880781E0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880795C8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8807FBD8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_88075408, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88075408, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88077DF8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88077B10, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88074BE0, XGRegisterPixelShader)  // default.xex sub_8209AB48
@@ -297,8 +297,8 @@ FUTARI_RENUT_CORE_HOOK(88075220, XGRegisterVertexShader)  // default.xex sub_820
 
 #if defined(FUTARI_CORE_kiniro_normal)
 FUTARI_RENUT_CORE_HOOK(88078308, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8807ECA0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8807D4F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807ECA0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8807D4F8, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8807D3D0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88075120, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88079970, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -306,7 +306,7 @@ FUTARI_RENUT_CORE_HOOK(880750A0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88075308, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8807F138, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8807EC90, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8807DD88, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807DD88, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88074C08, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88077E78, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880779B0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -323,11 +323,11 @@ FUTARI_RENUT_CORE_HOOK(8807C0A8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88079B28, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88078440, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88078320, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88081300, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8807FDF8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88081300, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8807FDF8, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88080B00, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8807FEE0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88080A00, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88080A00, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88080878, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88078560, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88078268, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -336,7 +336,7 @@ FUTARI_RENUT_CORE_HOOK(880788D0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880781D0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880795B8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8807FBC8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_880753F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(880753F8, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88077DE8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88077B00, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88074BD0, XGRegisterPixelShader)  // default.xex sub_8209AB48
@@ -345,8 +345,8 @@ FUTARI_RENUT_CORE_HOOK(88075210, XGRegisterVertexShader)  // default.xex sub_820
 
 #if defined(FUTARI_CORE_kiniro_abnormal)
 FUTARI_RENUT_CORE_HOOK(88078308, D3DArrayTexture_UnlockRect)  // default.xex sub_8209B710
-// D3DDevice_BeginVertices: sub_8807ECA0, futari_native_core.cpp's own hook yields
-// D3DDevice_Clear: sub_8807D4F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807ECA0, D3DDevice_BeginVertices)  // default.xex sub_8209D800
+FUTARI_RENUT_CORE_HOOK(8807D4F8, D3DDevice_Clear)  // default.xex sub_820A19F0
 FUTARI_RENUT_CORE_HOOK(8807D3D0, D3DDevice_ClearF)  // default.xex sub_820A18C8
 FUTARI_RENUT_CORE_HOOK(88075120, D3DDevice_CreatePixelShader)  // default.xex sub_8209B2B0
 FUTARI_RENUT_CORE_HOOK(88079970, D3DDevice_CreateTexture)  // default.xex sub_8209D2E0
@@ -354,7 +354,7 @@ FUTARI_RENUT_CORE_HOOK(880750A0, D3DDevice_CreateVertexDeclaration)  // default.
 FUTARI_RENUT_CORE_HOOK(88075308, D3DDevice_CreateVertexShader)  // default.xex sub_8209B498
 FUTARI_RENUT_CORE_HOOK(8807F138, D3DDevice_DrawVerticesUP)  // default.xex sub_8209DC98
 FUTARI_RENUT_CORE_HOOK(8807EC90, D3DDevice_EndIndexedVertices)  // default.xex sub_8209D7F0
-// D3DDevice_Resolve: sub_8807DD88, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(8807DD88, D3DDevice_Resolve)  // default.xex sub_820A2280
 FUTARI_RENUT_CORE_HOOK(88074C08, D3DDevice_SetPixelShader)  // default.xex sub_8209AB80
 FUTARI_RENUT_CORE_HOOK(88077E78, D3DDevice_SetRenderTarget)  // default.xex sub_82099AD8
 FUTARI_RENUT_CORE_HOOK(880779B0, D3DDevice_SetScissorRect)  // default.xex sub_820990E0
@@ -371,11 +371,11 @@ FUTARI_RENUT_CORE_HOOK(8807C0A8, D3DVertexShader_Bind)  // default.xex sub_820A0
 FUTARI_RENUT_CORE_HOOK(88079B28, D3DVolume_GetDesc)  // default.xex sub_8209D5F8
 FUTARI_RENUT_CORE_HOOK(88078440, D3D_AlignTextureDimensions)  // default.xex sub_8209B860
 FUTARI_RENUT_CORE_HOOK(88078320, D3D_BlockSizeOfGpuFormat)  // default.xex sub_8209B740
-// D3D_CBlocker_Check: sub_88081300, futari_native_core.cpp's own hook yields
-// D3D_CDevice_AllocateInlineData: sub_8807FDF8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88081300, D3D_CBlocker_Check)  // default.xex sub_820A4590
+FUTARI_RENUT_CORE_HOOK(8807FDF8, D3D_CDevice_AllocateInlineData)  // default.xex sub_820A8138
 FUTARI_RENUT_CORE_HOOK(88080B00, D3D_CDevice_BeginRingBig)  // default.xex sub_820A91F0
 FUTARI_RENUT_CORE_HOOK(8807FEE0, D3D_CDevice_BlockOnFence)  // default.xex sub_820A8220
-// D3D_CDevice_KickOff: sub_88080A00, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(88080A00, D3D_CDevice_KickOff)  // default.xex sub_820A8FC0
 FUTARI_RENUT_CORE_HOOK(88080878, D3D_CDevice_KickOffSegment)  // default.xex sub_820A8E38
 FUTARI_RENUT_CORE_HOOK(88078560, D3D_FindTextureSize)  // default.xex sub_8209B980
 FUTARI_RENUT_CORE_HOOK(88078268, D3D_GetGpuTextureDimensions)  // default.xex sub_8209B670
@@ -384,7 +384,7 @@ FUTARI_RENUT_CORE_HOOK(880788D0, D3D_GetMipTailLevelOffsetCoords)  // default.xe
 FUTARI_RENUT_CORE_HOOK(880781D0, D3D_GetTextureDimensions)  // default.xex sub_8209B5D8
 FUTARI_RENUT_CORE_HOOK(880795B8, D3D_Lock2DSurface)  // default.xex sub_8209C9D8
 FUTARI_RENUT_CORE_HOOK(8807FBC8, D3D_RingBufferDeviceAllocate)  // default.xex sub_820A7F08
-// D3D_SetSurfaceClip: sub_880753F8, futari_native_core.cpp's own hook yields
+FUTARI_RENUT_CORE_HOOK(880753F8, D3D_SetSurfaceClip)  // default.xex sub_82096B28
 FUTARI_RENUT_CORE_HOOK(88077DE8, D3D_SetSurfaceInfo)  // default.xex sub_82099A48
 FUTARI_RENUT_CORE_HOOK(88077B00, D3D_SetViewport)  // default.xex sub_82099740
 FUTARI_RENUT_CORE_HOOK(88074BD0, XGRegisterPixelShader)  // default.xex sub_8209AB48

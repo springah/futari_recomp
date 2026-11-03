@@ -120,6 +120,19 @@ configure; hook-mechanics analysis). Facts that corrected this document:
   `ShutdownRenderer()`. futari_linux.toml non-defaults: `futari_renderer = "renut"`, `renut_gpu_backend = "vulkan"`.
   No cvar name collides with main.cpp's or the SDK's. Full detail: `docs/NOTES_renut_hooks_analysis.md`.
 
+**Leg 3 result (11-03).** Renut boots on Windows. `tools/renut/renut_futari_hooks.py` was patched for this tree
+(ROOT = repo, APP = ROOT, a missing `futari_native_core.cpp` means no owned core addresses) and regenerated both hook
+files: 354 renderer hooks, 70 mapped, 70 default.xex sites, 0 yields, 45 of 70 found and hooked in every core.
+`FUTARI_RENUT_CORE_HOOKS` defaults ON (one full core rebuild: the FUTARI_CORE_<name> define is target-wide). main.cpp
+carries the 7-override boot surface listed above. First boot (`--futari_renderer=renut --renut_gpu_backend=vulkan`,
+RTX 3080): "Renderer: Vulkan", swapchain 2 images, guest D3D device created, render thread up, render resolution
+1280x720, vblank thread follows the display then falls back to its 60 Hz timer (the presents at 45.95/s because nothing
+is drawn), 10 s windows at 56-60 fps with 0 draws (every pipeline misses its shader), no errors. 38 shaders (16 vs,
+22 ps) captured to `shader_capture/` next to the exe = the dump leg 4 translates. The xenos path with the same exe and
+no flags boots unchanged. Leg 4 needs: the real shader pipeline (`FUTARI_RENUT_STUB_SHADER_CACHE=OFF`: XenosRecomp
+ExternalProject + dxc-bin Windows binaries, absent from the vendored tree) fed by the capture folder, or the futari-linux
+`renut_dump_shaders.py` route; then a full-game capture pass (every stage, every mode) so the shipped cache is complete.
+
 ## 5. plume and XenosRecomp
 
 - plume: their `app/thirdparty/plume` vs our springah/plume fork (daytona, d3d12 fixes) differ in 26 paths, of
@@ -169,7 +182,7 @@ dump + XenosRecomp + dxc there and write the cache beside the exe. Windows D3D12
 | 0 | Licence: reNut permission GRANTED (issue #74, 11-03); decide GPL-3 for the renderer build | done |
 | 1 | SDK deltas onto v0.9.3.1: frame_latency, video.h, input late-read, MarkStoreCardsAt (116 lines + 269 new; hook.h / presenter / cvar deltas NOT needed, see §3) | done 11-03 (branch `renderer/renut`) |
 | 2 | Vendor renut_engine + plume + reblue-XenosRecomp; shim the futari-nx headers; compile + link on win-amd64 (stub shader cache); xenos still boots | done 11-03 (same session as leg 1, 3 agents) |
-| 3 | Hooks: `futari_d3d_functions.txt` + `renut_futari_hooks.py` as-is; regen.sh adds the core hook source per DLL; vblank thread; boot surface in main.cpp | 1 |
+| 3 | Hooks: `futari_d3d_functions.txt` + `renut_futari_hooks.py` as-is; regen.sh adds the core hook source per DLL; vblank thread; boot surface in main.cpp | done 11-03 (first Renut boot: Vulkan, 60 fps, 0 draws on the stub cache; 38 shaders captured) |
 | 4 | Shader cache at extract time (dump -> XenosRecomp -> dxc SPIR-V), `vulkan_spirv.bin` beside the exe; Vulkan-only | 1 |
 | 5 | First light + gates on Windows: lockstep vs xenos (their `compare_frames.py` / lockstep scripts exist), all 9 images, DLC modes, present_vsync parity, F4 overlay through Renut's drawer | 1-2 |
 | 6 | macOS via MoltenVK; risk unknown | 1-2 |

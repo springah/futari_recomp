@@ -26,8 +26,10 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APP = os.path.join(ROOT, 'app')
+# futari_recomp (2026-11-03): this script lives at tools/renut/ and the tree has no app/ level: ROOT is
+# the repo and APP = ROOT (src/, generated/ directly under it).
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+APP = ROOT
 ENGINE = os.path.join(APP, 'src', 'renut_engine')
 GPU = os.path.join(ENGINE, 'gpu')
 MAP = os.path.join(ENGINE, 'futari_d3d_functions.txt')
@@ -129,6 +131,8 @@ def futari_owned_cores():
     there), under their #if defined(FUTARI_CORE_<core>) || ... conditions."""
     owned = {c: set() for c in CORES}
     current = []
+    if not os.path.isfile(CORE_SRC):
+        return owned  # futari_recomp: no CPU natives in the cores, nothing owns a core address
     text = open(CORE_SRC, encoding='utf-8').read().replace('\\\r\n', ' ').replace('\\\n', ' ')
     for line in text.split('\n'):
         m = re.match(r'^#\s*(?:el)?if\b(.*)$', line)
@@ -328,7 +332,7 @@ def check_yields(names, mapping, owned, matched, owned_cores):
             m = re.search(r'\b(?:REX_HOOK_RAW|REX_HOOK)\(\s*sub_%08X\b(.*?)\n\}' % a, text, re.S)
             if not m or 'FUTARI_RENUT_YIELD(%s)' % n not in m.group(1):
                 problems.append('%s: the hook of sub_%08X has no FUTARI_RENUT_YIELD(%s)' % (owned[a], a, n))
-    core_text = open(CORE_SRC, encoding='utf-8').read()
+    core_text = open(CORE_SRC, encoding='utf-8').read() if os.path.isfile(CORE_SRC) else ''
     for n in names:
         if any(matched[c].get(n) in owned_cores[c] for c in CORES if n in matched[c]):
             if 'FUTARI_RENUT_CORE_YIELD(%s)' % n not in core_text:

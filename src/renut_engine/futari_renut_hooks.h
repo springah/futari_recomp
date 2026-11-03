@@ -386,7 +386,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
 #define FUTARI_RENUT_SITE_D3DDevice_BeginCommandBuffer  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_BeginExport  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_BeginTiling  // not in Futari's Direct3D
-#define FUTARI_RENUT_SITE_D3DDevice_BeginVertices  // sub_8209D800: Futari's own hook (app/src/me/futari_direct_hooks.cpp) yields
+#define FUTARI_RENUT_SITE_D3DDevice_BeginVertices \
+  REX_EXTERN(__imp__sub_8209D800); \
+  extern "C" REX_FUNC(sub_8209D800) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DDevice_BeginVertices(ctx, base); return; } \
+    __imp__sub_8209D800(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DDevice_BlockOnFence \
   REX_EXTERN(__imp__sub_820A82F0); \
   extern "C" REX_FUNC(sub_820A82F0) { \
@@ -394,7 +399,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     __imp__sub_820A82F0(ctx, base); \
   }
 #define FUTARI_RENUT_SITE_D3DDevice_BlockUntilIdle  // not in Futari's Direct3D
-#define FUTARI_RENUT_SITE_D3DDevice_Clear  // sub_820A19F0: Futari's own hook (app/src/me/futari_direct_hooks.cpp) yields
+#define FUTARI_RENUT_SITE_D3DDevice_Clear \
+  REX_EXTERN(__imp__sub_820A19F0); \
+  extern "C" REX_FUNC(sub_820A19F0) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DDevice_Clear(ctx, base); return; } \
+    __imp__sub_820A19F0(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DDevice_ClearF \
   REX_EXTERN(__imp__sub_820A18C8); \
   extern "C" REX_FUNC(sub_820A18C8) { \
@@ -594,7 +604,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     __imp__sub_820A46B8(ctx, base); \
   }
 #define FUTARI_RENUT_SITE_D3DDevice_ReleaseThreadOwnership  // not in Futari's Direct3D
-#define FUTARI_RENUT_SITE_D3DDevice_Resolve  // sub_820A2280: Futari's own hook (app/src/me/futari_direct_hooks.cpp) yields
+#define FUTARI_RENUT_SITE_D3DDevice_Resolve \
+  REX_EXTERN(__imp__sub_820A2280); \
+  extern "C" REX_FUNC(sub_820A2280) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DDevice_Resolve(ctx, base); return; } \
+    __imp__sub_820A2280(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DDevice_RunCommandBuffer  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_SetClipPlane  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_SetCommandBufferPredication  // not in Futari's Direct3D
@@ -898,8 +913,18 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3D_BlockSizeOfGpuFormat(ctx, base); return; } \
     __imp__sub_8209B740(ctx, base); \
   }
-#define FUTARI_RENUT_SITE_D3D_CBlocker_Check  // sub_820A4590: Futari's own hook (app/src/me/me_ring_wait.cpp) yields
-#define FUTARI_RENUT_SITE_D3D_CDevice_AllocateInlineData  // sub_820A8138: Futari's own hook (app/src/me/futari_direct_hooks.cpp) yields
+#define FUTARI_RENUT_SITE_D3D_CBlocker_Check \
+  REX_EXTERN(__imp__sub_820A4590); \
+  extern "C" REX_FUNC(sub_820A4590) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3D_CBlocker_Check(ctx, base); return; } \
+    __imp__sub_820A4590(ctx, base); \
+  }
+#define FUTARI_RENUT_SITE_D3D_CDevice_AllocateInlineData \
+  REX_EXTERN(__imp__sub_820A8138); \
+  extern "C" REX_FUNC(sub_820A8138) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3D_CDevice_AllocateInlineData(ctx, base); return; } \
+    __imp__sub_820A8138(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3D_CDevice_BeginRingBig \
   REX_EXTERN(__imp__sub_820A91F0); \
   extern "C" REX_FUNC(sub_820A91F0) { \
@@ -913,7 +938,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3D_CDevice_BlockOnFence(ctx, base); return; } \
     __imp__sub_820A8220(ctx, base); \
   }
-#define FUTARI_RENUT_SITE_D3D_CDevice_KickOff  // sub_820A8FC0: Futari's own hook (app/src/me/futari_direct_hooks.cpp) yields
+#define FUTARI_RENUT_SITE_D3D_CDevice_KickOff \
+  REX_EXTERN(__imp__sub_820A8FC0); \
+  extern "C" REX_FUNC(sub_820A8FC0) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3D_CDevice_KickOff(ctx, base); return; } \
+    __imp__sub_820A8FC0(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3D_CDevice_KickOffSegment \
   REX_EXTERN(__imp__sub_820A8E38); \
   extern "C" REX_FUNC(sub_820A8E38) { \
@@ -994,7 +1024,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3D_RingBufferDeviceAllocate(ctx, base); return; } \
     __imp__sub_820A7F08(ctx, base); \
   }
-#define FUTARI_RENUT_SITE_D3D_SetSurfaceClip  // sub_82096B28: Futari's own hook (app/src/me/futari_direct_hooks.cpp) yields
+#define FUTARI_RENUT_SITE_D3D_SetSurfaceClip \
+  REX_EXTERN(__imp__sub_82096B28); \
+  extern "C" REX_FUNC(sub_82096B28) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3D_SetSurfaceClip(ctx, base); return; } \
+    __imp__sub_82096B28(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3D_SetSurfaceInfo \
   REX_EXTERN(__imp__sub_82099A48); \
   extern "C" REX_FUNC(sub_82099A48) { \

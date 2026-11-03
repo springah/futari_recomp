@@ -49,6 +49,29 @@ default and boots unchanged.
 - Analysis of the hook mechanics, the per-core forwarding and the boot surface
   main.cpp needs: `docs/NOTES_renut_hooks_analysis.md`.
 
+Leg 3 of 6: **Renut boots.** `futari_renderer = renut` (an init-only cvar: the
+managed block of futari.ini, or `--futari_renderer=renut` on the command line)
+selects it; `renut_gpu_backend` picks `vulkan` or `d3d12` (default). First boot
+11-03 on Vulkan / RTX 3080: host device, guest Direct3D device, render thread
+and the display-locked vblank all come up, the game runs at 60 fps, and every
+draw is skipped because the shader cache is still the empty stub, so the window
+stays black. Leg 4 fills the cache. The default (xenos) path boots unchanged.
+
+- `tools/renut/renut_futari_hooks.py` runs in this tree (paths; a tree without
+  futari-nx's core natives) and regenerated `futari_renut_hooks.h` /
+  `futari_renut_core_hooks.cpp` against `generated/`: 70 default.xex hook
+  sites (the 7 futari-nx had yielded to its own natives are real here) and 45
+  per core.
+- `FUTARI_RENUT_CORE_HOOKS` is on: each core DLL forwards its own copies of the
+  Direct3D functions to the exe's renderer while Renut is active.
+- main.cpp: the SDK's detached-mode boot surface (OnPreSetup clears the GPU
+  plugin, OnCreateImmediateDrawer, OnFinalizePaths starts the renderer,
+  OnPostSetup starts the vblank thread, resize and shutdown), all gated on the
+  cvar.
+- Shaders the cache lacks are captured at run time to `shader_capture/` next to
+  the exe (`vs_<hash>.bin` / `ps_<hash>.bin`, one warning each): the first boot
+  wrote 38, which is leg 4's input.
+
 Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
 for the log line, a save-path change in `main.cpp`, no codegen regen needed.
 

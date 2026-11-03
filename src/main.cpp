@@ -26,6 +26,16 @@
 #include <rex/ui/keybinds.h>
 #include <rex/ui/window.h>
 
+#if FUTARI_RENUT_RENDERER
+// Renut's Direct3D-level renderer (src/renut_engine, GPL-3.0; docs/NOTES_renut_port_scoping.md). Chosen by the
+// init-only cvar futari_renderer = "renut"; every call below is gated on that, and with any other value the SDK's
+// xenos plugin renders exactly as before.
+#include "renut_engine/futari_renut_vblank.h"
+#include "renut_engine/gpu/banjo_renut_select.h"
+#include "renut_engine/gpu/overlay/app_integration.h"
+#include <rex/ui/immediate_drawer.h>
+#endif
+
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -38,6 +48,8 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -689,7 +701,58 @@ class FutariApp : public rex::ReXApp {
     SetCvarInt("license_mask", 1);
     SetCvarBool("mnk_mode", true);
     SetCvarBool("mnk_mouse_capture", false);
+#if FUTARI_RENUT_RENDERER
+    // Renut: no SDK graphics system and no GPU plugin (the SDK's "detached"
+    // mode); the renderer owns the device, present timing and the overlay.
+    if (banjo::renut_gpu::Active()) {
+      renut::gpu::ConfigureRuntime(config);
+      REXLOG_INFO("Renderer: Renut (futari_renderer = renut); the xenos plugin is not loaded");
+    }
+#endif
   }
+
+#if FUTARI_RENUT_RENDERER
+  // The SDK's detached-mode boot surface for Renut (the order the SDK calls
+  // these: OnPreSetup, OnCreateImmediateDrawer, OnFinalizePaths, OnPostSetup).
+  std::unique_ptr<rex::ui::ImmediateDrawer> OnCreateImmediateDrawer() override {
+    if (banjo::renut_gpu::Active()) {
+      return renut::gpu::CreateOverlayDrawer();
+    }
+    return rex::ReXApp::OnCreateImmediateDrawer();
+  }
+
+  // UI thread, the window exists, the game has not started: create the host
+  // device and start presenting (overlay-only frames until the guest draws).
+  std::optional<rex::PathConfig> OnFinalizePaths(
+      const rex::PathConfig& defaults, std::function<void(rex::PathConfig)> resume) override {
+    if (banjo::renut_gpu::Active()) {
+      if (!renut::gpu::StartRenderer(app_context(), [this] { return imgui_drawer(); })) {
+        REXLOG_ERROR("Renut: StartRenderer failed; the game will run without a picture");
+      }
+    }
+    return rex::ReXApp::OnFinalizePaths(defaults, std::move(resume));
+  }
+
+  void OnPostSetup() override {
+    if (banjo::renut_gpu::Active()) {
+      futari::renut_vblank::Start();
+    }
+  }
+
+  void OnWindowPixelSizeChanged(uint32_t pixel_width, uint32_t pixel_height) override {
+    rex::ReXApp::OnWindowPixelSizeChanged(pixel_width, pixel_height);
+    if (banjo::renut_gpu::Active()) {
+      renut::gpu::OnWindowResized();
+    }
+  }
+
+  void OnShutdown() override {
+    if (banjo::renut_gpu::Active()) {
+      futari::renut_vblank::Stop();
+      renut::gpu::ShutdownRenderer();
+    }
+  }
+#endif
 
   // Auto-install any DLC packages bundled next to the exe (a "dlc" folder)
   // before the game launches, so they appear as owned marketplace content.
