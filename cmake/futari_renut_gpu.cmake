@@ -34,6 +34,10 @@ option(FUTARI_RENUT_STUB_SHADER_CACHE "Renut: an empty shader cache (no dump / X
 # OFF (this leg): src/renut_engine/futari_renut_core_hooks.cpp is futari-linux's output of
 # tools/renut/renut_futari_hooks.py and has not been regenerated for this tree yet (leg 3 does, and turns this on).
 option(FUTARI_RENUT_CORE_HOOKS "Renut: compile the per-core forwarding hooks (futari_renut_core_hooks.cpp) into the eight cores" ON)
+# futari_recomp (2026-11-03): a build for distribution: shader_cache.cpp is rewritten (tools/renut/release_shader_table.py) to
+# the table of numbers only, with no translated game shader in the binary; the exe reads the shaders from vulkan_spirv.bin
+# beside it, made at extract time by the XenosRecomp copy this file builds into renut_tools/ (futari_renut_tools below).
+option(FUTARI_RENUT_RELEASE_SHADERS "Renut: a build for distribution: the shader table without the translated game shaders (the exe reads vulkan_spirv.bin beside it, made at extract time)" OFF)
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Tools. Python only runs in the real pipeline (the dump and the early-alpha pass); gpu.cmake's own check for the
@@ -139,6 +143,9 @@ endif()
 
 # plume (thirdparty/plume, added by gpu.cmake): Vulkan always, D3D12 on Windows (its CMakeLists keys the backends on
 # WIN32), Metal on macOS. No SDL surface (PLUME_SDL_VULKAN_ENABLED is Linux-only there) and no deko3d (Switch).
+# futari_recomp (2026-11-03): gpu.cmake keys on futari-linux's name for this switch (FUTARI_LINUX_RELEASE_SHADERS); ours is
+# FUTARI_RENUT_RELEASE_SHADERS, so hand it over as a normal variable (it shadows any cache entry, CMP0126 NEW).
+set(FUTARI_LINUX_RELEASE_SHADERS ${FUTARI_RENUT_RELEASE_SHADERS})
 include("${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/gpu.cmake")
 
 add_library(futari_renut_gpu OBJECT
@@ -151,7 +158,8 @@ add_library(futari_renut_gpu OBJECT
     "${CMAKE_SOURCE_DIR}/src/renut_engine/futari_renut_shim.cpp"
     "${CMAKE_SOURCE_DIR}/src/renut_engine/futari_renut_vblank.cpp"
     # This tree's stand-ins for futari-nx's cvars (futari_vblank_*, futari_late_input) and Switch perf counters.
-    "${CMAKE_SOURCE_DIR}/src/renut_shim/renut_shim_stubs.cpp")
+    "${CMAKE_SOURCE_DIR}/src/renut_shim/renut_shim_stubs.cpp"
+    "${CMAKE_SOURCE_DIR}/src/renut_shim/renut_shader_dump_tool.cpp")  # ^ the extractor's dump tool mode (main.cpp)
 target_include_directories(futari_renut_gpu PRIVATE
     "${CMAKE_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/src"
@@ -167,6 +175,43 @@ if(COMMAND rexglue_apply_target_settings)
     rexglue_apply_target_settings(futari_renut_gpu)
 endif()
 renut_gpu_setup(futari_renut_gpu)
+
+# futari_recomp (2026-11-03): the shader tools a player's extract step runs to make vulkan_spirv.bin from their own
+# executables. A SECOND build of the same XenosRecomp source: gpu.cmake's renut_xenos_recomp links dxil.dll (DXIL for the
+# D3D12 path) and runs at build time; this copy is SPIR-V only (XENOS_RECOMP_DXIL=OFF, so no dxil.dll ships) and goes
+# to renut_tools/ beside the build. Only for FUTARI_RENUT_RELEASE_SHADERS; the stub cache has no tools to ship.
+if(FUTARI_RENUT_RELEASE_SHADERS AND NOT FUTARI_RENUT_STUB_SHADER_CACHE)
+    set(_futari_tool_prefix "${CMAKE_BINARY_DIR}/xenos_recomp_tool")
+    set(_futari_tool_exe "${_futari_tool_prefix}/build/XenosRecomp/XenosRecomp${CMAKE_EXECUTABLE_SUFFIX}")
+    set(_futari_tools_out "${CMAKE_BINARY_DIR}/renut_tools")
+    ExternalProject_Add(renut_xenos_recomp_tool
+        SOURCE_DIR "${RENUT_XENOS_RECOMP_DIR}"
+        BINARY_DIR "${_futari_tool_prefix}/build"
+        PREFIX "${_futari_tool_prefix}"
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+            -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DXENOS_RECOMP_RENUT=ON
+            -DXENOS_RECOMP_DXIL=OFF
+            ${BANJO_RENUT_XENOS_RECOMP_ARGS}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target XenosRecomp --config Release
+        INSTALL_COMMAND ""
+        BUILD_BYPRODUCTS "${_futari_tool_exe}"
+        BUILD_ALWAYS OFF
+        USES_TERMINAL_BUILD ON)
+    add_custom_target(futari_renut_tools ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_futari_tool_exe}" "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_XENOS_RECOMP_DIR}/thirdparty/dxc-bin/bin/x64/dxcompiler.dll" "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_SHADER_COMMON_DIR}/shader_common.h" "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_TOOLS_DIR}/renut_early_alpha.py" "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_TOOLS_DIR}/early_alpha.py" "${_futari_tools_out}"
+        DEPENDS renut_xenos_recomp_tool
+        COMMENT "Renut's shader tools for the extract step -> ${_futari_tools_out}"
+        VERBATIM)
+    message(STATUS "futari: Renut's shader tools (XenosRecomp, SPIR-V only) go to ${_futari_tools_out}")
+endif()
 # The renderer's own code without the game code's -ffp-contract / aliasing rules: it is host code (as in banjo-nx).
 target_link_libraries(futari PRIVATE futari_renut_gpu)
 target_compile_definitions(futari PRIVATE FUTARI_RENUT_RENDERER=1)

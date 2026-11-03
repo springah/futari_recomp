@@ -21,6 +21,7 @@ import os
 import sys
 import argparse
 import shutil
+import subprocess
 from pathlib import Path
 
 XDVDFS_MAGIC = b"MICROSOFT*XBOX*MEDIA"
@@ -554,8 +555,22 @@ def main():
         if xex != target:
             shutil.copy2(xex, target)
         print(f"\ndefault.xex -> {target}")
-        print("Extraction complete. Next: generate the recompiled C++ and build --")
-        print("  bash scripts/regen.sh      (or build.ps1 on Windows, which runs it for you)")
+        # The release layout: futari.exe and its renut_tools/ beside the assets folder. The Renut renderer draws with
+        # the game's own shaders translated on this machine (make_shaders.py); the public build carries none.
+        exe_dir = out_dir.resolve().parent
+        make_shaders = Path(__file__).resolve().with_name("make_shaders.py")
+        if (exe_dir / "futari.exe").is_file() and (exe_dir / "renut_tools").is_dir() and make_shaders.is_file():
+            print("\nTranslating the game's shaders for the Renut renderer (vulkan_spirv.bin)...")
+            rc = subprocess.call([sys.executable, str(make_shaders), "--exe", str(exe_dir / "futari.exe"),
+                                  "--assets", str(out_dir.resolve())])
+            if rc != 0:
+                print("\nWARNING: the shaders were not translated; the Renut renderer will draw nothing of the game.",
+                      file=sys.stderr)
+                print("         Fix what it reported, then run make_shaders.py again (python make_shaders.py).",
+                      file=sys.stderr)
+        else:
+            print("Extraction complete. Next: generate the recompiled C++ and build --")
+            print("  bash scripts/regen.sh      (or build.ps1 on Windows, which runs it for you)")
     else:
         print("\nWARNING: default.xex not found in extracted files.")
         sys.exit(1)

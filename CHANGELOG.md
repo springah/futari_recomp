@@ -94,6 +94,32 @@ present.
   `--futari_renut_capture_after_s=<n>` writes one presented frame, for the
   gates.
 
+Leg 4b: **the release route.** The leg-4 build compiles the translated game
+shaders into the exe, which is game data the public zips must not carry. The
+release build (`-DFUTARI_RENUT_RELEASE_SHADERS=ON`, futari-linux's route)
+ships the shader *table* only, and the player's extractor translates their own
+shaders on their machine. Verified 11-03: the release exe's dump is byte-identical
+to the build's, the translation takes 3 s, the title draws from the package with
+no misses, and without the package Renut logs what to do and draws nothing.
+
+- **`renut_tools/` ships in the zip**: XenosRecomp built SPIR-V-only (no
+  dxil.dll), dxcompiler.dll, shader_common.h and the early-alpha pass. The
+  `futari_renut_tools` target stages it; the DXC licence (NCSA) joined
+  THIRD-PARTY-NOTICES.txt.
+- **`futari.exe --futari_renut_dump_shaders=<dir>`**: the exe loads its own
+  executables as it would to run, writes their 42 shader containers and exits.
+  The player never needs the codegen CLI.
+- **`make_shaders.py`** (ships beside the exe): dump, XenosRecomp twice around
+  the early-alpha pass, and XenosRecomp's new `XENOS_RECOMP_SPIRV_PACKAGE`
+  writes `vulkan_spirv.bin` (the renderer's BVKS package) directly. The work
+  folder, game data, is deleted. `extract_assets.bat` runs it at the end of an
+  extraction when `futari.exe` and `renut_tools/` are beside it; run it again
+  by hand after updating the port.
+- `renut_gpu_backend` defaults to Vulkan: the package is SPIR-V only, so the
+  D3D12 backend would have nothing to draw with.
+- `scripts/stage_win_zip.sh <version>`: the public Windows zip from a clean
+  clone, with the shipping checks (release table, no game data, boots).
+
 Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
 for the log line, a save-path change in `main.cpp`, no codegen regen needed.
 

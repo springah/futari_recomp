@@ -34,6 +34,7 @@
 #include "renut_engine/gpu/banjo_renut_capture.h"
 #include "renut_engine/gpu/banjo_renut_select.h"
 #include "renut_engine/gpu/overlay/app_integration.h"
+#include "renut_shim/renut_shader_dump_tool.h"
 #include <rex/ui/immediate_drawer.h>
 
 // Dev aid (the Renut gates): write the presented frame once, N seconds after the runtime is up, as a binary PPM
@@ -45,6 +46,14 @@ REXCVAR_DEFINE_STRING(futari_renut_capture_path, "", "Futari",
 REXCVAR_DEFINE_INT32(futari_renut_capture_after_s, 20, "Futari",
                      "Renut: seconds after the runtime is up to take futari_renut_capture_path")
     .range(1, 600)
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+// Tool mode for the extractor (scripts/make_shaders.py): dump the game's shader containers from the loaded
+// executables into this folder (the input of XenosRecomp, which makes vulkan_spirv.bin), then exit before the game
+// starts. Works with either renderer. Empty = off.
+//   futari.exe --futari_renut_dump_shaders=<folder>
+REXCVAR_DEFINE_STRING(futari_renut_dump_shaders, "", "Futari",
+                      "Tool: dump the game's shader containers to this folder and exit (empty: off)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 #endif
 
@@ -696,6 +705,39 @@ class FutariApp : public rex::ReXApp {
   void OnSaveSettings() override {
     SaveFutariIni(rex::filesystem::GetExecutableFolder());
   }
+
+#if FUTARI_RENUT_RENDERER
+  // Renut's shipped shaders are SPIR-V only (vulkan_spirv.bin beside the exe, made at extract time), so its back end
+  // defaults to Vulkan here rather than its own d3d12 default. --renut_gpu_backend / the ini still win.
+  void OnPostInitLogging() override {
+    if (!rex::cvar::HasNonDefaultValue("renut_gpu_backend")) {
+      rex::cvar::SetFlagByName("renut_gpu_backend", "vulkan");
+    }
+  }
+
+  // The dump tool mode: the entrypoint is loaded, nothing has run.
+  void OnPostLoadXexImage() override {
+    const std::string dir = REXCVAR_GET(futari_renut_dump_shaders);
+    if (dir.empty()) {
+      return;
+    }
+    futari::renut_tool::DumpResult result;
+    std::string error;
+    const bool ok = futari::renut_tool::DumpShaders(*runtime(), std::filesystem::path(dir), result, error);
+    if (ok) {
+      REXLOG_INFO("Shader dump: {} unique shaders from {} occurrences ({} rejected) written to {}", result.unique,
+                  result.occurrences, result.rejected, dir);
+    } else {
+      REXLOG_ERROR("Shader dump FAILED: {}", error);
+    }
+    for (const auto& note : result.notes) {
+      REXLOG_INFO("Shader dump: {}", note);
+    }
+    renut_dump_exit_code_ = ok ? 0 : 2;
+    RequestExit("shader dump done");
+  }
+  int renut_dump_exit_code_ = -1;
+#endif
 
   void OnPreSetup(rex::RuntimeConfig& config) override {
     // Since the SDK's v0.9 GPU-plugin split an empty gpu_plugin means headless;

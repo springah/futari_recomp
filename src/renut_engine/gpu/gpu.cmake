@@ -296,9 +296,9 @@ function(renut_xenos_shader_cache TARGET)
         set(release_cpp "${RENUT_GPU_GEN_DIR}/shader_cache_release.cpp")
         add_custom_command(
             OUTPUT "${release_cpp}"
-            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/../tools/linux/release_shader_table.py"
+            COMMAND "${Python3_EXECUTABLE}" "${RENUT_TOOLS_DIR}/release_shader_table.py"  # futari_recomp (2026-11-03): RENUT_TOOLS_DIR
                     "${cache_cpp}" "${release_cpp}"
-            DEPENDS "${cache_cpp}" "${CMAKE_SOURCE_DIR}/../tools/linux/release_shader_table.py"
+            DEPENDS "${cache_cpp}" "${RENUT_TOOLS_DIR}/release_shader_table.py"  # futari_recomp (2026-11-03): RENUT_TOOLS_DIR
             COMMENT "Renut's shader table without the game shaders (FUTARI_LINUX_RELEASE_SHADERS)"
             VERBATIM)
         set(cache_cpp "${release_cpp}")

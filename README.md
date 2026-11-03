@@ -41,7 +41,9 @@ the last release with a Steam Deck zip; Linux and Steam Deck players should use
 recompiled, and are **for people who own the game only** — see [Legal](#legal).
 They contain no game data: unzip one and follow `RUN.txt` inside to add your own
 dump (on Windows, drag your disc ISO or console install folder onto
-`extract_assets.bat`, then double-click `futari.exe`).
+`extract_assets.bat`, then double-click `futari.exe`). The extractor also
+translates your game's shaders for the optional Renut renderer (`RUN.txt`,
+"RENDERER"); the zip carries the translator, not the shaders.
 
 ## How it works
 
@@ -219,9 +221,10 @@ generated/                # gitignored — codegen output (scripts/regen.sh)
 futari_functions.toml     # function-entry hints for the shell (default.xex)
 <module>_functions.toml   # the same for each of the 8 game-mode modules
 src/                      # host app: main.cpp (ReXApp subclass, futari.ini, title exit), ini_merge.h, icon
-scripts/                  # extract_iso.py, regen.sh, build_module_hints.sh, analyse_xex.py, notices generator
+src/renut_engine/, src/renut_shim/, tools/renut/   # the Renut renderer (vendored, GPL-3.0), its shims, its shader tools
+scripts/                  # extract_iso.py, make_shaders.py (ships in the zip), regen.sh, stage_win_zip.sh, notices generator
 build.ps1, build.bat      # one-shot Windows build
-extract_assets.bat        # drag-and-drop wrapper around extract_iso.py (also ships in the bundles)
+extract_assets.bat        # drag-and-drop wrapper around extract_iso.py (also ships in the bundles, with make_shaders.py + renut_tools/)
 mac-build/build_app.sh    # macOS .app packaging
 dist/                     # files that ship inside release zips: RUN.txt, gamecontrollerdb.txt, dlc-README.txt
 docs/                     # DUMPING.md (getting your own game data), upstream/ (SDK notes)

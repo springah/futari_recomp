@@ -149,12 +149,17 @@ ExternalProject + dxc-bin Windows binaries, absent from the vendored tree) fed b
   (`futari_renut_capture_path` / `_after_s`, main.cpp) writes a P6 PPM from `renut::gpu::CaptureFrame`.
 - Tools patched for this tree's layout: renut_dump_shaders.py, renut_futari_layout.py (ROOT one level up; src/ not
   app/src/).
-- DISTRIBUTION CAVEAT: this build compiles the TRANSLATED GAME SHADERS into futari.exe. That is game data, which the
-  public zips do not carry (asset-free rule). A release build must take futari-linux's route instead: the shader
-  table without the shaders (`tools/linux/release_shader_table.py` -> shader_cache_release.cpp,
-  FUTARI_LINUX_RELEASE_SHADERS) and `vulkan_spirv.bin` made from the player's own executables at extract time (the
-  wizard), which needs XenosRecomp + dxc on the player's machine or a translation step that ships with the zip. Until
-  that lands, Renut builds are DEV ONLY and must not be uploaded. Sized separately (leg 4b).
+- DISTRIBUTION: this (dev) build compiles the TRANSLATED GAME SHADERS into futari.exe, game data the public zips
+  do not carry. Leg 4b (11-03, user's ruling: ship XenosRecomp + the dxc DLL in the zip, the wizard translates at
+  extract time) is the release route: `-DFUTARI_RENUT_RELEASE_SHADERS=ON` (out/build/win-amd64-release-shaders)
+  builds the table only (`tools/renut/release_shader_table.py` -> shader_cache_release.cpp); `renut_tools/`
+  (XenosRecomp SPIR-V-only + dxcompiler.dll + shader_common.h + early-alpha, 19 MB, target futari_renut_tools) and
+  `scripts/make_shaders.py` ship beside the exe; `futari.exe --futari_renut_dump_shaders=<dir>`
+  (src/renut_shim/renut_shader_dump_tool.cpp) dumps the 42 containers without the codegen CLI; XenosRecomp's
+  `XENOS_RECOMP_SPIRV_PACKAGE` writes vulkan_spirv.bin (BVKS, plain SPIR-V, zstd) directly. extract_iso.py calls
+  make_shaders.py when futari.exe + renut_tools/ are beside it. Verified: exe dump == Python dump byte for byte;
+  3 s translation; title drawn from the package, 0 misses; no package -> error line + nothing drawn, no crash.
+  Only the release-shaders tree is ever zipped (`scripts/stage_win_zip.sh`, which refuses a dev build).
 - Open for leg 5 (Windows gate): hands on the whole game (stages, boss, both modes, Black Label DLC, Arrange), the
   overlay (F3/F4) on Renut's drawer, resolution/fullscreen, d3d12 backend, the xenos A/B of pictures and feel; then
   packaging (THIRD-PARTY-NOTICES, README renderer section, ini key). Leg 6 = macOS (Metal via plume).

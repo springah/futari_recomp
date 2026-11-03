@@ -21,6 +21,20 @@ TO PLAY
   .\assets folder next to it - no launcher script needed. A window opens; logs
   go to logs\futari_NNN.log next to the exe.
 
+RENDERER (Renut)
+  Two renderers are built in. The default emulates the Xbox 360's GPU
+  (Direct3D 12). The other, Renut, draws the game's Direct3D calls directly
+  through Vulkan, with the game's own shaders: lighter, and with less input
+  lag. Those shaders are game data, so the zip carries none: extract_assets.bat
+  translates them from YOUR game files at the end of the extraction (seconds;
+  it needs nothing but Python) into vulkan_spirv.bin next to futari.exe. To
+  redo that step, e.g. after updating the port: python make_shaders.py.
+  To play with Renut, add this line at the top of futari.ini (above the first
+  [section]), or start the exe with --futari_renderer=renut:
+    futari_renderer = renut
+  Without vulkan_spirv.bin Renut shows a black game; the default renderer does
+  not need it. Renut needs a Vulkan 1.2 GPU driver.
+
 DLC (optional)
   Own any add-on content? Drop the Xbox 360 STFS packages into the dlc\ folder
   and they install automatically on launch. See dlc\README.txt for details.

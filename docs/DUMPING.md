@@ -53,7 +53,9 @@ That's the whole route: it verifies your copy against the container's own
 integrity hashes (so a bad copy is caught immediately, with the file named),
 extracts the game into `assets/`, and installs any DLC packages it finds into
 `dlc/`. Nothing needs converting first, and a corrupt or incomplete copy cannot
-slip through to the build.
+slip through to the build. In a release zip the same step ends by translating
+the game's shaders for the Renut renderer into `vulkan_spirv.bin` beside
+`futari.exe` (see `RUN.txt`); the default renderer does not need that file.
 
 ## Route B — dumping the disc directly
 

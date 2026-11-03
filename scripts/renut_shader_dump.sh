@@ -5,7 +5,7 @@
 #  1. out/<module>_image.bin: the decrypted, decompressed images of default.xex and the eight game cores, written by
 #     the codegen CLI's REXGLUE_DUMP_IMAGE aid (thirdparty/rexglue-sdk/src/codegen/project_recompiler.cpp). One
 #     isolated manifest per core, as scripts/regen.sh (the cores share base 0x88000000); the codegen output goes to
-#     out/imgdump/ so generated/ is untouched. A few seconds per module.
+#     out/imgdump/ so generated/ is untouched (bar rexglue.cmake, which is saved and restored). A few seconds per module.
 #  2. tools/renut/renut_dump_shaders.py: the shader containers in those images (Futari compiles its shaders into its
 #     executables: 22 + 22 in default.xex, 2 + 2 per core, 42 unique) -> out/renut_shader_dump.
 #
@@ -36,6 +36,10 @@ for m in default "${MODS[@]}"; do [ -f "out/${m}_image.bin" ] || need=1; done
 
 if [ $need = 1 ] || [ $force = 1 ]; then
   mkdir -p out/imgdump
+  # The codegen CLI rewrites generated/rexglue.cmake on every run, whatever the manifest's output folders, and after
+  # this loop it would point the DLL targets at out/imgdump/gen_default (ONE module: the last of the loop). Put the
+  # regen.sh version back afterwards, or the next configure builds a single core (bitten 2026-11-03).
+  [ -f generated/rexglue.cmake ] && cp -f generated/rexglue.cmake out/imgdump/rexglue.cmake.keep
   for m in "${MODS[@]}"; do
     inc="[]"; [ -f "${m}_functions.toml" ] && inc="[\"${m}_functions.toml\"]"
     cat > .imgdump_solo.toml <<TOML
@@ -62,6 +66,7 @@ TOML
   done
   mv -f out/imgdump/default_image.bin out/default_image.bin
   rm -f .imgdump_solo.toml
+  [ -f out/imgdump/rexglue.cmake.keep ] && mv -f out/imgdump/rexglue.cmake.keep generated/rexglue.cmake
   echo "  [image] default"
 else
   echo "[images] out/*_image.bin present (--force to redo)"

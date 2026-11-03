@@ -118,8 +118,9 @@ SpirvPackage &OpenSpirvPackage() {
     std::ifstream in(p.path, std::ios::binary | std::ios::ate);
     if (!in) {
       if (g_spirvCacheCompressedSize == 0)
-        RGPU_ERROR("No {} and no game shaders built in: nothing of the game is drawn. Make the package with the "
-                   "installer page from your own copy of the game", p.path);
+        // futari_recomp (2026-11-03): the package is made by the extractor (extract_assets.bat -> make_shaders.py).
+        RGPU_ERROR("No {} and no game shaders built in: nothing of the game is drawn. Make the package from your own "
+                   "copy of the game: run extract_assets.bat, or python make_shaders.py beside futari.exe", p.path);
       return;
     }
     const std::streamsize n = in.tellg();

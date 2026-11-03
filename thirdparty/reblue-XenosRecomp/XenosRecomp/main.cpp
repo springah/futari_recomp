@@ -105,6 +105,10 @@ int main(int argc, char** argv)
         hlslDumpDir = argv[4];
     else if (const char* env = std::getenv("XENOS_RECOMP_HLSL_DUMP"))
         hlslDumpDir = env;
+    // futari_recomp (2026-11-03): XENOS_RECOMP_SPIRV_PACKAGE=<path> also writes the shaders as a vulkan_spirv.bin package.
+    std::string spirvPackagePath;
+    if (const char* env = std::getenv("XENOS_RECOMP_SPIRV_PACKAGE"))
+        spirvPackagePath = env;
 #endif
 
     size_t includeSize = 0;
@@ -481,6 +485,92 @@ int main(int argc, char** argv)
 #endif
 
         writeAllBytes(output, f.out.data(), f.out.size());
+
+#ifdef RENUT_RECOMP
+        // futari_recomp (2026-11-03): the SPIR-V package, the layout shader_library.cpp's AttachSpirvPackage reads:
+        // 32 byte header "BVKS", table of 56 byte entries sorted by hash (the map's order), one zstd frame per shader
+        // padded to 8 bytes. shader.spirv is smol-v encoded, so it is decoded back to plain SPIR-V first.
+        if (!spirvPackagePath.empty())
+        {
+#pragma pack(push, 1)
+            struct PackageHeader { char magic[4]; uint32_t version, count, reserved0, tableOffset, dataOffset, reserved[2]; };
+            struct PackageEntry { uint64_t hash; uint32_t offset, compressedSize, size, stage; uint32_t boolMask[8]; };
+#pragma pack(pop)
+            static_assert(sizeof(PackageHeader) == 32 && sizeof(PackageEntry) == 56, "SPIR-V package layout");
+
+            std::vector<PackageEntry> table;
+            std::vector<uint8_t> packageData;
+            for (auto& [hash, shader] : shaders)
+            {
+                if (shader.spirv.empty())
+                {
+                    fmt::println("SPIR-V package: shader 0x{:X} has no SPIR-V, skipped", hash);
+                    continue;
+                }
+
+                std::vector<uint8_t> plain(smolv::GetDecodedBufferSize(shader.spirv.data(), shader.spirv.size()));
+                if (plain.size() < 20 || !smolv::Decode(shader.spirv.data(), shader.spirv.size(), plain.data(), plain.size()))
+                {
+                    fmt::println("SPIR-V package: shader 0x{:X} failed to smol-v decode, skipped", hash);
+                    continue;
+                }
+
+                PackageEntry e{};
+                e.hash = hash;
+                e.size = uint32_t(plain.size());
+                const uint32_t* words = reinterpret_cast<const uint32_t*>(plain.data());
+                const size_t wordCount = plain.size() / 4;
+                for (size_t w = 5; w < wordCount;)
+                {
+                    const uint32_t length = words[w] >> 16, opcode = words[w] & 0xFFFF;
+                    if (length == 0)
+                        break;
+                    if (opcode == 15 && w + 1 < wordCount)   // OpEntryPoint: execution model 0 vertex, 4 fragment
+                    {
+                        e.stage = words[w + 1];
+                        break;
+                    }
+                    w += length;
+                }
+                for (size_t w = 5; w < wordCount;)
+                {
+                    const uint32_t length = words[w] >> 16, opcode = words[w] & 0xFFFF;
+                    if (length == 0)
+                        break;
+                    if (opcode == 71 && length >= 4 && w + 3 < wordCount && words[w + 2] == 1)   // OpDecorate SpecId
+                    {
+                        const uint32_t id = words[w + 3];
+                        if (id >= 1000 && id < 1256)
+                            e.boolMask[(id - 1000) / 32] |= 1u << ((id - 1000) % 32);
+                    }
+                    w += length;
+                }
+
+                std::vector<uint8_t> frame(ZSTD_compressBound(plain.size()));
+                frame.resize(ZSTD_compress(frame.data(), frame.size(), plain.data(), plain.size(), level));
+                e.offset = uint32_t(packageData.size());
+                e.compressedSize = uint32_t(frame.size());
+                packageData.insert(packageData.end(), frame.begin(), frame.end());
+                packageData.resize((packageData.size() + 7) & ~size_t(7));
+                table.push_back(e);
+            }
+
+            PackageHeader header{};
+            std::memcpy(header.magic, "BVKS", 4);
+            header.version = 1;
+            header.count = uint32_t(table.size());
+            header.tableOffset = sizeof(PackageHeader);
+            header.dataOffset = uint32_t(sizeof(PackageHeader) + table.size() * sizeof(PackageEntry));
+
+            std::vector<uint8_t> package(header.dataOffset);
+            std::memcpy(package.data(), &header, sizeof(header));
+            if (!table.empty())
+                std::memcpy(package.data() + header.tableOffset, table.data(), table.size() * sizeof(PackageEntry));
+            package.insert(package.end(), packageData.begin(), packageData.end());
+            writeAllBytes(spirvPackagePath.c_str(), package.data(), package.size());
+            fmt::println("SPIR-V package: {} shaders written to {}", table.size(), spirvPackagePath);
+        }
+#endif
     }
     else
     {
