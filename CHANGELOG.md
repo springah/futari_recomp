@@ -9,6 +9,31 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 v1.5.5-rc1 (2026-11-03): a Windows pre-release of the state below, for
 testers of the Renut renderer (opt-in; the default renderer is unchanged).
 
+After rc1 (2026-11-03), from a scripted player-path test of the rc1 zip:
+
+- **The shader translator is built into `futari.exe`** (`--futari_renut_translate`,
+  `src/renut_shim/renut_shader_translate_tool.cpp`; XenosRecomp compiled in with
+  `FUTARI_RENUT_IN_EXE`, the DirectX Shader Compiler loaded from
+  `renut_tools/dxcompiler.dll` only when the tool runs). No `XenosRecomp.exe`
+  ships any more: Windows Defender's cloud heuristics quarantined rc1's copy as
+  `Trojan:Win32/Bearfoos.B!ml` on a stock PC, so `make_shaders.py` could never
+  run and Renut stayed black for every player. `make_shaders.py` now also says
+  so in plain words when Windows refuses to start a tool (WinError 225).
+- **`extract_assets.bat` accepts an already-extracted game folder** (one with
+  `default.xex` and `media\` at its top): it is copied into `assets\` and its
+  DLC installed. Before, such a folder installed the DLC only, and the batch file
+  still printed `[DONE] ... double-click futari.exe` with no game data. A DLC-only
+  source now exits 4 with its own message; nothing dragged on with `assets\`
+  already in place (if no .iso is in the folder) runs only the shader
+  translation (the upgrade route). A failed shader translation now exits 3 and
+  the batch file says the game data is fine and only Renut lacks its shaders,
+  instead of "[FAILED] Extraction did not complete".
+- `RUN.txt`: the loose-folder route, the upgrade step (copy `futari.ini` too),
+  F11 for fullscreen (Alt+Enter presses START), and where DUMPING.md is: the
+  batch file and the extractor's messages pointed at a file that is not in the
+  zip, and now give its GitHub URL. DUMPING.md gained Route C, the
+  already-extracted folder.
+
 Groundwork for the native renderer (issue #8, `docs/NOTES_renut_port_scoping.md`),
 leg 1 of 6: the SDK additions the Renut renderer compiles against, ported from
 cerroverb/futari-linux's SDK fork onto the vendored v0.9.3.1. No renderer code
@@ -106,7 +131,8 @@ to the build's, the translation takes 3 s, the title draws from the package with
 no misses, and without the package Renut logs what to do and draws nothing.
 
 - **`renut_tools/` ships in the zip**: XenosRecomp built SPIR-V-only (no
-  dxil.dll), dxcompiler.dll, shader_common.h and the early-alpha pass. The
+  dxil.dll; rc1 only, from rc2 the translator is in futari.exe), dxcompiler.dll,
+  shader_common.h and the early-alpha pass. The
   `futari_renut_tools` target stages it; the DXC licence (NCSA) joined
   THIRD-PARTY-NOTICES.txt.
 - **`futari.exe --futari_renut_dump_shaders=<dir>`**: the exe loads its own

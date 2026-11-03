@@ -35,6 +35,7 @@
 #include "renut_engine/gpu/banjo_renut_select.h"
 #include "renut_engine/gpu/overlay/app_integration.h"
 #include "renut_shim/renut_shader_dump_tool.h"
+#include "renut_shim/renut_shader_translate_tool.h"
 #include <rex/ui/immediate_drawer.h>
 
 // Dev aid (the Renut gates): write the presented frame once, N seconds after the runtime is up, as a binary PPM
@@ -55,6 +56,30 @@ REXCVAR_DEFINE_INT32(futari_renut_capture_after_s, 20, "Futari",
 REXCVAR_DEFINE_STRING(futari_renut_dump_shaders, "", "Futari",
                       "Tool: dump the game's shader containers to this folder and exit (empty: off)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+#if FUTARI_RENUT_TRANSLATOR
+// Tool mode for the extractor, step 2: translate that dump to SPIR-V (Renut's XenosRecomp built into this exe, the
+// DirectX Shader Compiler loaded from renut_tools/) and exit before anything of the game runs. The package and the
+// early-alpha pass's two runs are asked for through the environment, as for the standalone tool (make_shaders.py sets
+// XENOS_RECOMP_SPIRV_PACKAGE, BANJO_HLSL_DUMP_ONLY, BANJO_HLSL_OVERRIDE). Empty = off.
+//   futari.exe --futari_renut_translate=<dump folder> [--futari_renut_translate_out=<cache .cpp>]
+//              [--futari_renut_translate_common=<shader_common.h>] [--futari_renut_translate_hlsl=<HLSL dump folder>]
+//              [--futari_renut_dxcompiler=<dxcompiler.dll>]
+REXCVAR_DEFINE_STRING(futari_renut_translate, "", "Futari",
+                      "Tool: translate this shader dump folder to SPIR-V and exit (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_translate_out, "", "Futari",
+                      "Tool: the shader-cache .cpp the translation writes (empty: beside the dump)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_translate_common, "", "Futari",
+                      "Tool: shader_common.h for the translation (empty: renut_tools/ beside the exe)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_translate_hlsl, "", "Futari",
+                      "Tool: the HLSL dump folder of the early-alpha pass (empty: none)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_dxcompiler, "", "Futari",
+                      "Tool: dxcompiler.dll for the translation (empty: renut_tools/ beside the exe)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+#endif
 #endif
 
 #include <imgui.h>
@@ -713,6 +738,31 @@ class FutariApp : public rex::ReXApp {
     if (!rex::cvar::HasNonDefaultValue("renut_gpu_backend")) {
       rex::cvar::SetFlagByName("renut_gpu_backend", "vulkan");
     }
+#if FUTARI_RENUT_TRANSLATOR
+    // The translate tool mode: nothing of the game is needed, so it runs here and the process ends with the tool's
+    // exit code (no window, no runtime; the SDK's shutdown has nothing to undo yet).
+    const std::string dump = REXCVAR_GET(futari_renut_translate);
+    if (!dump.empty()) {
+      // Cvar strings are UTF-8 (the SDK converts the wide command line); a path built from a std::string would
+      // read them as the ANSI code page and garble a non-ASCII folder.
+      const auto u8 = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
+      futari::renut_tool::TranslateArgs args;
+      args.dump = u8(dump);
+      args.out = u8(REXCVAR_GET(futari_renut_translate_out));
+      args.common = u8(REXCVAR_GET(futari_renut_translate_common));
+      args.hlsl_dump = u8(REXCVAR_GET(futari_renut_translate_hlsl));
+      args.dxcompiler = u8(REXCVAR_GET(futari_renut_dxcompiler));
+      REXLOG_INFO("Shader translate: {} (XenosRecomp built in)", dump);
+      std::string error;
+      const int rc = futari::renut_tool::Translate(args, error);
+      if (!error.empty()) {
+        REXLOG_ERROR("Shader translate FAILED: {}", error);
+        std::fprintf(stderr, "Shader translate FAILED: %s\n", error.c_str());
+      }
+      REXLOG_INFO("Shader translate: exit {}", rc);
+      futari::renut_tool::EndProcess(rc);
+    }
+#endif
   }
 
   // The dump tool mode: the entrypoint is loaded, nothing has run.

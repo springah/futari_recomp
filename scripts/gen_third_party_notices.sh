@@ -51,9 +51,9 @@ COMPONENTS=(
   "D3D12 Memory Allocator (plume)|MIT|https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator|thirdparty/plume/contrib/D3D12MemoryAllocator/LICENSE.txt"
   "metal-cpp (plume, macOS)|Apache-2.0|https://developer.apple.com/metal/cpp/|thirdparty/plume/contrib/metal-cpp/LICENSE.txt"
   "XenosRecomp (hedge-dev; shader_common.h and the shader translation)|MIT|https://github.com/hedge-dev/XenosRecomp|thirdparty/reblue-XenosRecomp/LICENSE.md"
-  "zstd (decoder only, vendored with XenosRecomp)|BSD-3-Clause|https://github.com/facebook/zstd|thirdparty/reblue-XenosRecomp/thirdparty/zstd/LICENSE"
+  "zstd (vendored with XenosRecomp; the decoder in the renderer, the encoder in the translator built into futari.exe)|BSD-3-Clause|https://github.com/facebook/zstd|thirdparty/reblue-XenosRecomp/thirdparty/zstd/LICENSE"
   "smol-v (SPIR-V decoder, vendored with XenosRecomp)|MIT / Unlicense|https://github.com/aras-p/smol-v|thirdparty/reblue-XenosRecomp/thirdparty/smol-v/license.txt"
-  "DirectX Shader Compiler (dxcompiler.dll, shipped beside XenosRecomp for the shader translation at extract time)|NCSA (LLVM Release License)|https://github.com/microsoft/DirectXShaderCompiler|thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/LICENSE.TXT"
+  "DirectX Shader Compiler (dxcompiler.dll in renut_tools/, loaded by the translator built into futari.exe at extract time)|NCSA (LLVM Release License)|https://github.com/microsoft/DirectXShaderCompiler|thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/LICENSE.TXT"
 )
 
 # Components linked by the SDK that vendor no licence file. Named rather than

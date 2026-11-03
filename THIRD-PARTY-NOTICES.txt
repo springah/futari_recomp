@@ -68,9 +68,9 @@ COMPONENTS
   D3D12 Memory Allocator (plume)                             MIT                    https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator
   metal-cpp (plume, macOS)                                   Apache-2.0             https://developer.apple.com/metal/cpp/
   XenosRecomp (hedge-dev; shader_common.h and the shader translation) MIT                    https://github.com/hedge-dev/XenosRecomp
-  zstd (decoder only, vendored with XenosRecomp)             BSD-3-Clause           https://github.com/facebook/zstd
+  zstd (vendored with XenosRecomp; the decoder in the renderer, the encoder in the translator built into futari.exe) BSD-3-Clause           https://github.com/facebook/zstd
   smol-v (SPIR-V decoder, vendored with XenosRecomp)         MIT / Unlicense        https://github.com/aras-p/smol-v
-  DirectX Shader Compiler (dxcompiler.dll, shipped beside XenosRecomp for the shader translation at extract time) NCSA (LLVM Release License) https://github.com/microsoft/DirectXShaderCompiler
+  DirectX Shader Compiler (dxcompiler.dll in renut_tools/, loaded by the translator built into futari.exe at extract time) NCSA (LLVM Release License) https://github.com/microsoft/DirectXShaderCompiler
 
   Linked components whose licence text is not vendored in the SDK tree, and
   which therefore are NOT reproduced below (upstream licence named for
@@ -4111,7 +4111,7 @@ SOFTWARE.
 
 
 ===============================================================================
-zstd (decoder only, vendored with XenosRecomp)
+zstd (vendored with XenosRecomp; the decoder in the renderer, the encoder in the translator built into futari.exe)
 BSD-3-Clause -- https://github.com/facebook/zstd
 ===============================================================================
 
@@ -4194,7 +4194,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 ===============================================================================
-DirectX Shader Compiler (dxcompiler.dll, shipped beside XenosRecomp for the shader translation at extract time)
+DirectX Shader Compiler (dxcompiler.dll in renut_tools/, loaded by the translator built into futari.exe at extract time)
 NCSA (LLVM Release License) -- https://github.com/microsoft/DirectXShaderCompiler
 ===============================================================================
 

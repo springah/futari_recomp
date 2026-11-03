@@ -17,7 +17,7 @@ or `futari.exe --futari_renderer=renut`. Logs land in `logs/` beside the exe; af
       the chain counter, the "NOW LOADING" plates between stages.
 - [ ] A game over, name entry, the ranking screen, a continue.
 - [ ] Ver 1.5 Arrange modes (the three extra on the mode menu).
-- [ ] Black Label DLC when installed (`--dlc_dir=`): both its modes boot and draw.
+- [ ] Black Label DLC when installed (its packages in `dlc\` beside the exe): both its modes boot and draw.
 - [ ] Training mode (the panel rows that regressed once in realcomp are a known kind of trouble).
 - [ ] Pause menu and the in-game options.
 
@@ -32,19 +32,19 @@ Same screens on `play_xenos.cmd`. Things to compare side by side, one screenshot
 ## C. Feel
 
 - [ ] Input lag at the title and in stage 1 versus xenos (Renut's whole point: it should feel at least as tight).
-- [ ] 60 fps steady in stage 1 and on the boss: F3 stats, or the log's fps lines.
+- [ ] 60 fps steady in stage 1 and on the boss: the log's fps lines (F3 shows no fps).
 - [ ] Audio stays in sync through a stage (the swap counter feeds the renderer; a drift would show as late music cues).
 
 ## D. Window
 
 - [ ] F4 overlay opens, is readable, and "Save to config" works on Renut's drawer.
-- [ ] Alt+Enter / the fullscreen setting; a resolution change in the ini; the window resized by hand mid-game.
+- [ ] F11 (Alt+Enter acts as START) / the fullscreen setting; a resolution change in the ini; the window resized by hand mid-game.
 - [ ] Alt-tab out and back during a stage; minimise and restore.
 - [ ] Quit from the title (the title-exit binding) and from the game: clean exit, no hang (check the log's last line).
 
 ## E. Known and out of scope
 
-- `renut_gpu_backend = d3d12` draws nothing of the game: the package is SPIR-V only. Vulkan is forced in main.cpp.
+- `renut_gpu_backend = d3d12` draws nothing of the game: the package is SPIR-V only. Vulkan is the default (main.cpp); the ini or the flag still wins.
 - A missing `vulkan_spirv.bin` is an error line in the log and a black game; the default renderer does not need it.
 - Leg 6 is macOS (Metal via plume); nothing here covers it.
 

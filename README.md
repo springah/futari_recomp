@@ -40,10 +40,13 @@ the last release with a Steam Deck zip; Linux and Steam Deck players should use
 [futari-linux](https://github.com/cerroverb/futari-linux)). The bundles contain the game's own program code,
 recompiled, and are **for people who own the game only** — see [Legal](#legal).
 They contain no game data: unzip one and follow `RUN.txt` inside to add your own
-dump (on Windows, drag your disc ISO or console install folder onto
-`extract_assets.bat`, then double-click `futari.exe`). The extractor also
-translates your game's shaders for the optional Renut renderer (`RUN.txt`,
-"RENDERER"); the zip carries the translator, not the shaders.
+dump (on Windows, drag your disc ISO, console install folder or an
+already-extracted game folder onto `extract_assets.bat`, then double-click
+`futari.exe`). The extractor also translates your game's shaders for the
+optional Renut renderer (`RUN.txt`, "RENDERER"); the zip carries the
+translator, not the shaders. Upgrading: copy your `assets/` and `dlc/` folders
+(and `futari.ini`) into the new version's folder and double-click
+`extract_assets.bat` with nothing dragged on.
 
 ## How it works
 
@@ -61,9 +64,10 @@ the host app (`src/main.cpp`), the codegen inputs (`*.toml`), and the build.
 
 You supply the game yourself, from a copy you own. Two pieces:
 
-**`assets/` — the disc (required).** The extractor takes either a **Ver 1.5**
-disc ISO or the install folder copied straight off your console's storage
-(hash-verified, no conversion tools needed — see DUMPING.md):
+**`assets/` — the disc (required).** The extractor takes a **Ver 1.5**
+disc ISO, the install folder copied straight off your console's storage
+(hash-verified, no conversion tools needed — see DUMPING.md), or an
+already-extracted game folder (`default.xex` and `media/` at its top):
 
 ```sh
 python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
@@ -227,7 +231,7 @@ build.ps1, build.bat      # one-shot Windows build
 extract_assets.bat        # drag-and-drop wrapper around extract_iso.py (also ships in the bundles, with make_shaders.py + renut_tools/)
 mac-build/build_app.sh    # macOS .app packaging
 dist/                     # files that ship inside release zips: RUN.txt, gamecontrollerdb.txt, dlc-README.txt
-docs/                     # DUMPING.md (getting your own game data), upstream/ (SDK notes)
+docs/                     # DUMPING.md (getting your own game data), NOTES_renut_*.md (the Renut port), upstream/ (SDK notes)
 PORTS.md, CHANGELOG.md    # per-OS build/release notes; version history
 thirdparty/rexglue-sdk/   # the SDK, vendored (VENDORED.md); its deps are submodules
 ```

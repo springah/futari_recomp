@@ -1,19 +1,71 @@
 #include "dxc_compiler.h"
 
+#ifdef FUTARI_RENUT_IN_EXE
+// futari_recomp (2026-11-03): inside futari.exe the DirectX Shader Compiler is loaded when the tool runs, never at the
+// game's start (the game must boot without it). FUTARI_RENUT_DXCOMPILER names the DLL (the tool mode sets it to
+// renut_tools/dxcompiler.dll beside the exe); otherwise the loader's own search for dxcompiler.dll.
+#include <mutex>
+static DxcCreateInstanceProc futariDxcCreateInstance()
+{
+    static DxcCreateInstanceProc proc = nullptr;
+    static std::once_flag once;
+    std::call_once(once, []
+    {
+        const char* path = std::getenv("FUTARI_RENUT_DXCOMPILER");
+        HMODULE module = nullptr;
+        if (path && *path)
+        {
+            const int n = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
+            std::wstring wide(n > 0 ? n - 1 : 0, L'\0');
+            if (n > 0)
+                MultiByteToWideChar(CP_UTF8, 0, path, -1, wide.data(), n);
+            module = LoadLibraryExW(wide.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        }
+        else
+        {
+            // No path named: the loader's search. Never a fallback for a named path that failed, which could pick
+            // up a different DXC from the PATH (a Vulkan or Windows SDK) and translate differently.
+            module = LoadLibraryW(L"dxcompiler.dll");
+        }
+        if (module == nullptr)
+        {
+            fmt::println(stderr, "XenosRecomp: cannot load the DirectX Shader Compiler ({}): error {}",
+                         path && *path ? path : "dxcompiler.dll", GetLastError());
+            return;
+        }
+        proc = reinterpret_cast<DxcCreateInstanceProc>(GetProcAddress(module, "DxcCreateInstance"));
+        if (proc == nullptr)
+            fmt::println(stderr, "XenosRecomp: the DirectX Shader Compiler has no DxcCreateInstance");
+    });
+    return proc;
+}
+#endif
+
 DxcCompiler::DxcCompiler()
 {
+#ifdef FUTARI_RENUT_IN_EXE
+    DxcCreateInstanceProc create = futariDxcCreateInstance();
+    if (create == nullptr)
+        return;  // compile() reports every shader as failed
+    HRESULT hr = create(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+#else
     HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+#endif
     assert(SUCCEEDED(hr));
 }
 
 DxcCompiler::~DxcCompiler()
 {
-    dxcCompiler->Release();
+    if (dxcCompiler != nullptr)
+        dxcCompiler->Release();
 }
 
 IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool compilePixelShader, bool compileLibrary, bool compileSpirv,
                                bool deko3d)
 {
+    if (dxcCompiler == nullptr)
+        return nullptr;
+
     DxcBuffer source{};
     source.Ptr = shaderSource.c_str();
     source.Size = shaderSource.size();

@@ -6,13 +6,14 @@
 #
 # The build must be the RELEASE SHADER build (-DFUTARI_RENUT_RELEASE_SHADERS=ON): its futari.exe carries the Renut
 # shader table but no game shader. The player's extractor translates their own shaders into vulkan_spirv.bin with the
-# tools in renut_tools/ (XenosRecomp + the DirectX Shader Compiler, ~19 MB, plus make_shaders.py). A build with the
-# shaders built in (the dev tree) is game data and is refused here.
+# translator built into futari.exe (XenosRecomp) and the files in renut_tools/ (the DirectX Shader Compiler DLL, the
+# shader header, the early-alpha pass; no executable), driven by make_shaders.py. A build with the shaders built in
+# (the dev tree) is game data and is refused here.
 #
 # Layout (single root, as every public zip since v1.5.3; + renut_tools/ and make_shaders.py from this version on):
 #   Mushihimesama-Futari-PC/
 #     futari.exe futari.ini futari_<core>.dll x8 rexgpu-xenos.dll rexruntime.dll
-#     extract_assets.bat extract_iso.py make_shaders.py renut_tools/{XenosRecomp.exe,dxcompiler.dll,shader_common.h,
+#     extract_assets.bat extract_iso.py make_shaders.py renut_tools/{dxcompiler.dll,shader_common.h,
 #     renut_early_alpha.py,early_alpha.py}
 #     RUN.txt gamecontrollerdb.txt THIRD-PARTY-NOTICES.txt dlc/README.txt
 # Not shipped: assets/, dlc/<ids>/, vulkan_spirv.bin, shader_work/, logs/, TracyClient.dll (not imported).
@@ -27,14 +28,17 @@ ZIP="$ROOT/out/$NAME-v$VER.zip"
 [ -f "$BUILD_DIR/futari.exe" ] || { echo "no $BUILD_DIR/futari.exe"; exit 1; }
 grep -q 'FUTARI_RENUT_RELEASE_SHADERS:BOOL=ON' "$BUILD_DIR/CMakeCache.txt" ||
   { echo "REFUSED: $BUILD_DIR was not configured with FUTARI_RENUT_RELEASE_SHADERS=ON (its exe would carry game shaders)"; exit 1; }
-for t in XenosRecomp.exe dxcompiler.dll shader_common.h renut_early_alpha.py early_alpha.py; do
+for t in dxcompiler.dll shader_common.h renut_early_alpha.py early_alpha.py; do
   [ -f "$BUILD_DIR/renut_tools/$t" ] || { echo "no $BUILD_DIR/renut_tools/$t: build the futari_renut_tools target"; exit 1; }
 done
 
 rm -rf "$ROOT/out/_stage"
 mkdir -p "$STAGE/dlc" "$STAGE/renut_tools"
 cp "$BUILD_DIR"/futari.exe "$BUILD_DIR"/futari_*.dll "$BUILD_DIR"/rexgpu-xenos.dll "$BUILD_DIR"/rexruntime.dll "$STAGE/"
-cp "$BUILD_DIR"/renut_tools/{XenosRecomp.exe,dxcompiler.dll,shader_common.h,renut_early_alpha.py,early_alpha.py} "$STAGE/renut_tools/"
+cp "$BUILD_DIR"/renut_tools/{dxcompiler.dll,shader_common.h,renut_early_alpha.py,early_alpha.py} "$STAGE/renut_tools/"
+# No executable ships in renut_tools/ (2026-11-03): the translator is built into futari.exe; Windows Defender quarantined
+# v1.5.5-rc1's standalone XenosRecomp.exe.
+ls "$STAGE"/renut_tools/*.exe >/dev/null 2>&1 && { echo "REFUSED: an executable in renut_tools/"; exit 1; }
 cp "$ROOT/extract_assets.bat" "$ROOT/scripts/extract_iso.py" "$ROOT/scripts/make_shaders.py" "$STAGE/"
 cp "$ROOT/dist/RUN.txt" "$ROOT/dist/gamecontrollerdb.txt" "$ROOT/THIRD-PARTY-NOTICES.txt" "$STAGE/"
 cp "$ROOT/dist/dlc-README.txt" "$STAGE/dlc/README.txt"
@@ -60,6 +64,15 @@ grep -q "no game shaders built in" "${LOG:-/dev/null}" ||
 grep -q "Renderer: Vulkan" "$LOG" || { echo "REFUSED: the staged exe did not bring Renut up; see $LOG"; exit 1; }
 rm -rf "$STAGE/logs" "$STAGE/shader_capture"
 echo "  boot check: release shader table, Renut up"
+# The exe must carry the translator (the tool mode make_shaders.py drives): asked to translate a folder that does not
+# exist it must refuse with exit 2 within seconds. An exe without the mode ignores the unknown cvar, boots the game
+# and times out, and make_shaders.py would do the same on the player's PC.
+translate_rc=0
+( cd "$STAGE" && timeout 15 ./futari.exe --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renut_translate="$(cygpath -m "$STAGE")/no_such_dump" >/dev/null 2>&1 ) || translate_rc=$?
+taskkill //F //IM futari.exe >/dev/null 2>&1 || true
+rm -rf "$STAGE/logs"
+[ "$translate_rc" = "2" ] || { echo "REFUSED: the staged exe has no shader translator tool mode (exit $translate_rc, expected 2)"; exit 1; }
+echo "  tool check: the translator is built in"
 # The default renderer must survive its first dialogs (the title hint appears a few seconds in): a crash there leaves a
 # log identical to a healthy run's, so judge by the exit: 124 = still running when timeout killed it.
 xenos_rc=0

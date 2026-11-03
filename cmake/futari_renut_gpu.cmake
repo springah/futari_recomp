@@ -176,41 +176,60 @@ if(COMMAND rexglue_apply_target_settings)
 endif()
 renut_gpu_setup(futari_renut_gpu)
 
-# futari_recomp (2026-11-03): the shader tools a player's extract step runs to make vulkan_spirv.bin from their own
-# executables. A SECOND build of the same XenosRecomp source: gpu.cmake's renut_xenos_recomp links dxil.dll (DXIL for the
-# D3D12 path) and runs at build time; this copy is SPIR-V only (XENOS_RECOMP_DXIL=OFF, so no dxil.dll ships) and goes
-# to renut_tools/ beside the build. Only for FUTARI_RENUT_RELEASE_SHADERS; the stub cache has no tools to ship.
-if(FUTARI_RENUT_RELEASE_SHADERS AND NOT FUTARI_RENUT_STUB_SHADER_CACHE)
-    set(_futari_tool_prefix "${CMAKE_BINARY_DIR}/xenos_recomp_tool")
-    set(_futari_tool_exe "${_futari_tool_prefix}/build/XenosRecomp/XenosRecomp${CMAKE_EXECUTABLE_SUFFIX}")
+# futari_recomp (2026-11-03): XenosRecomp built INTO futari.exe as a tool mode (--futari_renut_translate: main.cpp and
+# src/renut_shim/renut_shader_translate_tool.cpp), so the player's extract step translates their shaders with the game's
+# own exe and no separate translator ships: Windows Defender's cloud heuristics quarantined v1.5.5-rc1's standalone
+# XenosRecomp.exe on every player's PC. SPIR-V only (no DXIL); the DirectX Shader Compiler stays a DLL, loaded from
+# renut_tools/dxcompiler.dll when the tool runs and never at the game's start. gpu.cmake's build-time XenosRecomp
+# (renut_xenos_recomp, the complete build's embedded cache) is a separate ExternalProject and stays as it is.
+# Windows only until leg 6 (macOS loads libdxcompiler.dylib the same way; not wired yet).
+if(WIN32)
+    # The package writer compresses; renut_zstd (gpu.cmake) is the decoder only.
+    file(GLOB renut_zstd_compress_sources "${RENUT_ZSTD_LIB_DIR}/compress/*.c")
+    add_library(renut_zstd_compress STATIC ${renut_zstd_compress_sources})
+    target_include_directories(renut_zstd_compress PUBLIC "${RENUT_ZSTD_LIB_DIR}")
+    target_compile_definitions(renut_zstd_compress PRIVATE ZSTD_DISABLE_ASM)
+    target_link_libraries(renut_zstd_compress PUBLIC renut_zstd)
+    set_target_properties(renut_zstd_compress PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    set(_futari_xr "${RENUT_XENOS_RECOMP_DIR}/XenosRecomp")
+    add_library(futari_renut_translator STATIC
+        "${_futari_xr}/main.cpp"
+        "${_futari_xr}/shader_recompiler.cpp"
+        "${_futari_xr}/dxc_compiler.cpp"
+        "${CMAKE_SOURCE_DIR}/src/renut_shim/renut_shader_translate_tool.cpp")
+    target_include_directories(futari_renut_translator PRIVATE
+        "${_futari_xr}"
+        "${RENUT_XENOS_RECOMP_DIR}/thirdparty/dxc-bin/inc"
+        "${CMAKE_SOURCE_DIR}/src")
+    # As XenosRecomp's own CMakeLists (RENUT_RECOMP, no DXIL), plus the in-exe entry point.
+    target_compile_definitions(futari_renut_translator PRIVATE RENUT_RECOMP FUTARI_RENUT_IN_EXE _CRT_SECURE_NO_WARNINGS)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(futari_renut_translator PRIVATE -Wno-switch -Wno-unused-variable -Wno-null-arithmetic
+                               -fms-extensions)
+    endif()
+    target_precompile_headers(futari_renut_translator PRIVATE "${_futari_xr}/pch.h")
+    target_link_libraries(futari_renut_translator PRIVATE fmt::fmt renut_xxhash renut_smolv renut_zstd_compress)
+    target_link_libraries(futari PRIVATE futari_renut_translator)
+    target_compile_definitions(futari PRIVATE FUTARI_RENUT_TRANSLATOR=1)
+    message(STATUS "futari: Renut's shader translator (XenosRecomp, SPIR-V only) is built into futari.exe")
+endif()
+
+# The files the player's make_shaders.py needs beside the exe (renut_tools/): the DirectX Shader Compiler, the shader
+# header the translation includes, and the early-alpha pass. Only for FUTARI_RENUT_RELEASE_SHADERS; the stub cache has
+# nothing to translate. No executable goes in here (scripts/stage_win_zip.sh refuses one).
+if(FUTARI_RENUT_RELEASE_SHADERS AND NOT FUTARI_RENUT_STUB_SHADER_CACHE AND WIN32)
     set(_futari_tools_out "${CMAKE_BINARY_DIR}/renut_tools")
-    ExternalProject_Add(renut_xenos_recomp_tool
-        SOURCE_DIR "${RENUT_XENOS_RECOMP_DIR}"
-        BINARY_DIR "${_futari_tool_prefix}/build"
-        PREFIX "${_futari_tool_prefix}"
-        CMAKE_ARGS
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-            -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-            -DXENOS_RECOMP_RENUT=ON
-            -DXENOS_RECOMP_DXIL=OFF
-            ${BANJO_RENUT_XENOS_RECOMP_ARGS}
-        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target XenosRecomp --config Release
-        INSTALL_COMMAND ""
-        BUILD_BYPRODUCTS "${_futari_tool_exe}"
-        BUILD_ALWAYS OFF
-        USES_TERMINAL_BUILD ON)
     add_custom_target(futari_renut_tools ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory "${_futari_tools_out}"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_futari_tool_exe}" "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E rm -f "${_futari_tools_out}/XenosRecomp.exe"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_XENOS_RECOMP_DIR}/thirdparty/dxc-bin/bin/x64/dxcompiler.dll" "${_futari_tools_out}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_SHADER_COMMON_DIR}/shader_common.h" "${_futari_tools_out}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_TOOLS_DIR}/renut_early_alpha.py" "${_futari_tools_out}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_TOOLS_DIR}/early_alpha.py" "${_futari_tools_out}"
-        DEPENDS renut_xenos_recomp_tool
-        COMMENT "Renut's shader tools for the extract step -> ${_futari_tools_out}"
+        COMMENT "Renut's shader tool files for the extract step -> ${_futari_tools_out}"
         VERBATIM)
-    message(STATUS "futari: Renut's shader tools (XenosRecomp, SPIR-V only) go to ${_futari_tools_out}")
+    message(STATUS "futari: Renut's shader tool files (DXC, shader_common.h, early-alpha pass) go to ${_futari_tools_out}")
 endif()
 # The renderer's own code without the game code's -ffp-contract / aliasing rules: it is host code (as in banjo-nx).
 target_link_libraries(futari PRIVATE futari_renut_gpu)

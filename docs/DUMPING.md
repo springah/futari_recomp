@@ -67,6 +67,16 @@ dump the disc to an ISO, then drag the `.iso` onto `extract_assets.bat` (or run
 far less trouble — a disc install reads the same data off the disc using the
 console's own drive.
 
+## Route C — an already-extracted game folder
+
+If you already have the disc contents as plain files (a folder with
+`default.xex` and `media/` at its top, from an earlier extraction or another
+tool), drag that folder onto `extract_assets.bat` (or run
+`python scripts/extract_iso.py "path/to/folder" --out assets/ --dlc-out dlc/`).
+It is copied into `assets/`, and any DLC packages inside it are installed into
+`dlc/`. There are no container hashes to check on this route: compare the
+executables against the table under "Checking you got the right files" below.
+
 ## DLC
 
 Route A step 3 already handles this — packages found under `00000002` are

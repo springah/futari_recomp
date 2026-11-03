@@ -5,19 +5,23 @@ Makes vulkan_spirv.bin, the game's shaders for the Renut renderer, from YOUR cop
 The public build of futari.exe carries no game shader (they are game data, like the executables they are compiled
 into). Renut draws with the game's own shaders translated to SPIR-V, so after the assets are extracted this script
 translates them on your machine, once, into vulkan_spirv.bin beside futari.exe. extract_assets.bat runs it for you
-at the end of the extraction; run it again by hand after updating the port (the file must match the build):
+at the end of the extraction. After updating the port (the file must match the build), double-click
+extract_assets.bat with nothing dragged on, which runs only this script, or run it by hand:
 
     python make_shaders.py                      # next to futari.exe (the release layout)
+    py make_shaders.py                          # the same, where python is not on the PATH
     python scripts/make_shaders.py --exe out/build/win-amd64-release/futari.exe --assets assets \\
            --tools out/build/win-amd64-release-shaders/renut_tools      # a developer tree
 
-Steps (each a program that ships in renut_tools/ beside the exe, or futari.exe itself):
+Steps (every program is futari.exe itself; renut_tools/ beside it holds the DirectX Shader Compiler DLL, the shader
+header and the early-alpha pass, no executable):
   1. futari.exe --futari_renut_dump_shaders=<work>/dump: the game loads its executables as it would to run and writes
      their shader containers (42 for Ver 1.5) to the folder, then exits without starting the game.
-  2. XenosRecomp (hedge-dev's Xbox 360 shader translator, Renut's build of it) with Renut's early-alpha pass between
-     its two runs, as the port's own build does: the shaders to SPIR-V, written as the package the renderer reads.
+  2. futari.exe --futari_renut_translate=<work>/dump, twice around Renut's early-alpha pass as the port's own build
+     does: XenosRecomp (hedge-dev's Xbox 360 shader translator, Renut's build of it) is built into the exe, and writes
+     the shaders as the SPIR-V package the renderer reads.
   3. The work folder (game data) is deleted.
-Needs nothing but Python 3: XenosRecomp and the DirectX Shader Compiler it uses are in renut_tools/.
+Needs nothing but Python 3.
 """
 import argparse
 import os
@@ -48,8 +52,15 @@ def run(cmd, env=None, timeout=600, log=None):
     except subprocess.TimeoutExpired:
         print(f"  timed out after {timeout} s: {cmd[0]}")
         return False
+    except OSError as e:
+        # WinError 225 is Windows refusing to start a file its antivirus quarantined or blocked.
+        print(f"  Windows would not start {Path(str(cmd[0])).name}: {e}")
+        print("  If your antivirus quarantined it, restore the file and allow this folder, then run this again.")
+        if log is not None:
+            log.write(f"$ {' '.join(str(c) for c in cmd)}\nOSError: {e}\n")
+        return False
     if log is not None:
-        log.write(f"$ {' '.join(str(c) for c in cmd)}\n{proc.stdout}{proc.stderr}\n")
+        log.write(f"$ {' '.join(str(c) for c in cmd)}\n{proc.stdout}{proc.stderr}\n(exit {proc.returncode})\n")
     if proc.returncode != 0:
         print(f"  {Path(str(cmd[0])).name} exited {proc.returncode}")
         tail = (proc.stdout + proc.stderr).strip().splitlines()[-15:]
@@ -97,12 +108,20 @@ def main():
     if not (assets / "default.xex").is_file():
         return fail(f"no {assets / 'default.xex'}: extract the game data first (extract_assets.bat)")
     tools = Path(args.tools).resolve() if args.tools else exe_dir / "renut_tools"
-    recomp = tools / "XenosRecomp.exe"
+    dxcompiler = tools / "dxcompiler.dll"
     common = tools / "shader_common.h"
     early_alpha = tools / "renut_early_alpha.py"
-    for needed in (recomp, tools / "dxcompiler.dll", common, early_alpha, tools / "early_alpha.py"):
+    for needed in (dxcompiler, common, early_alpha, tools / "early_alpha.py"):
         if not needed.is_file():
             return fail(f"no {needed}: the renut_tools folder that ships with the port is incomplete")
+    def translate(dump_dir, out_cpp, hlsl_dir=None):
+        """The translator built into the exe (--futari_renut_translate), with the arguments its standalone build took."""
+        cmd = [exe, f"--game_data_root={assets}", f"--futari_renut_translate={dump_dir}",
+               f"--futari_renut_translate_out={out_cpp}", f"--futari_renut_translate_common={common}",
+               f"--futari_renut_dxcompiler={dxcompiler}"]
+        if hlsl_dir is not None:
+            cmd.append(f"--futari_renut_translate_hlsl={hlsl_dir}")
+        return cmd
     out_dir = Path(args.out).resolve() if args.out else exe_dir
     package = out_dir / PACKAGE_NAME
 
@@ -126,18 +145,19 @@ def main():
         print(f"     {len(bins)} shaders" + ("" if len(bins) == EXPECTED_SHADERS else
                                            f" (expected {EXPECTED_SHADERS}: a different game version?)"))
 
-        print("2/3  Translating them (XenosRecomp, DirectX Shader Compiler)...")
+        print("2/3  Translating them (XenosRecomp built into futari.exe, DirectX Shader Compiler)...")
         # As the build (src/renut_engine/gpu/gpu.cmake): a dump-only pass, the early-alpha rewrite, the real pass.
-        if not run([recomp, dump, work / "pass1.cpp", common, hlsl], env={"BANJO_HLSL_DUMP_ONLY": "1"}, log=log):
-            return fail("XenosRecomp's first pass failed")
+        if not run(translate(dump, work / "pass1.cpp", hlsl), env={"BANJO_HLSL_DUMP_ONLY": "1"}, timeout=300, log=log):
+            return fail("the translator's first pass failed (see shader_work/make_shaders.log and the newest logs/*.log)")
         if not run([sys.executable, early_alpha, hlsl], log=log):
             return fail("the early-alpha pass failed")
         tmp_package = work / PACKAGE_NAME
-        if not run([recomp, dump, work / "cache.cpp", common],
-                   env={"BANJO_HLSL_OVERRIDE": str(hlsl), "XENOS_RECOMP_SPIRV_PACKAGE": str(tmp_package)}, log=log):
-            return fail("XenosRecomp's second pass failed")
+        if not run(translate(dump, work / "cache.cpp"),
+                   env={"BANJO_HLSL_OVERRIDE": str(hlsl), "XENOS_RECOMP_SPIRV_PACKAGE": str(tmp_package)},
+                   timeout=300, log=log):
+            return fail("the translator's second pass failed (see shader_work/make_shaders.log and the newest logs/*.log)")
         if not tmp_package.is_file():
-            return fail("XenosRecomp wrote no package (is renut_tools/XenosRecomp.exe the port's own build?)")
+            return fail("the translator wrote no package (is futari.exe this version's build?)")
         count, why = check_package(tmp_package)
         if count is None:
             return fail(f"the package is unusable: {why}")

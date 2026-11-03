@@ -16,6 +16,13 @@ static std::atomic<size_t> banjoKillShaders{0}, banjoDepthShaders{0};  // banjo-
 static std::unique_ptr<uint8_t[]> readAllBytes(const char* filePath, size_t& fileSize)
 {
     FILE* file = fopen(filePath, "rb");
+    if (file == nullptr)
+    {
+        // futari_recomp (2026-11-03): a missing input is a message, not a crash (the tool runs inside the game's exe).
+        fmt::println(stderr, "XenosRecomp: cannot open {}", filePath);
+        fileSize = 0;
+        return nullptr;
+    }
     fseek(file, 0, SEEK_END);
     fileSize = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -61,7 +68,14 @@ struct ShaderFailure
 static std::mutex g_failureMutex;
 static std::vector<ShaderFailure> g_failures;
 
+// futari_recomp (2026-11-03): FUTARI_RENUT_IN_EXE builds this program into futari.exe as a tool mode
+// (src/renut_shim/renut_shader_translate_tool.cpp calls it with the same argv), so the player's extract step needs no
+// separate executable: Windows Defender's cloud heuristics quarantined the standalone XenosRecomp.exe of v1.5.5-rc1.
+#ifdef FUTARI_RENUT_IN_EXE
+int futari_xenos_recomp_main(int argc, char** argv)
+#else
 int main(int argc, char** argv)
+#endif
 {
 #ifndef XENOS_RECOMP_INPUT
     if (argc < 4)
@@ -113,6 +127,8 @@ int main(int argc, char** argv)
 
     size_t includeSize = 0;
     auto includeData = readAllBytes(includeInput, includeSize);
+    if (includeData == nullptr)
+        return 3;
     std::string_view include(reinterpret_cast<const char*>(includeData.get()), includeSize);
 
     if (std::filesystem::is_directory(input))

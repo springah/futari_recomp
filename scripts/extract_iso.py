@@ -10,6 +10,10 @@ Accepts any of:
   - a folder containing the marketplace DLC packages (`00000002`)
   - a copied `Content\\...\\435A07D7` folder holding both of the above, which
     extracts the game AND installs the DLC in one go
+  - an already-extracted game folder (default.xex and media/ at its top),
+    which is copied into assets/ (any DLC in it is installed)
+With no path and assets/default.xex already in place, only the shader
+translation runs (the upgrade route; release layout only).
 
 Usage:
     python3 scripts/extract_iso.py [path] [--out assets/] [--dlc-out dlc/]
@@ -102,7 +106,7 @@ class GodReader:
             # scanning for its volume descriptor — but say so, since hash
             # verification against this layout is untested.
             print(f"  NOTE: unusual container layout (flags={self.flags:#x}, "
-                  f"dataBlockOffset={data_block_offset:#x}) — untested, "
+                  f"dataBlockOffset={data_block_offset:#x}) - untested, "
                   "attempting anyway")
 
         self.data_dir = header_path.parent / (header_path.name + ".data")
@@ -136,7 +140,7 @@ class GodReader:
             elif path.stat().st_size != expected:
                 problems.append(
                     f"{path.name} is {path.stat().st_size:,} bytes, "
-                    f"expected {expected:,} — the copy is incomplete")
+                    f"expected {expected:,} - the copy is incomplete")
         return problems
 
     def verify(self):
@@ -172,7 +176,7 @@ class GodReader:
                         group += 1
             if bad:
                 print(" CORRUPT")
-                problems.append(bad + " — the copy is corrupt")
+                problems.append(bad + " - the copy is corrupt")
             else:
                 print(" ok")
             # entry 0xCB of each level-1 table hashes the next file's level-1
@@ -297,7 +301,7 @@ def find_volume_descriptor(f):
             return base - 0x10000, root_sector, root_size
 
     # Fall back: scan the first 2 GB for the magic signature
-    print("  Known offsets failed — scanning for XDVDFS magic (may take a moment)...")
+    print("  Known offsets failed - scanning for XDVDFS magic (may take a moment)...")
     f.seek(0)
     chunk_size = 1 << 20  # 1 MB
     offset = 0
@@ -415,45 +419,120 @@ def extract_tree(f, fs_base, sector, size, dest: Path, rel=""):
 # Entry point
 # ---------------------------------------------------------------------------
 
+def is_loose_dump(path: Path):
+    """An already-extracted game folder: default.xex and media/ at its root (the
+    layout assets/ ends up with, e.g. a folder copied off a modded console or
+    an earlier extraction)."""
+    return path.is_dir() and (path / "default.xex").is_file() and (path / "media").is_dir()
+
+
 def classify_source(path: Path):
-    """Work out what the user handed us. Returns (god_header, iso, dlc_list),
-    any of which may be None/empty."""
+    """Work out what the user handed us. Returns (god_header, iso, dlc_list,
+    loose_dir), any of which may be None/empty."""
     if path.is_file():
         info = read_xcontent_header(path)
         if info is None:
-            return None, path, []          # presumably an ISO
+            return None, path, [], None    # presumably an ISO
         if info["title_id"] != TITLE_ID:
             sys.exit(f"{path.name} is an Xbox 360 package, but for title "
                      f"{info['title_id']:08X}, not this game ({TITLE_ID:08X}).")
         if info["content_type"] == CONTENT_TYPE_INSTALLED_DISC:
-            return path, None, []
+            return path, None, [], None
         if info["content_type"] == CONTENT_TYPE_DLC:
-            return None, None, [path]
+            return None, None, [path], None
         sys.exit(f"{path.name}: unsupported package type "
                  f"{info['content_type']:#x} (expected a disc install or DLC).")
 
-    gods = find_god_installs(path)
+    loose = path if is_loose_dump(path) else None
+    gods = [] if loose else find_god_installs(path)
     dlc = find_dlc_packages(path)
-    if not gods and not dlc:
+    if not gods and not dlc and not loose:
         sys.exit(
-            f"No disc install or DLC for this game found under {path}.\n"
-            "Expected the console's Content layout: a 00007000 folder (the\n"
-            "installed disc) and/or a 00000002 folder (the DLC packages) —\n"
-            "see docs/DUMPING.md."
+            f"No game or DLC for this game found under {path}.\n"
+            "Expected one of: the console's Content layout (a 00007000 folder,\n"
+            "the installed disc, and/or a 00000002 folder, the DLC packages), or\n"
+            "an already-extracted game folder with default.xex and media\\ at its\n"
+            "root. See https://github.com/springah/futari_recomp/blob/main/docs/DUMPING.md"
         )
     if len(gods) > 1:
         print(f"  NOTE: {len(gods)} disc installs found; using {gods[0]}")
-    return (gods[0] if gods else None), None, dlc
+    return (gods[0] if gods else None), None, dlc, loose
+
+
+def copy_loose_dump(src: Path, out_dir: Path, dlc_packages):
+    """Copy an already-extracted game folder into assets/, leaving the DLC
+    packages (they go to dlc/) and any earlier assets untouched."""
+    src = src.resolve()
+    out_dir = out_dir.resolve()
+    if src == out_dir:
+        print(f"{src} is already the assets folder; nothing to copy.")
+        return
+    if out_dir.is_relative_to(src):
+        # The game files sit loose beside the exe (or above it): copying the folder into its own assets/ would
+        # drag the port, its logs and a nested assets/ along. Only the game's own files, then.
+        print(f"{src} contains the assets folder; copying only the game files (default.xex, media, ...)")
+        game_names = ("default.xex", "media", "nxeart", "$SystemUpdate", "AvatarAssetPack")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for name in game_names:
+            item = src / name
+            if item.is_dir():
+                shutil.copytree(item, out_dir / name, dirs_exist_ok=True)
+            elif item.is_file():
+                shutil.copy2(item, out_dir / name)
+        return
+    skip = {Path(p).resolve() for p in dlc_packages}
+
+    def ignore(d, names):
+        return [n for n in names if (Path(d) / n).resolve() in skip]
+
+    print(f"Copying your extracted game folder to {out_dir}/")
+    shutil.copytree(src, out_dir, ignore=ignore, dirs_exist_ok=True)
+    # A folder that held only DLC packages (e.g. the dump's own dlc/) came across empty; drop it.
+    for p in skip:
+        try:
+            empty = out_dir / p.parent.relative_to(src)
+            if empty != out_dir and empty.is_dir() and not any(empty.iterdir()):
+                empty.rmdir()
+        except ValueError:
+            pass
+
+
+def translate_shaders(out_dir: Path):
+    """The release layout: futari.exe and its renut_tools/ beside the assets
+    folder. The Renut renderer draws with the game's own shaders translated on
+    this machine (make_shaders.py); the public build carries none."""
+    exe_dir = out_dir.resolve().parent
+    make_shaders = Path(__file__).resolve().with_name("make_shaders.py")
+    if not ((exe_dir / "futari.exe").is_file() and (exe_dir / "renut_tools").is_dir()
+            and make_shaders.is_file()):
+        return None
+    print("\nTranslating the game's shaders for the Renut renderer (vulkan_spirv.bin)...")
+    rc = subprocess.call([sys.executable, str(make_shaders), "--exe", str(exe_dir / "futari.exe"),
+                          "--assets", str(out_dir.resolve())])
+    if rc != 0:
+        print("\nWARNING: the shaders were not translated; the Renut renderer will draw nothing of the game.",
+              file=sys.stderr)
+        print("         Fix what it reported, then double-click extract_assets.bat again with nothing dragged on",
+              file=sys.stderr)
+        print("         (or run python make_shaders.py; py make_shaders.py where python is not on the PATH).",
+              file=sys.stderr)
+    return rc
+
+
+# Exit 3: the game data is fine, only the shader translation failed (extract_assets.bat says so).
+SHADERS_FAILED = "Your game data is in place; the default renderer will run. Renut has no shaders yet."
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Extract a Mushihimesama Futari Ver. 1.5 dump: a disc ISO, "
-                    "a console disc-install folder, and/or its DLC packages")
+                    "a console disc-install folder, an already-extracted game "
+                    "folder, and/or its DLC packages")
     parser.add_argument("source", nargs="?",
                         help="Path to an .iso, a console-install folder "
-                             "(00007000 or any folder above it), or a DLC "
-                             "folder (00000002)")
+                             "(00007000 or any folder above it), an "
+                             "already-extracted game folder (default.xex and "
+                             "media/ at its top), or a DLC folder (00000002)")
     parser.add_argument("--out", default="assets",
                         help="Assets output directory (default: assets/)")
     parser.add_argument("--dlc-out", default="dlc",
@@ -467,20 +546,32 @@ def main():
         src = Path(args.source)
         if not src.exists():
             sys.exit(f"Not found: {src}")
-        god_header, iso_path, dlc = classify_source(src)
+        god_header, iso_path, dlc, loose_dir = classify_source(src)
     else:
         candidates = list(Path(".").glob("*.iso")) + list(Path("game").glob("*.iso"))
+        if not candidates and (Path(args.out) / "default.xex").is_file():
+            # Nothing dragged on, but assets/ is already populated (the "just put
+            # them in assets" route): only the shader translation is left to do.
+            print(f"{args.out}/ already holds the game (default.xex found); nothing to extract.")
+            rc = translate_shaders(Path(args.out))
+            if rc:
+                print(SHADERS_FAILED)
+                sys.exit(3)
+            sys.exit(0)
         if not candidates:
-            sys.exit("No .iso file found. Pass a path explicitly: an .iso, or a "
-                     "folder copied off your console (see docs/DUMPING.md).")
+            sys.exit("Nothing to extract: drag your disc .iso, your console's 435A07D7 "
+                     "folder, or an already-extracted game folder onto extract_assets.bat.")
         if len(candidates) > 1:
             names = ", ".join(str(c) for c in candidates)
             sys.exit(f"Several .iso files found ({names}); pass the right one explicitly.")
-        god_header, iso_path, dlc = None, candidates[0], []
+        god_header, iso_path, dlc, loose_dir = None, candidates[0], [], None
         print(f"Auto-detected ISO: {iso_path}")
 
     out_dir = Path(args.out)
     disc = None
+
+    if loose_dir is not None:
+        copy_loose_dump(loose_dir, out_dir, dlc)
 
     if god_header is not None:
         print(f"Opening console disc install: {god_header}")
@@ -497,7 +588,7 @@ def main():
             for p in structural:
                 print(f"  {p}", file=sys.stderr)
             print("\nRe-copy the install from your console's storage and try "
-                  "again;\ndo not build from a copy that fails these checks.",
+                  "again;\ndo not play from a copy that fails these checks.",
                   file=sys.stderr)
             sys.exit(1)
     elif iso_path is not None:
@@ -505,15 +596,16 @@ def main():
         disc = open(iso_path, "rb")
 
     if disc is not None:
-        out_dir.mkdir(parents=True, exist_ok=True)
         result = find_volume_descriptor(disc)
         if result is None:
             sys.exit(
-                "Could not find XDVDFS volume descriptor.\n"
-                "The ISO may be encrypted, split, or use an unsupported format.\n"
-                "Try extracting with extract-xiso first: https://github.com/XboxDev/extract-xiso"
+                "This is not an Xbox 360 disc image (no XDVDFS volume descriptor): the wrong file,\n"
+                "or an ISO that is encrypted, split, or in an unsupported format.\n"
+                "If it is the right game, try extracting with extract-xiso first:\n"
+                "https://github.com/XboxDev/extract-xiso"
             )
         fs_base, root_sector, root_size = result
+        out_dir.mkdir(parents=True, exist_ok=True)
         print(f"  Root dir: sector {root_sector}, size {root_size} bytes")
         print(f"Extracting to {out_dir}/")
         extract_tree(disc, fs_base, root_sector, root_size, out_dir)
@@ -531,16 +623,21 @@ def main():
             print(f"  {p}", file=sys.stderr)
         print(
             "\nThe dump is most likely truncated, split across files, or corrupt.\n"
-            "Verify it against the checksums in docs/DUMPING.md and re-dump\n"
-            "it; do not build from what was extracted here.",
+            "Verify it against the checksums in\n"
+            "https://github.com/springah/futari_recomp/blob/main/docs/DUMPING.md\n"
+            "and re-dump it; do not play from what was extracted here.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    if disc is None:
-        print("\nDLC installed. (No game install was found at that path — "
-              "assets/ was left alone.)")
-        return
+    if disc is None and loose_dir is None:
+        if (out_dir / "default.xex").is_file():
+            print(f"\nDLC installed. ({out_dir}/ already holds the game; left alone.)")
+            return
+        print("\nDLC installed, but that path holds no game: drag your disc .iso or your "
+              "game folder onto extract_assets.bat next (or pass it to extract_iso.py).",
+              file=sys.stderr)
+        sys.exit(4)  # 4, not 2: argparse exits 2 on a usage error, and the bat tells the two apart
 
     xex = out_dir / "default.xex"
     if not xex.exists():
@@ -555,20 +652,11 @@ def main():
         if xex != target:
             shutil.copy2(xex, target)
         print(f"\ndefault.xex -> {target}")
-        # The release layout: futari.exe and its renut_tools/ beside the assets folder. The Renut renderer draws with
-        # the game's own shaders translated on this machine (make_shaders.py); the public build carries none.
-        exe_dir = out_dir.resolve().parent
-        make_shaders = Path(__file__).resolve().with_name("make_shaders.py")
-        if (exe_dir / "futari.exe").is_file() and (exe_dir / "renut_tools").is_dir() and make_shaders.is_file():
-            print("\nTranslating the game's shaders for the Renut renderer (vulkan_spirv.bin)...")
-            rc = subprocess.call([sys.executable, str(make_shaders), "--exe", str(exe_dir / "futari.exe"),
-                                  "--assets", str(out_dir.resolve())])
-            if rc != 0:
-                print("\nWARNING: the shaders were not translated; the Renut renderer will draw nothing of the game.",
-                      file=sys.stderr)
-                print("         Fix what it reported, then run make_shaders.py again (python make_shaders.py).",
-                      file=sys.stderr)
-        else:
+        rc = translate_shaders(out_dir)
+        if rc:
+            print(SHADERS_FAILED)
+            sys.exit(3)
+        if rc is None:
             print("Extraction complete. Next: generate the recompiled C++ and build --")
             print("  bash scripts/regen.sh      (or build.ps1 on Windows, which runs it for you)")
     else:

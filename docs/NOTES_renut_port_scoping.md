@@ -149,6 +149,11 @@ ExternalProject + dxc-bin Windows binaries, absent from the vendored tree) fed b
   (`futari_renut_capture_path` / `_after_s`, main.cpp) writes a P6 PPM from `renut::gpu::CaptureFrame`.
 - Tools patched for this tree's layout: renut_dump_shaders.py, renut_futari_layout.py (ROOT one level up; src/ not
   app/src/).
+- DISTRIBUTION (11-03 evening, after rc1): the translator is BUILT INTO futari.exe (`--futari_renut_translate`,
+  src/renut_shim/renut_shader_translate_tool.cpp, XenosRecomp with FUTARI_RENUT_IN_EXE; dxcompiler.dll loaded at
+  tool time from renut_tools/). No XenosRecomp.exe ships: Defender's cloud ML quarantined rc1's as
+  Trojan:Win32/Bearfoos.B!ml (a lane-A player-path test found it; it took the repo's release-tree copy too).
+  renut_tools/ = dxcompiler.dll + shader_common.h + the early-alpha pass only. The paragraph below is rc1's state.
 - DISTRIBUTION: this (dev) build compiles the TRANSLATED GAME SHADERS into futari.exe, game data the public zips
   do not carry. Leg 4b (11-03, user's ruling: ship XenosRecomp + the dxc DLL in the zip, the wizard translates at
   extract time) is the release route: `-DFUTARI_RENUT_RELEASE_SHADERS=ON` (out/build/win-amd64-release-shaders)
