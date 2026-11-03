@@ -118,15 +118,17 @@ dump + XenosRecomp + dxc there and write the cache beside the exe. Windows D3D12
   **GPL-3.0**. Linking Renut makes futari_recomp's binaries GPL-3 (source can stay BSD for our files, but the
   distributed work is GPL). GPL already grants the reuse; the consequence is the relicensing of the shipped build.
 - **reNut itself has NO licence file.** Their notice says "its author permits the user's [ChanseyIsTheBest's]
-  ports to reuse it". That permission is personal. Before a line is vendored, ask masterspike52/reNut for the
-  same permission for futari_recomp (or for a licence on the repo). This is the one blocking item.
+  ports to reuse it", which read as personal. **Asked and GRANTED 2026-11-03** (masterspike52/reNut issue #74):
+  "in my readme it says you are free to fork it. i have no problems with anyone doing such for any reason." The
+  README indeed carries a blanket free-to-fork line. No LICENSE file was added, so our NOTICES/README cite the
+  issue and the README line, and credit masterspike52 / reNut as the other ports do. No longer blocking.
 - plume MIT, XenosRecomp MIT (+ their MIT-licensed patches), SDK BSD-3: no issue.
 
 ## 9. Effort estimate (sessions), Windows first
 
 | Leg | What | Est. |
 |---|---|---|
-| 0 | Licence: ask reNut's author; decide GPL-3 for the renderer build (user + email, not a session) | blocking |
+| 0 | Licence: reNut permission GRANTED (issue #74, 11-03); decide GPL-3 for the renderer build | done |
 | 1 | SDK deltas onto v0.9.3.1: frame_latency, video.h, hook.h, presenter bits (~800 lines) | 1 |
 | 2 | Vendor renut_engine + plume reconcile + reblue-XenosRecomp ExternalProject; shim the 5 futari-nx headers; strip deko3d; compile on win-amd64 | 1-2 |
 | 3 | Hooks: `futari_d3d_functions.txt` + `renut_futari_hooks.py` as-is; regen.sh adds the core hook source per DLL; vblank thread; boot surface in main.cpp | 1 |
