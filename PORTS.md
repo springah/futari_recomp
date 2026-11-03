@@ -7,7 +7,7 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 
 | OS | Build | Status |
 |----|-------|--------|
-| Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.4 (SDK v0.9.3.1) |
+| Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.4 (SDK v0.9.3.1) · test build [v1.5.5-rc2](https://github.com/springah/futari_recomp/releases/tag/v1.5.5-rc2) with the opt-in Renut renderer (branch `renderer/renut`; the public zip comes from a tree configured with `-DFUTARI_RENUT_RELEASE_SHADERS=ON`, see `scripts/stage_win_zip.sh`) |
 | Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) — still builds, no longer shipped | ⏹ handed over to [futari-linux](https://github.com/cerroverb/futari-linux) from v1.5.4 ([#6](https://github.com/springah/futari_recomp/issues/6)); last bundle here v1.5.3 |
 | macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.4 (MoltenVK) |
 

@@ -20,6 +20,16 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging details:
 [PORTS.md](PORTS.md).
 
+**Test build:** [v1.5.5-rc2](https://github.com/springah/futari_recomp/releases/tag/v1.5.5-rc2)
+(Windows) adds an opt-in second renderer, Renut (masterspike52's
+[reNut](https://github.com/masterspike52/reNut), as carried by futari-linux;
+GPL-3.0), beside the unchanged default one. The zip's extractor translates
+your own game's shaders for it (the translator is built into `futari.exe`);
+turn it on with `futari_renderer = renut` at the top of `futari.ini`. It is a
+test build: play the same stage on both renderers and report what differs
+([#8](https://github.com/springah/futari_recomp/issues/8)). The rc1 zip is
+superseded (Windows Defender blocked its shader step); use rc2.
+
 **Linux and Steam Deck players: use [futari-linux](https://github.com/cerroverb/futari-linux)** instead.
 From v1.5.4 on this project ships Windows and macOS only. futari-linux is a
 native-renderer port of the same game maintained by cerroverb, and on a Steam
