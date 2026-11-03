@@ -32,6 +32,16 @@ The licence does NOT cover, and this project does not grant any rights to:
     this project; if you fork this repository for anything beyond building the
     port for yourself, replace it with your own mark.
 
+## The Renut renderer is GPL-3.0, not BSD
+
+`src/renut_engine/` is a vendored copy of the Renut native renderer (masterspike52/reNut by
+way of banjo-nx, futari-nx and cerroverb/futari-linux). It is licensed **GPL-3.0-or-later**,
+see `src/renut_engine/LICENSE` and `src/renut_engine/PROVENANCE.md`. The BSD 3-Clause licence
+of this repository does not cover that directory, and a binary built with the renderer
+(the default) is a combined work distributed under the GPL-3.0; the complete corresponding
+source is this repository at the matching release tag. `src/renut_shim/` (this port's
+compatibility headers for it) stays BSD 3-Clause.
+
 ## Third-party components
 
 The ReXGlue SDK (`thirdparty/rexglue-sdk`) is a vendored copy of a separate

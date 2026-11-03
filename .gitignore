@@ -22,3 +22,6 @@ soak_tools/
 # Python bytecode caches from the helper scripts in scripts/.
 __pycache__/
 *.pyc
+
+# Renut leg 2: XenosRecomp builds zstd with ZSTD_LEGACY_SUPPORT=ON (the vendored tree must stay complete)
+!thirdparty/reblue-XenosRecomp/thirdparty/zstd/lib/legacy/

@@ -91,6 +91,35 @@ Non-SDK includes from renut_engine: `me/me_platform_compat.h` (4, Switch thread 
 `futari_renut_shim` replaces them (their own `futari_renut_shim.cpp` already isolates 52 cvars).
 deko3d (Switch) is mentioned in 31 files / 363 lines: strip or `#if`-out.
 
+**Leg 2 result (11-03).** Done in the same session as leg 1 with three parallel agents (shim headers; CMake wiring +
+configure; hook-mechanics analysis). Facts that corrected this document:
+- deko3d needs NO stripping: every mention is behind `PLUME_DEKO3D` / `REX_PLATFORM_SWITCH` (we define the latter 0 in
+  platform.h). Linux-only surface code is behind `!_WIN32`. Nothing in Renut assumes Switch or Linux unguarded.
+- Six shim headers, not five: `futari_enhancements.h` too (`futari_renut_shim.cpp` includes it). Shims live in
+  `src/renut_shim/` on the include path; Renut's sources are untouched except gpu.cmake (3 tagged edits). Six cvars
+  Renut only DECLAREs (`futari_vblank_*`, `futari_late_input`) and the Switch perf-counter stubs are defined in
+  `src/renut_shim/renut_shim_stubs.cpp`.
+- The hooks are safe to link unconditionally: there is no `REX_HOOK_RAW` in Renut; its `FUTARI_RENUT_HOOK` sites test
+  `banjo::renut_gpu::Active()` (latched once from `futari_renderer`) and otherwise call the codegen's `__imp__sub_X`
+  body, the same override pattern main.cpp already uses for the title exit. Verified: the xenos boot log with the
+  renderer linked is identical to the leg-1 log.
+- The shipped `futari_renut_hooks.h` / `futari_renut_core_hooks.cpp` carry futari-nx's 7 "yield to native" EMPTY sites
+  (BeginVertices, Clear, Resolve, CBlocker_Check, AllocateInlineData, KickOff, SetSurfaceClip). They must be regenerated
+  with `tools/renut/renut_futari_hooks.py` against our generated/ before the first Renut boot (leg 3); the script needs a
+  small path patch (expects tools/<script> and app/ layout, and opens futari-nx's futari_native_core.cpp
+  unconditionally). All 70 mapped addresses exist as weak `sub_X` in our generated/default.
+- ImGui: the SDK's 1.92.5 copy is compiled a second time into the exe (no vendored copy). plume builds as-is from
+  futari-linux's tree (Vulkan=1, D3D12=1 on Windows); the daytona-fork reconcile is deferred until something needs it.
+- dxc: XenosRecomp's dxc-bin submodule ships no binaries; `FUTARI_DXC` finds `_tools/XenosRecomp/.../dxc.exe`
+  (1.8.2407) or the Windows SDK's. The REAL shader-cache pipeline (option OFF) also needs dxcompiler in dxc-bin's own
+  folders on Windows, a leg-4 item.
+- Boot surface for main.cpp (leg 3): 7 ReXApp overrides gated on `Active()`, in SDK order: OnPostInitLogging (gpu_plugin
+  default) -> OnPreSetup `renut::gpu::ConfigureRuntime(config)` (detached mode, no SDK graphics) -> OnCreateImmediateDrawer
+  `CreateOverlayDrawer()` -> OnFinalizePaths `StartRenderer(app_context(), imgui_drawer getter)` -> OnPostSetup
+  `futari::renut_vblank::Start()` -> OnWindowPixelSizeChanged `OnWindowResized()` -> OnShutdown `Stop()` +
+  `ShutdownRenderer()`. futari_linux.toml non-defaults: `futari_renderer = "renut"`, `renut_gpu_backend = "vulkan"`.
+  No cvar name collides with main.cpp's or the SDK's. Full detail: `docs/NOTES_renut_hooks_analysis.md`.
+
 ## 5. plume and XenosRecomp
 
 - plume: their `app/thirdparty/plume` vs our springah/plume fork (daytona, d3d12 fixes) differ in 26 paths, of
@@ -139,7 +168,7 @@ dump + XenosRecomp + dxc there and write the cache beside the exe. Windows D3D12
 |---|---|---|
 | 0 | Licence: reNut permission GRANTED (issue #74, 11-03); decide GPL-3 for the renderer build | done |
 | 1 | SDK deltas onto v0.9.3.1: frame_latency, video.h, input late-read, MarkStoreCardsAt (116 lines + 269 new; hook.h / presenter / cvar deltas NOT needed, see §3) | done 11-03 (branch `renderer/renut`) |
-| 2 | Vendor renut_engine + plume reconcile + reblue-XenosRecomp ExternalProject; shim the 5 futari-nx headers; strip deko3d; compile on win-amd64 | 1-2 |
+| 2 | Vendor renut_engine + plume + reblue-XenosRecomp; shim the futari-nx headers; compile + link on win-amd64 (stub shader cache); xenos still boots | done 11-03 (same session as leg 1, 3 agents) |
 | 3 | Hooks: `futari_d3d_functions.txt` + `renut_futari_hooks.py` as-is; regen.sh adds the core hook source per DLL; vblank thread; boot surface in main.cpp | 1 |
 | 4 | Shader cache at extract time (dump -> XenosRecomp -> dxc SPIR-V), `vulkan_spirv.bin` beside the exe; Vulkan-only | 1 |
 | 5 | First light + gates on Windows: lockstep vs xenos (their `compare_frames.py` / lockstep scripts exist), all 9 images, DLC modes, present_vsync parity, F4 overlay through Renut's drawer | 1-2 |

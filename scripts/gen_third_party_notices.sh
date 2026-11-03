@@ -45,6 +45,14 @@ COMPONENTS=(
   "volk|MIT|https://github.com/zeux/volk|thirdparty/volk/LICENSE.md"
   "DES implementation|see text|(vendored in the SDK)|thirdparty/crypto/des/LICENSE"
   "SDL_GameControllerDB (gamecontrollerdb.txt data file)|Zlib|https://github.com/mdqinc/SDL_GameControllerDB|dist/gamecontrollerdb.LICENSE"
+  # The Renut renderer (FUTARI_RENUT_RENDERER, on by default) and what it links. Repo-relative paths.
+  "Renut renderer (src/renut_engine: reNut via banjo-nx, futari-nx, futari-linux)|GPL-3.0-or-later|https://github.com/cerroverb/futari-linux|src/renut_engine/LICENSE"
+  "plume (render interface: Vulkan, D3D12, Metal back ends; from rt64)|MIT|https://github.com/rt64/rt64|thirdparty/plume/LICENSE"
+  "D3D12 Memory Allocator (plume)|MIT|https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator|thirdparty/plume/contrib/D3D12MemoryAllocator/LICENSE.txt"
+  "metal-cpp (plume, macOS)|Apache-2.0|https://developer.apple.com/metal/cpp/|thirdparty/plume/contrib/metal-cpp/LICENSE.txt"
+  "XenosRecomp (hedge-dev; shader_common.h and the shader translation)|MIT|https://github.com/hedge-dev/XenosRecomp|thirdparty/reblue-XenosRecomp/LICENSE.md"
+  "zstd (decoder only, vendored with XenosRecomp)|BSD-3-Clause|https://github.com/facebook/zstd|thirdparty/reblue-XenosRecomp/thirdparty/zstd/LICENSE"
+  "smol-v (SPIR-V decoder, vendored with XenosRecomp)|MIT / Unlicense|https://github.com/aras-p/smol-v|thirdparty/reblue-XenosRecomp/thirdparty/smol-v/license.txt"
 )
 
 # Components linked by the SDK that vendor no licence file. Named rather than
@@ -86,6 +94,16 @@ emit() {
   echo "libmspack as its thirdparty/FFmpeg and thirdparty/libmspack submodules and the"
   echo "build files used to produce the runtime. If you cannot obtain them there, open"
   echo "an issue in that repository and they will be provided."
+  echo
+  echo "GPL-3.0 NOTICE (the Renut renderer)"
+  echo "-----------------------------------"
+  echo "The native renderer in src/renut_engine (reNut by masterspike52, adapted by"
+  echo "banjo-nx, futari-nx and cerroverb/futari-linux) is licensed under the GNU GPL,"
+  echo "version 3 or later. A build that includes it (the default) is a combined work"
+  echo "distributed under the GPL-3.0; its complete corresponding source is the port's"
+  echo "repository above at the release tag matching this build. reNut itself carries"
+  echo "no licence file; its author's permission for this port is recorded at"
+  echo "https://github.com/masterspike52/reNut/issues/74."
   echo
   echo "COMPONENTS"
   echo "----------"

@@ -54,3 +54,11 @@ endif()
 rexglue_setup_target(futari GPU_PLUGINS xenos)
 
 target_compile_definitions(futari PRIVATE FUTARI_VERSION_STRING="${PROJECT_VERSION}")
+
+# Renut's Direct3D-level renderer (src/renut_engine, GPL-3; cmake/futari_renut_gpu.cmake), beside the SDK's xenos
+# plugin, which stays the fallback: futari_renderer = "renut" selects it at boot. After rexglue_setup_target: it links
+# into the futari target and, with FUTARI_RENUT_CORE_HOOKS, into the eight core targets dll_targets.cmake made.
+option(FUTARI_RENUT_RENDERER "Renut's Direct3D-level renderer (futari_renderer = renut)" ON)
+if(FUTARI_RENUT_RENDERER)
+    include(cmake/futari_renut_gpu.cmake)
+endif()

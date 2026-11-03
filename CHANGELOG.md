@@ -24,6 +24,31 @@ yet; the xenos path is unchanged in behaviour.
   to the frame that shows it. No effect unless set.
 - `rex::memory::MarkStoreCardsAt` no-op, for Renut's draw path.
 
+Leg 2 of 6: the renderer itself is in the tree and compiles into the Windows
+build, but nothing selects it yet (its hooks forward to the recompiled code
+unless `futari_renderer = renut`, which leg 3 wires up). The xenos path is the
+default and boots unchanged.
+
+- **Renut vendored** at `src/renut_engine/` (105 files, GPL-3.0, see
+  `src/renut_engine/PROVENANCE.md` and NOTICE.md), with plume (Vulkan + D3D12
+  + Metal, MIT) and hedge-dev's XenosRecomp (MIT) under `thirdparty/`. A build
+  that includes the renderer (`FUTARI_RENUT_RENDERER`, on by default) is a
+  combined work under the GPL-3.0; THIRD-PARTY-NOTICES.txt carries the notice
+  and the seven new licence texts.
+- **`src/renut_shim/`**: futari_recomp's replacements for the six futari-nx
+  headers the renderer includes, plus the six `futari_vblank_*` /
+  `futari_late_input` cvars it expects. All banjo-nx "enhancements" are off;
+  Renut's own paths are complete without them.
+- **Build**: `cmake/futari_renut_gpu.cmake` (an OBJECT library, so the hooks
+  can override the generated weak symbols), the SDK's ImGui compiled a second
+  time for the overlay, 12 host shaders built by dxc (`FUTARI_DXC`, found from
+  XenosRecomp's dxc-bin or the Windows SDK), and
+  `FUTARI_RENUT_STUB_SHADER_CACHE` (on): an empty shader table so the tree
+  links without a game-shader dump. The real dump + translate pipeline is
+  leg 4. `FUTARI_RENUT_CORE_HOOKS` (off) is leg 3's per-core forwarding.
+- Analysis of the hook mechanics, the per-core forwarding and the boot surface
+  main.cpp needs: `docs/NOTES_renut_hooks_analysis.md`.
+
 Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
 for the log line, a save-path change in `main.cpp`, no codegen regen needed.
 
