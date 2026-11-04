@@ -228,6 +228,7 @@ std::filesystem::path ToolFile(const std::filesystem::path& exe_dir, const std::
   }
 #endif
   return beside;
+}
 
 #ifndef FUTARI_SHADER_TRANSLATOR_HASH
 #define FUTARI_SHADER_TRANSLATOR_HASH "unknown"
