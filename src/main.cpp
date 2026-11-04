@@ -794,10 +794,13 @@ class FutariApp : public rex::ReXApp {
                 have_game ? "asked for" : "no default.xex in " + rex::path_to_utf8(defaults.game_data_root));
     auto env = MakeLauncherEnv(defaults.game_data_root);
     env.auto_source = rex::to_path(auto_source);
-    env.on_play = [this, resume = std::move(resume), paths = defaults]() {
-      // Deferred: the runtime is constructed outside the ImGui frame that pressed Play.
-      REXLOG_INFO("Launcher: Play; constructing the runtime (host uptime {} ms)",
-                  rex::chrono::Clock::QueryHostUptimeMillis());
+    const auto opened = std::chrono::steady_clock::now();
+    env.on_play = [this, resume = std::move(resume), paths = defaults, opened]() {
+      // Deferred: the runtime is constructed outside the ImGui frame that pressed Play. The time spent in the
+      // setup screen is logged so a crash log after Play says how long the game waited for its clock (bd3f869).
+      REXLOG_INFO("Launcher: Play; constructing the runtime ({} ms in the setup screen)",
+                  std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - opened)
+                      .count());
       app_context().CallInUIThreadDeferred([resume, paths] {
         REXLOG_INFO("Launcher: resume running");
         resume(paths);
