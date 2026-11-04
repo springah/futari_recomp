@@ -6,12 +6,17 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <system_error>
 #include <thread>
 #include <vector>
 
+#include <fstream>
+#include <sstream>
+
 #include <rex/filesystem.h>
+#include <rex/version.h>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -202,6 +207,78 @@ bool PackageStatus(const std::filesystem::path& exe_dir, int& count, uint64_t& b
   return CheckPackage(package, count, why);
 }
 
+#ifndef FUTARI_SHADER_TRANSLATOR_HASH
+#define FUTARI_SHADER_TRANSLATOR_HASH "unknown"
+#endif
+
+std::string ShaderBuildId() {
+  return std::string("futari ") + FUTARI_VERSION_STRING + "; rexglue " + REXGLUE_VERSION_STRING +
+         "; xenosrecomp " + FUTARI_SHADER_TRANSLATOR_HASH;
+}
+
+namespace {
+constexpr const char* kStampName = "vulkan_spirv.stamp";
+}
+
+StampState CheckPackageStamp(const std::filesystem::path& exe_dir, std::string& detail) {
+  std::error_code ec;
+  const auto package = exe_dir / "vulkan_spirv.bin";
+  if (!std::filesystem::is_regular_file(package, ec)) {
+    detail = "no vulkan_spirv.bin";
+    return StampState::kNoPackage;
+  }
+  const uint64_t bytes = std::filesystem::file_size(package, ec);
+  std::ifstream in(exe_dir / kStampName, std::ios::binary);
+  if (!in) {
+    detail = "vulkan_spirv.bin has no vulkan_spirv.stamp beside it";
+    return StampState::kUnstamped;
+  }
+  std::string line, build;
+  uint64_t stamped_bytes = 0;
+  bool have_bytes = false;
+  while (std::getline(in, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    if (line.rfind("build=", 0) == 0) {
+      build = line.substr(6);
+    } else if (line.rfind("package_bytes=", 0) == 0) {
+      stamped_bytes = std::strtoull(line.c_str() + 14, nullptr, 10);
+      have_bytes = true;
+    }
+  }
+  if (build.empty() || !have_bytes || stamped_bytes != bytes) {
+    detail = "vulkan_spirv.stamp does not describe this vulkan_spirv.bin (" + std::to_string(bytes) + " bytes)";
+    return StampState::kUnstamped;
+  }
+  if (build != ShaderBuildId()) {
+    detail = "vulkan_spirv.bin was made by \"" + build + "\", this is \"" + ShaderBuildId() + "\"";
+    return StampState::kStale;
+  }
+  detail = "vulkan_spirv.bin was made by this build";
+  return StampState::kCurrent;
+}
+
+bool WritePackageStamp(const std::filesystem::path& exe_dir, std::string& error) {
+  std::error_code ec;
+  const uint64_t bytes = std::filesystem::file_size(exe_dir / "vulkan_spirv.bin", ec);
+  if (ec) {
+    error = "no vulkan_spirv.bin to stamp";
+    return false;
+  }
+  std::ofstream out(exe_dir / kStampName, std::ios::binary | std::ios::trunc);
+  out << "# futari_recomp: the build that made vulkan_spirv.bin beside this file. The launcher redoes the shaders\n"
+         "# when this differs from the running build (or the package's size does not match).\n"
+      << "build=" << ShaderBuildId() << "\n"
+      << "package_bytes=" << bytes << "\n";
+  out.close();
+  if (!out) {
+    error = "cannot write " + Utf8(exe_dir / kStampName);
+    return false;
+  }
+  return true;
+}
+
 bool ToolsPresent(const std::filesystem::path& exe_dir, std::string& missing) {
   std::error_code ec;
   for (const char* name : {"dxcompiler.dll", "shader_common.h"}) {
@@ -324,6 +401,10 @@ ShaderResult MakeShaderPackage(const ShaderEnv& env, Progress& progress) {
   if (ec) {
     result.message = "cannot write " + Utf8(package) + ": " + ec.message();
     return result;
+  }
+  std::string stamp_error;
+  if (!WritePackageStamp(env.exe_dir, stamp_error)) {
+    progress.Log("     note: " + stamp_error + " (the next start will think the shaders are stale)");
   }
   keep_work = false;
   result.ok = true;

@@ -39,6 +39,11 @@ class ImGuiDialog {
 
   void Draw();
 
+  // A dialog that answers true is navigated with the keyboard and the gamepad (ImGui's nav flags, SDL3 gamepads
+  // fed to ImGui's ImGuiKey_Gamepad* keys by the drawer) and claims all input while it is up: the guest sees an
+  // untouched pad and no keys (ReXApp's input active callback). The drawer asks every frame.
+  virtual bool WantsGamepadNavigation() const { return false; }
+
  protected:
   ImGuiDialog(ImGuiDrawer* imgui_drawer);
 

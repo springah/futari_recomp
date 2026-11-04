@@ -703,13 +703,18 @@ class FutariApp : public rex::ReXApp {
   }
 
  protected:
+  // The launcher's font, beside (after) the SDK's ProggyTiny, which stays the default for the F4 overlay.
+  void OnConfigureFonts(ImFontAtlas* atlas) override { futari::launcher::LauncherDialog::AddFonts(atlas); }
+
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     (void)drawer;
     instance_ = this;
     rex::ui::RegisterBind(
         "bind_title_exit", "Escape", "Exit the game from the title screen", [this] {
           // Leave Escape to an open overlay (it may be using it itself).
-          if (TitleScreenIdle() && !g_overlay_open.load(std::memory_order_acquire)) {
+          // The F2 screen uses Esc as "close" (LauncherDialog::BackPressed).
+          if (TitleScreenIdle() && !g_overlay_open.load(std::memory_order_acquire) &&
+              !futari::launcher::LauncherDialog::instance()) {
             RequestExit(TitleExitKeyName());
           }
         });
@@ -752,6 +757,18 @@ class FutariApp : public rex::ReXApp {
   // takes over before the SDK loads the executable, and its Play hands the paths back through `resume`.
   std::optional<rex::PathConfig> FinalizePathsThroughLauncher(const rex::PathConfig& defaults,
                                                               std::function<void(rex::PathConfig)> resume) {
+    {
+      // The shader package stamp (shader_pipeline.h): say so at every start when vulkan_spirv.bin is from another
+      // build, since Renut then only shows shader misses. The launcher's setup flow and its Settings page redo it.
+      std::string detail;
+      const auto stamp = futari::launcher::CheckPackageStamp(rex::filesystem::GetExecutableFolder(), detail);
+      if (futari::launcher::StampWantsRedo(stamp)) {
+        REXLOG_WARN("Renut shaders are STALE: {} (F2 -> Settings -> Redo the shaders, or start with --futari_setup)",
+                    detail);
+      } else if (stamp == futari::launcher::StampState::kCurrent) {
+        REXLOG_INFO("Renut shaders: {}", detail);
+      }
+    }
     const std::string auto_source = REXCVAR_GET(futari_setup_source);
     std::error_code ec;
     const bool have_game = std::filesystem::is_regular_file(defaults.game_data_root / "default.xex", ec);

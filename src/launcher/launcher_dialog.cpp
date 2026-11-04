@@ -5,6 +5,7 @@
 #include "launcher/launcher_dialog.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -14,6 +15,7 @@
 #include <system_error>
 
 #include <imgui.h>
+#include "launcher/launcher_font.h"
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/logging.h>
@@ -23,6 +25,22 @@ namespace futari::launcher {
 namespace {
 
 std::string Utf8(const std::filesystem::path& p) { return rex::path_to_utf8(p); }
+
+// Baked once (the SDK's renderer backends upload the atlas once; ImGui 1.92 without RendererHasTextures scales a
+// font only by stretching its bitmap), so a ladder of sizes covers 720p to 2160p crisply.
+constexpr float kFontSizes[] = {15.0f, 18.0f, 22.0f, 27.0f, 33.0f, 40.0f, 50.0f};
+ImFont* g_fonts[std::size(kFontSizes)] = {};
+
+ImFont* PickFont(float display_height) {
+  const float want = display_height / 36.0f;  // 30 px at 1080 lines -> the 27 px font; 20 at 720 -> 18
+  ImFont* best = nullptr;
+  for (size_t i = 0; i < std::size(kFontSizes); ++i) {
+    if (g_fonts[i] && (!best || kFontSizes[i] <= want)) {
+      best = g_fonts[i];
+    }
+  }
+  return best;
+}
 
 struct Resolution {
   const char* label;
@@ -58,7 +76,25 @@ bool IsXContentFile(const std::filesystem::path& p) {
 
 void WrappedText(const std::string& text) { ImGui::TextWrapped("%s", text.c_str()); }
 
+// The key's state as the drawer fed it, whatever ImGui's key ownership says: ImGui's own navigation takes Esc and
+// the gamepad's B for "cancel" and IsKeyPressed then answers false to everyone else.
+bool RawDown(ImGuiKey key) { return ImGui::GetIO().KeysData[key - ImGuiKey_NamedKey_BEGIN].Down; }
+
 }  // namespace
+
+void LauncherDialog::AddFonts(ImFontAtlas* atlas) {
+  static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D,
+                                    0x2022, 0x2022, 0x2026, 0x2026, 0};
+  for (size_t i = 0; i < std::size(kFontSizes); ++i) {
+    ImFontConfig config;
+    config.OversampleH = 2;
+    config.OversampleV = 1;
+    std::snprintf(config.Name, sizeof(config.Name), "Roboto Medium %.0fpx (launcher)", kFontSizes[i]);
+    g_fonts[i] = atlas->AddFontFromMemoryCompressedTTF(futari_launcher_font_compressed_data,
+                                                       int(futari_launcher_font_compressed_size), kFontSizes[i],
+                                                       &config, kRanges);
+  }
+}
 
 bool WriteRendererLine(const std::filesystem::path& ini_path, bool renut, std::string& error) {
   std::string original;
@@ -160,22 +196,62 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
     auto_started_ = true;
     UseSource(env_.auto_source);
   }
+  // The setup flow over a game that is already there (--futari_setup) and a package another build made: redo it
+  // now, the game would otherwise miss shaders on Renut. The Done page does the same after an extraction.
+  if (!stale_redo_started_ && mode_ == Mode::kSetup && env_.auto_source.empty() && page_ == Page::kSetup &&
+      package_stale_ && env_.renut_available && !worker_.joinable()) {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec)) {
+      stale_redo_started_ = true;
+      REXLOG_WARN("Launcher: the Renut shaders were made by a different build; redoing them");
+      after_work_ = Page::kDone;
+      StartShaders();
+    }
+  }
   PollPicker();
   PollWorker();
+  {
+    const bool back_down = RawDown(ImGuiKey_GamepadFaceRight) || RawDown(ImGuiKey_Escape);
+    // Esc inside the path field only leaves the field (ImGui's own handling): the text field is the only item that
+    // stays active across frames here.
+    back_pressed_ = back_down && !back_was_down_ && !ImGui::IsAnyItemActive();
+    back_was_down_ = back_down;
+  }
+  if (after_release_) {
+    bool held = false;
+    for (ImGuiKey key : {ImGuiKey_GamepadFaceDown, ImGuiKey_GamepadFaceRight, ImGuiKey_Enter, ImGuiKey_KeypadEnter,
+                         ImGuiKey_Space, ImGuiKey_Escape}) {
+      held = held || RawDown(key);
+    }
+    if (!held) {
+      auto action = std::move(after_release_);
+      after_release_ = nullptr;
+      action();
+      return;  // the action may have closed the dialog
+    }
+  }
 
-  const float scale = io.DisplaySize.y >= 1000.0f ? 2.0f : 1.5f;
-  const ImVec2 size(std::min(io.DisplaySize.x - 40.0f, 500.0f * scale),
-                    std::min(io.DisplaySize.y - 40.0f, 300.0f * scale));
+  ImFont* font = PickFont(io.DisplaySize.y);
+  const float font_px = font ? font->LegacySize : 20.0f;
+  if (font) {
+    ImGui::PushFont(font, font->LegacySize);
+  }
+  const ImVec2 size(std::min(io.DisplaySize.x - 40.0f, 46.0f * font_px), std::min(io.DisplaySize.y - 40.0f, 27.0f * font_px));
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always,
                           ImVec2(0.5f, 0.5f));
   ImGui::SetNextWindowSize(size, ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(env_.in_game ? 0.92f : 1.0f);
+  if (focus_pending_) {
+    ImGui::SetNextWindowFocus();  // over the game, F2 must take the keyboard and the pad at once
+  }
   const std::string title = "Mushihimesama Futari (recompiled) v" + env_.version + "##futari_launcher";
   constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove;
   bool open = true;
   if (ImGui::Begin(title.c_str(), env_.in_game ? &open : nullptr, kFlags)) {
-    ImGui::SetWindowFontScale(scale);
+    if (!font) {
+      ImGui::SetWindowFontScale(io.DisplaySize.y >= 1000.0f ? 2.0f : 1.5f);  // no launcher font: ProggyTiny, as before
+    }
     switch (page_) {
       case Page::kSetup:
         DrawSetup();
@@ -192,8 +268,39 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
     }
   }
   ImGui::End();
+  if (font) {
+    ImGui::PopFont();
+  }
   if (!open) {
     Close();
+  }
+}
+
+void LauncherDialog::GoTo(Page page) {
+  if (page == Page::kSettings && page_ != Page::kSettings && page_ != Page::kWorking) {
+    settings_return_ = page_;
+  }
+  page_ = page;
+  focus_pending_ = true;
+}
+
+void LauncherDialog::FocusHere() {
+  if (focus_pending_) {
+    focus_pending_ = false;
+    ImGui::SetKeyboardFocusHere();
+  }
+}
+
+bool LauncherDialog::BackPressed() const {
+  if (after_release_) {
+    return false;
+  }
+  return back_pressed_;
+}
+
+void LauncherDialog::AfterRelease(std::function<void()> action) {
+  if (!after_release_) {
+    after_release_ = std::move(action);
   }
 }
 
@@ -209,6 +316,7 @@ void LauncherDialog::DrawSetup() {
   ImGui::Spacing();
   const bool busy = picker_.pending();
   ImGui::BeginDisabled(busy);
+  FocusHere();
   if (ImGui::Button("Disc image (.iso)...")) {
     picker_.Open(env_.native_window, false, "Pick your Mushihimesama Futari disc image", "iso");
   }
@@ -255,7 +363,7 @@ void LauncherDialog::DrawSetup() {
   if (ImGui::Button("Settings")) {
     LoadSettings();
     RefreshStatus();
-    page_ = Page::kSettings;
+    GoTo(Page::kSettings);
   }
 }
 
@@ -280,7 +388,8 @@ void LauncherDialog::DrawWorking() {
     const float t = float(ImGui::GetTime());
     ImGui::ProgressBar(-1.0f * t, ImVec2(-1, 0), "working...");
   }
-  if (ImGui::Button("Cancel")) {
+  FocusHere();
+  if (ImGui::Button("Cancel") || BackPressed()) {
     if (progress_) {
       progress_->cancel.store(true);
     }
@@ -325,21 +434,24 @@ void LauncherDialog::DrawDone() {
   ImGui::Separator();
   std::error_code ec;
   const bool have_game = std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec);
-  if (have_game && !env_.in_game && env_.on_play) {
+  const bool can_play = have_game && !env_.in_game && env_.on_play;
+  if (can_play) {
+    FocusHere();
     if (ImGui::Button("Play")) {
-      FinishPlay();
-      return;
+      AfterRelease([this] { FinishPlay(); });
     }
     ImGui::SameLine();
+  } else {
+    FocusHere();
   }
-  if (ImGui::Button(have_game ? "Settings" : "Back")) {
+  if (ImGui::Button(have_game ? "Settings" : "Back") || (!have_game && BackPressed())) {
     if (have_game) {
       LoadSettings();
       RefreshStatus();
-      page_ = Page::kSettings;
+      GoTo(Page::kSettings);
     } else {
       status_.clear();
-      page_ = Page::kSetup;
+      GoTo(Page::kSetup);
     }
   }
   ImGui::SameLine();
@@ -356,6 +468,7 @@ void LauncherDialog::DrawSettings() {
   if (env_.renut_available) {
     ImGui::TextUnformatted("Renderer");
     ImGui::SameLine();
+    FocusHere();
     if (ImGui::RadioButton("Default", !renderer_renut_)) {
       renderer_renut_ = false;
     }
@@ -365,16 +478,23 @@ void LauncherDialog::DrawSettings() {
     }
     ImGui::SameLine();
     ImGui::TextDisabled("applies at the next start");
-    ImGui::TextUnformatted(package_status_.c_str());
+    if (package_stale_) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.45f, 1.0f));
+      ImGui::TextUnformatted(package_status_.c_str());
+      ImGui::PopStyleColor();
+    } else {
+      ImGui::TextUnformatted(package_status_.c_str());
+    }
     ImGui::SameLine();
     ImGui::BeginDisabled(!have_game || worker_.joinable());
-    if (ImGui::Button(package_ok_ ? "Redo the shaders" : "Prepare the shaders")) {
+    if (ImGui::Button(package_ok_ || package_stale_ ? "Redo the shaders" : "Prepare the shaders")) {
       after_work_ = Page::kSettings;
       StartShaders();
     }
     ImGui::EndDisabled();
     ImGui::Spacing();
   }
+  FocusHere();  // no-op when the renderer row took the focus
   ImGui::Checkbox("Fullscreen (F11 toggles it in the game)", &fullscreen_);
   ImGui::Checkbox("VSync", &vsync_);
   ImGui::TextUnformatted("Window size");
@@ -401,6 +521,8 @@ void LauncherDialog::DrawSettings() {
       ImGui::BulletText("%s", n.c_str());
     }
   }
+  ImGui::Spacing();
+  DrawUpdateCheck();
   if (!settings_note_.empty()) {
     ImGui::Spacing();
     WrappedText(settings_note_);
@@ -410,26 +532,25 @@ void LauncherDialog::DrawSettings() {
   if (ImGui::Button(env_.in_game ? "Save and close" : "Save")) {
     SaveSettings();
     if (env_.in_game) {
-      Close();
-      return;
+      AfterRelease([this] { Close(); });
     }
   }
   ImGui::SameLine();
   if (env_.in_game) {
-    if (ImGui::Button("Close")) {
-      Close();
-      return;
+    if (ImGui::Button("Close") || BackPressed()) {
+      AfterRelease([this] { Close(); });
     }
   } else {
     if (have_game && env_.on_play) {
       if (ImGui::Button("Play")) {
-        FinishPlay();
-        return;
+        AfterRelease([this] { FinishPlay(); });
       }
       ImGui::SameLine();
     }
     if (ImGui::Button("Setup")) {
-      page_ = Page::kSetup;
+      GoTo(Page::kSetup);
+    } else if (BackPressed()) {
+      GoTo(settings_return_ == Page::kDone && have_game ? Page::kDone : Page::kSetup);
     }
     ImGui::SameLine();
     if (ImGui::Button("Quit")) {
@@ -437,6 +558,49 @@ void LauncherDialog::DrawSettings() {
         env_.on_quit();
       }
     }
+  }
+}
+
+void LauncherDialog::DrawUpdateCheck() {
+  const bool pending = update_future_.valid();
+  if (pending && update_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+    update_result_ = update_future_.get();
+    update_answered_ = true;
+    REXLOG_INFO("Launcher: update check: {}", update_result_.message);
+  }
+  ImGui::BeginDisabled(update_future_.valid());
+  if (ImGui::Button(update_future_.valid() ? "Checking..." : "Check for updates")) {
+    update_answered_ = false;
+    update_future_ = CheckForUpdates(env_.version);  // the only network request the port makes, and only here
+  }
+  ImGui::EndDisabled();
+  if (update_answered_) {
+    ImGui::SameLine();
+    switch (update_result_.status) {
+      case UpdateResult::Status::kNewer:
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 1.0f, 0.6f, 1.0f));
+        ImGui::TextUnformatted(update_result_.message.c_str());
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        if (ImGui::Button("Open the release page")) {
+          if (!OpenInBrowser(update_result_.release_url)) {
+            update_result_.message = "Could not open a browser: " + update_result_.release_url;
+            update_result_.status = UpdateResult::Status::kError;
+          }
+        }
+        break;
+      case UpdateResult::Status::kUpToDate:
+        ImGui::TextUnformatted(update_result_.message.c_str());
+        break;
+      case UpdateResult::Status::kError:
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.45f, 1.0f));
+        WrappedText(update_result_.message);
+        ImGui::PopStyleColor();
+        break;
+    }
+  } else if (!update_future_.valid()) {
+    ImGui::SameLine();
+    ImGui::TextDisabled("asks github.com for the latest release; nothing else is sent");
   }
 }
 
@@ -469,9 +633,11 @@ void LauncherDialog::StartExtraction(const std::filesystem::path& source) {
   log_.clear();
   fraction_ = -1.0f;
   work_title_ = "Extracting from " + Utf8(source);
-  page_ = Page::kWorking;
+  GoTo(Page::kWorking);
   REXLOG_INFO("Launcher: extracting {} into {}", Utf8(source), Utf8(env_.assets_dir));
-  const bool shaders = make_shaders_ && env_.renut_available;
+  // A package from another build is redone even with the box unticked: it would only cause shader misses.
+  const bool shaders = (make_shaders_ || package_stale_) && env_.renut_available;
+  stale_redo_started_ = stale_redo_started_ || shaders;
   Progress* progress = progress_.get();
   worker_ = std::thread([this, source, shaders, progress] {
     extract_result_ = ExtractGame(source, env_.assets_dir, env_.dlc_dir, *progress);
@@ -497,7 +663,7 @@ void LauncherDialog::StartShaders() {
   log_.clear();
   fraction_ = -1.0f;
   work_title_ = "Preparing the Renut renderer's shaders";
-  page_ = Page::kWorking;
+  GoTo(Page::kWorking);
   Progress* progress = progress_.get();
   worker_ = std::thread([this, progress] {
     shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir}, *progress);
@@ -527,7 +693,7 @@ void LauncherDialog::PollWorker() {
   if (after_work_ == Page::kSettings) {
     settings_note_ = shader_result_.ok ? shader_result_.message : "Shaders: " + shader_result_.message;
   }
-  page_ = after_work_;
+  GoTo(after_work_);
   if (!env_.auto_source.empty() && ran_extract_ && extract_result_.status == ExtractResult::Status::kOk) {
     FinishPlay();
   }
@@ -570,9 +736,17 @@ void LauncherDialog::RefreshStatus() {
   int count = 0;
   uint64_t bytes = 0;
   package_ok_ = PackageStatus(env_.exe_dir, count, bytes);
-  package_status_ = package_ok_ ? "Renut shaders: ready (" + std::to_string(count) + " shaders, " +
-                                      std::to_string(bytes / 1024) + " KB)"
-                                : "Renut shaders: not prepared yet (Renut would draw nothing)";
+  std::string stamp_detail;
+  const StampState stamp = CheckPackageStamp(env_.exe_dir, stamp_detail);
+  package_stale_ = StampWantsRedo(stamp);
+  if (package_stale_) {
+    package_ok_ = false;
+    package_status_ = "Shaders were made by a different build, press Redo the shaders";
+  } else {
+    package_status_ = package_ok_ ? "Renut shaders: ready (" + std::to_string(count) + " shaders, " +
+                                        std::to_string(bytes / 1024) + " KB)"
+                                  : "Renut shaders: not prepared yet (Renut would draw nothing)";
+  }
   dlc_names_.clear();
   std::error_code ec;
   for (const auto& entry : std::filesystem::directory_iterator(env_.dlc_dir, ec)) {

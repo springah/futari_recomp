@@ -102,3 +102,7 @@ BSD-3-Clause and MIT/Unlicense for their bundled parts). The Windows bundle also
 ships Microsoft's DirectX Shader Compiler as `renut_tools/dxcompiler.dll`
 (University of Illinois/NCSA Open Source License); its binaries are not in this
 repository. Every one of those texts is reproduced in `THIRD-PARTY-NOTICES.txt`.
+
+The launcher's font, embedded in the executable as `src/launcher/launcher_font.h`, is a Latin subset of
+**Roboto Medium** (Copyright 2011 Google Inc.), licensed **Apache-2.0** (`dist/Roboto.LICENSE`, reproduced in
+`THIRD-PARTY-NOTICES.txt`); `scripts/make_launcher_font.sh` regenerates it from Dear ImGui's copy of the font.

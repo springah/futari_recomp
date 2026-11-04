@@ -21,9 +21,12 @@
 
 #include <rex/ui/imgui_dialog.h>
 
+struct ImFontAtlas;
+
 #include "launcher/file_picker.h"
 #include "launcher/game_source.h"
 #include "launcher/shader_pipeline.h"
+#include "launcher/update_check.h"
 
 namespace futari::launcher {
 
@@ -52,6 +55,15 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
 
   static LauncherDialog* instance() { return instance_; }
 
+  // The launcher's own font (Roboto Medium, Latin, launcher_font.h) baked at a few pixel sizes into the drawer's
+  // atlas, after the SDK's default ProggyTiny, which the F4 overlay and every other dialog keep using. Called from
+  // ReXApp::OnConfigureFonts; the dialog picks the largest size not above (window height / 36) every frame.
+  static void AddFonts(ImFontAtlas* atlas);
+
+  // Keyboard and gamepad navigation, and the dialog owns the input while it is up (the game sees an untouched pad
+  // over F2): the SDK's ImGuiDrawer feeds SDL3's gamepads to ImGui for dialogs that ask.
+  bool WantsGamepadNavigation() const override { return true; }
+
  protected:
   void OnDraw(ImGuiIO& io) override;
   void OnClose() override;
@@ -64,6 +76,7 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   void DrawDone();
   void DrawSettings();
   void DrawFooterNote();
+  void DrawUpdateCheck();
 
   void UseSource(const std::filesystem::path& source);
   void StartExtraction(const std::filesystem::path& source);
@@ -71,6 +84,12 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   void PollWorker();
   void PollPicker();
   void FinishPlay();
+  void GoTo(Page page);
+  void FocusHere();         // the page's default item: call just before it
+  bool BackPressed() const;  // B / Circle, or Esc while no text field is being edited
+  // Runs `action` once A / B / Enter / Space / Esc are all released, so the press that closes the dialog or starts
+  // the game never reaches the game.
+  void AfterRelease(std::function<void()> action);
 
   void LoadSettings();
   void SaveSettings();
@@ -82,6 +101,11 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   Page after_work_ = Page::kDone;
   bool opened_ = false;
   bool auto_started_ = false;
+  bool focus_pending_ = true;    // the page changed: focus its default item and the window
+  Page settings_return_ = Page::kSetup;  // where B goes from Settings outside the game
+  std::function<void()> after_release_;
+  bool back_pressed_ = false;   // B or Esc went down this frame
+  bool back_was_down_ = false;
 
   // Setup page state.
   char path_buffer_[1024] = {};
@@ -109,7 +133,14 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   std::vector<std::string> dlc_names_;
   std::string package_status_;
   bool package_ok_ = false;
+  bool package_stale_ = false;  // exists but made by another build (or by hand): StampWantsRedo
+  bool stale_redo_started_ = false;
   std::string settings_note_;
+
+  // "Check for updates" (Settings page): pressed -> the future; answered -> the result line.
+  std::future<UpdateResult> update_future_;
+  UpdateResult update_result_;
+  bool update_answered_ = false;
 
   static inline LauncherDialog* instance_ = nullptr;
 };
