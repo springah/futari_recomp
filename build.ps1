@@ -278,6 +278,20 @@ for ($i = 0; $i -lt 4 -and $gitRoot -and -not $bash; $i++) {
 if (-not $bash) { Fail "Git's bash.exe was not found above $git. Install Git for Windows (winget id Git.Git)." }
 Note "bash: $bash"
 
+# The shader translator built into futari.exe for the Renut renderer (XenosRecomp, an ExternalProject) links the
+# DirectX Shader Compiler from XenosRecomp's dxc-bin, whose Windows binaries are not in this repository (they are
+# git-ignored), and its dxc.exe compiles Renut's host shaders to SPIR-V (the Windows SDK's dxc.exe cannot). Without
+# them the build stops near its end, so check before starting it.
+$dxcBin = Join-Path $Root 'thirdparty\reblue-XenosRecomp\thirdparty\dxc-bin'
+$dxcMissing = @(@('bin\x64\dxc.exe', 'bin\x64\dxcompiler.dll', 'lib\x64\dxcompiler.lib') |
+               Where-Object { -not (Test-Path (Join-Path $dxcBin $_)) })
+if ($dxcMissing.Count -gt 0) {
+    Fail ("The DirectX Shader Compiler binaries are missing under $dxcBin ($($dxcMissing -join ', ')). " +
+          'Copy bin\x64 (dxc.exe, dxcompiler.dll, dxil.dll) and lib\x64 (dxcompiler.lib) from hedge-dev''s dxc-bin ' +
+          '(https://github.com/hedge-dev/dxc-bin, commit 737ac9f) into that folder, then re-run.')
+}
+Note "DXC: $dxcBin"
+
 # ----------------------------------------------------------- 3. dev shell ---
 
 Step 'Entering the Visual Studio x64 developer environment'
