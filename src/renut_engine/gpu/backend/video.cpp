@@ -49,6 +49,8 @@
 #include "host_shaders/rectangle_list_gs.spirv.h"
 #include "host_shaders/rectangle_list_hs.spirv.h"  // futari_recomp (leg/rectlist)
 #include "host_shaders/rectangle_list_ds.spirv.h"
+#include "host_shaders/point_sprite_hs.spirv.h"
+#include "host_shaders/point_sprite_ds.spirv.h"
 #include "host_shaders/point_sprite_gs.spirv.h"
 #include "host_shaders/stream_convert_cs.spirv.h"
 #include "host_shaders/target_readback_cs.spirv.h"
@@ -74,6 +76,8 @@
 #include "host_shaders/rectangle_list_gs.dxil.h"
 #include "host_shaders/rectangle_list_hs.dxil.h"  // futari_recomp (leg/rectlist)
 #include "host_shaders/rectangle_list_ds.dxil.h"
+#include "host_shaders/point_sprite_hs.dxil.h"
+#include "host_shaders/point_sprite_ds.dxil.h"
 #include "host_shaders/point_sprite_gs.dxil.h"
 #include "host_shaders/stream_convert_cs.dxil.h"
 #include "host_shaders/target_readback_cs.dxil.h"
@@ -320,9 +324,9 @@ bool BuildDepthResolvePipelines(VideoState &s) {
   return true;
 }
 
-// Optional: without geometry shaders rectangle lists are tessellated where the
-// device can (futari_recomp leg/rectlist: MoltenVK) and stay triangle lists
-// where it cannot; point sprites stay single pixels.
+// Optional: without geometry shaders rectangle lists and point sprites are
+// tessellated where the device can (futari_recomp leg/rectlist: MoltenVK); where
+// it cannot they stay triangle lists and single pixels.
 void BuildRectangleListShader(VideoState &s) {
   const plume::RenderDeviceCapabilities &caps = s.device->getCapabilities();
   if (!caps.geometryShader) {
@@ -336,11 +340,20 @@ void BuildRectangleListShader(VideoState &s) {
         s.rectangle_list_hs.reset();
         s.rectangle_list_ds.reset();
       }
+      s.point_sprite_hs =
+          CreateHostShader(s.device.get(), RENUT_HOST_SHADER(point_sprite_hs), "point_sprite_hs");
+      s.point_sprite_ds =
+          CreateHostShader(s.device.get(), RENUT_HOST_SHADER(point_sprite_ds), "point_sprite_ds");
+      if (!s.point_sprite_hs || !s.point_sprite_ds) {
+        s.point_sprite_hs.reset();
+        s.point_sprite_ds.reset();
+      }
     }
 #endif
-    if (s.rectangle_list_hs) {
-      RGPU_INFO("No geometry shader support; rectangle lists are drawn by tessellation (rectangle_list_hs/ds), "
-                "point sprites as points");
+    if (s.rectangle_list_hs || s.point_sprite_hs) {
+      RGPU_INFO("No geometry shader support; rectangle lists are drawn by {}, point sprites by {}",
+                s.rectangle_list_hs ? "tessellation (rectangle_list_hs/ds)" : "triangle lists",
+                s.point_sprite_hs ? "tessellation (point_sprite_hs/ds)" : "points");
     } else {
       RGPU_WARN("No geometry shader or tessellation support; rectangle lists are drawn as triangle lists and "
                 "point sprites as points");

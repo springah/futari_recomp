@@ -193,6 +193,9 @@ struct VideoState {
   // Expands point-list draws into point sprites (pipeline.cpp); null like
   // rectangle_list_gs, which leaves them single-pixel points.
   std::unique_ptr<plume::RenderShader> point_sprite_gs;
+  // futari_recomp (leg/rectlist): its tessellation form (patches of 1), like rectangle_list_hs/ds.
+  std::unique_ptr<plume::RenderShader> point_sprite_hs;
+  std::unique_ptr<plume::RenderShader> point_sprite_ds;
 
   // Layout of the recompiled guest shaders (see pipeline.h).
   std::unique_ptr<plume::RenderPipelineLayout> draw_layout;

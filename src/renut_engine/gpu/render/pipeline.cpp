@@ -294,8 +294,14 @@ std::unique_ptr<plume::RenderPipeline> Build(const PipelineKey &key, const Pipel
       desc.domainShader = s.rectangle_list_ds.get();
     }
   }
-  if (key.point_sprite)
+  if (key.point_sprite) {
     desc.geometryShader = s.point_sprite_gs.get();
+    // futari_recomp (leg/rectlist): no geometry shader, so the tessellation form (patches of 1).
+    if (!desc.geometryShader) {
+      desc.hullShader = s.point_sprite_hs.get();
+      desc.domainShader = s.point_sprite_ds.get();
+    }
+  }
   desc.primitiveTopology = key.topology;
 
   // PA_SU_SC_MODE_CNTL: cull front 0, cull back 1, front face clockwise 2.
@@ -986,10 +992,15 @@ bool BuildDrawLayout(VideoState &s) {
     layout.addDescriptorSet(constants);
     layout.addDescriptorSet(constants);
     layout.addDescriptorSet(constants);
-    // Geometry too: point_sprite_gs reads SharedConstants.
-    layout.addPushConstant(0, 4, sizeof(DrawPushConstants),
-                           plume::RenderShaderStageFlag::VERTEX | plume::RenderShaderStageFlag::GEOMETRY |
-                               plume::RenderShaderStageFlag::PIXEL);
+    // Geometry too: point_sprite_gs reads SharedConstants. futari_recomp (leg/rectlist): and its tessellation form's
+    // domain shader (point_sprite_ds) where that replaces it, i.e. without geometry shaders.
+    const plume::RenderDeviceCapabilities &caps = s.device->getCapabilities();
+    plume::RenderShaderStageFlags push_stages = plume::RenderShaderStageFlag::VERTEX |
+                                                plume::RenderShaderStageFlag::GEOMETRY |
+                                                plume::RenderShaderStageFlag::PIXEL;
+    if (!caps.geometryShader && caps.tessellationShader)
+      push_stages |= plume::RenderShaderStageFlag::TESS_EVALUATION;
+    layout.addPushConstant(0, 4, sizeof(DrawPushConstants), push_stages);
   } else {
     layout.addRootDescriptor(0, 4, plume::RenderRootDescriptorType::CONSTANT_BUFFER);
     layout.addRootDescriptor(1, 4, plume::RenderRootDescriptorType::CONSTANT_BUFFER);

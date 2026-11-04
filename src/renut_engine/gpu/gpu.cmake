@@ -373,6 +373,8 @@ function(renut_gpu_setup TARGET)
     # futari_recomp (2026-11-04, leg/rectlist): rectangle lists by tessellation where geometry shaders are missing (macOS).
     renut_host_shader(${TARGET} rectangle_list_hs hs_6_0)
     renut_host_shader(${TARGET} rectangle_list_ds ds_6_0)
+    renut_host_shader(${TARGET} point_sprite_hs hs_6_0)
+    renut_host_shader(${TARGET} point_sprite_ds ds_6_0)
     renut_host_shader(${TARGET} stream_convert_cs cs_6_0)
     renut_host_shader(${TARGET} target_readback_cs cs_6_0)
 

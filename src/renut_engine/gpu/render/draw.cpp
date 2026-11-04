@@ -3099,8 +3099,14 @@ PipelineKey MakeKey(const GuestDevice &device, const ShaderRecord *vs, const Sha
     // frame's final image back into the bloom, which grew to white.
     key.mode_control &= ~3u;
   }
-  if (primitive == kPointList && State().point_sprite_gs)
+  if (primitive == kPointList && (State().point_sprite_gs || State().point_sprite_hs))  // futari_recomp: or tessellated
     key.point_sprite = 1;
+  // futari_recomp (leg/rectlist): say when the game first draws point sprites, and in which form.
+  static uint32_t point_logged = 0;
+  if (primitive == kPointList && LogLimited(point_logged, 1))
+    RGPU_INFO("First point-sprite draw: {}", State().point_sprite_gs   ? "geometry shader"
+                                             : State().point_sprite_hs ? "tessellation (point_sprite_hs/ds)"
+                                                                       : "single-pixel points");
   if (per_instance) {
     key.per_instance_streams = 1;
     // Which way the tessellated grid winds depends on how the shader weights
