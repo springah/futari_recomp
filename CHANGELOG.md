@@ -137,6 +137,17 @@ binaries are now distributed under the GPL-3.0 (last bullet).
   tool mode of the exe), so the two-pass package from `extract_assets.bat` is
   not mistaken for a stale one.
 
+- **After a console-install extraction the game starts in a fresh process.**
+  Pressing Play right after the setup screen had read and hash-checked a
+  console install in the same process ended in an access violation a second
+  into the game in about four runs of ten on Windows (the same guest address
+  every time, a null pointer chain), while plain starts, the disc-image route
+  and the extracted-folder route never did, nor did a 30 s idle wait before
+  Play. The cause is not understood; what the data allows is a workaround that
+  removes the condition: on that route Play now starts a new `futari.exe` on
+  the extracted data with the same options and this one exits (the log says
+  "restarting the game in a fresh process"). Ten of ten runs survived with
+  it, against four crashes of ten without. The other routes are unchanged.
 - **Fix: the game's clock starts when the game does.** The guest tick count
   took its host baseline at process start, so the first guest clock query
   absorbed every second spent in the setup screen, scaled to the 50 MHz
@@ -152,10 +163,7 @@ binaries are now distributed under the GPL-3.0 (last bullet).
 Known limits in this release: Renut is Vulkan-only; the setup screen's
 shader step is one translation pass where `extract_assets.bat` runs two around
 an early-alpha rewrite, so a few pixel shaders run slower that way, with the
-same picture; and the setup screen's console-install route crashes about four
-runs in ten with an access violation a second after Play (the loose-folder and
-disc-image routes and plain starts do not), under investigation: use the disc
-image or an extracted folder as the source until it is fixed.
+same picture.
 
 For builders (`docs/NOTES_renut_port_scoping.md`, `docs/NOTES_launcher.md`):
 

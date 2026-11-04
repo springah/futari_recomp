@@ -23,6 +23,7 @@ struct ShaderEnv {
   std::filesystem::path exe;      // this exe
   std::filesystem::path exe_dir;  // where renut_tools/ and the package live
   std::filesystem::path assets;   // the game data root
+  std::filesystem::path user_data;  // --user_data_root for the children (empty: the SDK default)
 };
 
 struct ShaderResult {

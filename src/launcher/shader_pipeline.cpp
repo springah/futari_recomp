@@ -470,6 +470,9 @@ ShaderResult MakeShaderPackage(const ShaderEnv& env, Progress& progress) {
   std::filesystem::create_directories(dump, ec);
   const auto started = std::chrono::steady_clock::now();
   const std::string assets_arg = "--game_data_root=" + Utf8(env.assets);
+  // The children get the parent's save folder too, so a scratch --user_data_root is honoured all the way down
+  // (their logs used to say the default folder even when the parent had another; nothing was written there).
+  const std::string user_arg = env.user_data.empty() ? "" : "--user_data_root=" + Utf8(env.user_data);
   bool keep_work = true;
   struct Cleanup {
     const std::filesystem::path& work;
@@ -486,8 +489,10 @@ ShaderResult MakeShaderPackage(const ShaderEnv& env, Progress& progress) {
   progress.SetFraction(0.1f);
   std::string error;
   // --futari_renderer=default: the dump must not start the Renut renderer the ini may ask for (no package yet).
-  int rc = RunChild(env.exe, {assets_arg, "--futari_renut_dump_shaders=" + Utf8(dump), "--futari_renderer=default"},
-                    180, progress, error);
+  std::vector<std::string> dump_args{assets_arg, "--futari_renut_dump_shaders=" + Utf8(dump),
+                                     "--futari_renderer=default"};
+  if (!user_arg.empty()) dump_args.push_back(user_arg);
+  int rc = RunChild(env.exe, dump_args, 180, progress, error);
   if (rc == -3) {
     result.message = "Cancelled.";
     return result;
@@ -516,13 +521,13 @@ ShaderResult MakeShaderPackage(const ShaderEnv& env, Progress& progress) {
   progress.SetFraction(0.4f);
   const auto package_tmp = work / "vulkan_spirv.bin";
   SetEnv("XENOS_RECOMP_SPIRV_PACKAGE", package_tmp);
-  rc = RunChild(env.exe,
-                {assets_arg, "--futari_renut_translate=" + Utf8(dump),
-                 "--futari_renut_translate_out=" + Utf8(work / "cache.cpp"),
-                 "--futari_renut_translate_common=" + Utf8(ToolFile(env.exe_dir, "shader_common.h")),
-                 "--futari_renut_dxcompiler=" + Utf8(ToolFile(env.exe_dir, kDxcompilerName)),
-                 "--futari_renderer=default"},
-                300, progress, error);
+  std::vector<std::string> translate_args{
+      assets_arg, "--futari_renut_translate=" + Utf8(dump),
+      "--futari_renut_translate_out=" + Utf8(work / "cache.cpp"),
+      "--futari_renut_translate_common=" + Utf8(ToolFile(env.exe_dir, "shader_common.h")),
+      "--futari_renut_dxcompiler=" + Utf8(ToolFile(env.exe_dir, kDxcompilerName)), "--futari_renderer=default"};
+  if (!user_arg.empty()) translate_args.push_back(user_arg);
+  rc = RunChild(env.exe, translate_args, 300, progress, error);
   SetEnv("XENOS_RECOMP_SPIRV_PACKAGE", {});
   if (rc == -3) {
     result.message = "Cancelled.";

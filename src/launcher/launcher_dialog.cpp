@@ -655,7 +655,7 @@ void LauncherDialog::StartExtraction(const std::filesystem::path& source) {
       ran_shaders_ = true;
       progress->Log("");
       progress->Log("Preparing the Renut renderer's shaders (vulkan_spirv.bin)...");
-      shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir}, *progress);
+      shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir, env_.user_data_dir}, *progress);
     }
     worker_done_.store(true);
   });
@@ -676,7 +676,7 @@ void LauncherDialog::StartShaders() {
   GoTo(Page::kWorking);
   Progress* progress = progress_.get();
   worker_ = std::thread([this, progress] {
-    shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir}, *progress);
+    shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir, env_.user_data_dir}, *progress);
     worker_done_.store(true);
   });
 }

@@ -37,6 +37,11 @@
 REXCVAR_DEFINE_BOOL(futari_setup, false, "Futari",
                     "Open the setup screen at start even when the game data is in place")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Dev aid: take the fresh-process route after ANY extraction (the console-install route takes it by itself), to
+// exercise the relaunch on a platform without a console install at hand.
+REXCVAR_DEFINE_BOOL(futari_setup_fresh_process, false, "Futari",
+                    "After the setup screen's extraction, always start the game in a new process (dev aid)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 REXCVAR_DEFINE_STRING(futari_setup_source, "", "Futari",
                       "Setup: extract this disc image or folder at start without asking, then play (empty: off)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
@@ -753,6 +758,10 @@ class FutariApp : public rex::ReXApp {
   futari::launcher::LauncherDialog::Env MakeLauncherEnv(std::filesystem::path assets_dir = {}) {
     futari::launcher::LauncherDialog::Env env;
     env.exe_dir = rex::filesystem::GetExecutableFolder();
+    {
+      const std::string user_data = REXCVAR_GET(user_data_root);
+      env.user_data_dir = std::filesystem::path(std::u8string(user_data.begin(), user_data.end()));
+    }
     env.exe = rex::filesystem::GetExecutablePath();
     env.assets_dir = assets_dir.empty() ? (game_data_root().empty() ? env.exe_dir / "assets" : game_data_root())
                                         : assets_dir;
@@ -806,7 +815,7 @@ class FutariApp : public rex::ReXApp {
       // this one, after the GoD/SVOD reader has hashed and copied the whole disc, ended in an access violation ~1 s
       // into the game in 3-4 of 10 runs on Windows (guest sub_821911D0, a null pointer chain; never on a plain start,
       // the loose folder or the disc image, nor with the drawer kept attached). Cause not understood.
-      if (fresh_process) {
+      if (fresh_process || REXCVAR_GET(futari_setup_fresh_process)) {
         std::string error;
         if (const uint32_t pid =
                 futari::launcher::RelaunchWithoutSetup(rex::filesystem::GetExecutablePath(), error)) {

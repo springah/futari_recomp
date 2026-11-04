@@ -39,6 +39,7 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
     std::filesystem::path exe_dir;
     std::filesystem::path assets_dir;  // the game data root (assets/ beside the exe unless --game_data_root)
     std::filesystem::path dlc_dir;     // dlc/ beside the exe
+    std::filesystem::path user_data_dir;  // --user_data_root as given (empty: the SDK default), for the children
     std::string version;               // "1.5.5"
     void* native_window = nullptr;     // for the file dialogs' parent
     bool renut_available = false;      // the build carries the Renut renderer and its translator
