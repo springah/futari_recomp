@@ -5,6 +5,20 @@
 cmake_minimum_required(VERSION 3.25)
 project(futari VERSION 1.5.5 LANGUAGES CXX)
 
+# macOS: the launcher's file picker is Objective-C++ (src/launcher/file_picker_mac.mm) and plume's Apple glue is too
+# (thirdparty/plume/plume_apple.mm). Enabled here, at the root: a language enabled only inside plume's subdirectory
+# leaves the root's .mm without a compile rule (CMAKE_OBJCXX_COMPILE_OBJECT unset at generate time). The same
+# compiler as C/C++ (the presets' Homebrew LLVM), not whatever clang is first on the PATH.
+if(APPLE)
+    if(NOT CMAKE_OBJC_COMPILER AND CMAKE_C_COMPILER)
+        set(CMAKE_OBJC_COMPILER "${CMAKE_C_COMPILER}")
+    endif()
+    if(NOT CMAKE_OBJCXX_COMPILER)
+        set(CMAKE_OBJCXX_COMPILER "${CMAKE_CXX_COMPILER}")
+    endif()
+    enable_language(C OBJC OBJCXX)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -67,7 +81,8 @@ if(WIN32)
     # The launcher's file dialogs (IFileOpenDialog) and its child processes.
     target_link_libraries(futari PRIVATE ole32 uuid)
 elseif(APPLE)
-    target_link_libraries(futari PRIVATE "-framework Cocoa")
+    # The launcher's NSOpenPanel (src/launcher/file_picker_mac.mm) and its file-type filter (UTType).
+    target_link_libraries(futari PRIVATE "-framework Cocoa" "-framework UniformTypeIdentifiers")
 endif()
 
 # Renut's Direct3D-level renderer (src/renut_engine, GPL-3; cmake/futari_renut_gpu.cmake), beside the SDK's xenos

@@ -1,8 +1,11 @@
 /**
  * @file        file_picker.cpp
- * @brief       Windows: IFileOpenDialog on its own thread. Other platforms without a native file: always kFailed.
+ * @brief       Windows: IFileOpenDialog on its own thread. macOS: Open() is file_picker_mac.mm (NSOpenPanel); the
+ *              state, Poll() and the destructor here serve both. Other platforms without a native file dialog: always
+ *              kFailed.
  */
 #include "launcher/file_picker.h"
+#include "launcher/file_picker_impl.h"
 
 #include <atomic>
 #include <mutex>
@@ -17,15 +20,18 @@
 
 namespace futari::launcher {
 
-struct FilePicker::Impl {
-  std::mutex mutex;
-  PickState state = PickState::kIdle;
-  std::filesystem::path picked;
-  std::string error;
-  std::thread thread;
-};
 
 FilePicker::~FilePicker() {
+#ifdef __APPLE__
+  if (impl_) {
+    std::unique_lock<std::mutex> lock(impl_->mutex);
+    if (impl_->state == PickState::kPending) {
+      // The open panel's completion handler still holds impl_ and runs later on the main thread, which is this
+      // thread: it cannot be waited for here. Leave it the (small) state to write into.
+      return;
+    }
+  }
+#endif
   if (impl_) {
     if (impl_->thread.joinable()) {
       impl_->thread.join();  // the dialog is modal to its own thread; the user closing it ends it

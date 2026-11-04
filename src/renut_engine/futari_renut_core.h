@@ -20,6 +20,11 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#elif defined(__APPLE__)
+// futari_recomp (2026-11-04, leg 6): macOS, as the PC. A dylib's undefined symbols must resolve when it is LINKED
+// (no -undefined dynamic_lookup here), so the core finds the executable's two exports at run time with dlsym, as the
+// PC core does with GetProcAddress. The executable exports them (FUTARI_RENUT_EXPORT, banjo_renut_select.cpp).
+#include <dlfcn.h>
 #else
 using FutariRenutEntryFn = void (*)(PPCContext&, uint8_t*);
 extern "C" __attribute__((visibility("default"))) const FutariRenutEntryFn* FutariRenutEntries(uint32_t* count);
@@ -48,6 +53,11 @@ inline const Table& Get() {
     t.entries = get ? get(&count) : nullptr;
     t.call_with_free =
         reinterpret_cast<CallWithFree>(reinterpret_cast<void*>(GetProcAddress(exe, "FutariRenutCallWithFree")));
+#elif defined(__APPLE__)
+    using GetEntries = const Entry* (*)(uint32_t*);
+    const auto get = reinterpret_cast<GetEntries>(dlsym(RTLD_DEFAULT, "FutariRenutEntries"));
+    t.entries = get ? get(&count) : nullptr;
+    t.call_with_free = reinterpret_cast<CallWithFree>(dlsym(RTLD_DEFAULT, "FutariRenutCallWithFree"));
 #else
     t.entries = FutariRenutEntries(&count);
     t.call_with_free = &FutariRenutCallWithFree;
