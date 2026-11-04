@@ -53,7 +53,9 @@ That's the whole route: it verifies your copy against the container's own
 integrity hashes (so a bad copy is caught immediately, with the file named),
 extracts the game into `assets/`, and installs any DLC packages it finds into
 `dlc/`. Nothing needs converting first, and a corrupt or incomplete copy cannot
-slip through to the build.
+slip through to the build. In a release zip the same step ends by translating
+the game's shaders for the Renut renderer into `vulkan_spirv.bin` beside
+`futari.exe` (see `RUN.txt`); the default renderer does not need that file.
 
 ## Route B — dumping the disc directly
 
@@ -64,6 +66,16 @@ dump the disc to an ISO, then drag the `.iso` onto `extract_assets.bat` (or run
 `python scripts/extract_iso.py game.iso --out assets/`). If you don't, Route A is
 far less trouble — a disc install reads the same data off the disc using the
 console's own drive.
+
+## Route C — an already-extracted game folder
+
+If you already have the disc contents as plain files (a folder with
+`default.xex` and `media/` at its top, from an earlier extraction or another
+tool), drag that folder onto `extract_assets.bat` (or run
+`python scripts/extract_iso.py "path/to/folder" --out assets/ --dlc-out dlc/`).
+It is copied into `assets/`, and any DLC packages inside it are installed into
+`dlc/`. There are no container hashes to check on this route: compare the
+executables against the table under "Checking you got the right files" below.
 
 ## DLC
 

@@ -10,9 +10,13 @@
  */
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <thread>
 
 #include <rex/dbg.h>
+#include <rex/frame_latency.h>
 #include <rex/input/flags.h>
 #include <rex/input/input_driver.h>
 #include <rex/input/input_system.h>
@@ -26,7 +30,27 @@ REXCVAR_DEFINE_STRING(input_backend, "sdl", "Input", "Input backend: sdl, xinput
     .allowed({"sdl", "xinput"});
 
 REXCVAR_DEFINE_BOOL(guide_button, false, "Input", "Enable guide button pass-through");
+
+// Input lag (futari-nx, 2026-10-16; ported from the futari-linux SDK fork 2026-11-03). The game reads its controllers
+// right after its Swap and then waits for the next vertical blank; reading them later moves the sample closer to the
+// frame that shows it. Too long and the frame misses its vblank (a stutter; the "[latency]" report counts guest
+// vblanks without a Swap).
+REXCVAR_DEFINE_INT32(input_frame_read_delay_us, 0, "Input",
+                     "Input lag: the first controller read after each Swap waits this many microseconds, so a game that "
+                     "reads its controllers right after its Swap reads them later (0 = at once; a port may decide it "
+                     "frame by frame instead)")
+    .range(0, 15000)
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
 namespace rex::input {
+
+namespace {
+std::atomic<uint32_t (*)()> g_frame_read_delay{nullptr};
+}  // namespace
+
+void SetFrameReadDelayFunction(uint32_t (*delay_us)()) {
+  g_frame_read_delay.store(delay_us, std::memory_order_release);
+}
 
 InputSystem::InputSystem(rex::ui::Window* window) : window_(window) {}
 
@@ -76,6 +100,18 @@ X_RESULT InputSystem::GetCapabilities(uint32_t user_index, uint32_t flags,
 
 X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
   SCOPE_profile_cpu_f("hid");
+  {  // the frame's first read: the late input (SetFrameReadDelayFunction), then the probe (rex/frame_latency.h)
+    static std::atomic<uint64_t> frame{UINT64_MAX};
+    // The game's Swaps as the latency probe counts them (VdSwap, or a renderer's own Swap that calls none).
+    const uint64_t swaps = rex::latency::SwapCount();
+    if (frame.exchange(swaps, std::memory_order_relaxed) != swaps) {
+      static const int32_t fixed_us = REXCVAR_GET(input_frame_read_delay_us);
+      uint32_t delay_us = uint32_t(std::max(fixed_us, 0));
+      if (auto* const port = g_frame_read_delay.load(std::memory_order_acquire)) delay_us = port();
+      if (delay_us > 0) std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+    }
+  }
+  rex::latency::NoteInputRead();
 
   bool any_connected = false;
   bool first_result = true;

@@ -15,7 +15,10 @@
       4. builds the ReXGlue CLI (the codegen tool) from the vendored SDK;
       5. extracts your game data into assets\ (and your DLC into dlc\) unless
          assets\ is already populated;
-      6. runs scripts\regen.sh to generate the recompiled C++;
+      6. runs scripts\regen.sh to generate the recompiled C++, then
+         scripts\renut_shader_dump.sh, which dumps the game's own shader
+         containers for the Renut renderer's shader cache (installs the
+         Python xxhash module if it is missing);
       7. configures with the win-amd64-<Config> preset and builds the exe plus
          the 8 module DLLs.
 
@@ -275,6 +278,40 @@ for ($i = 0; $i -lt 4 -and $gitRoot -and -not $bash; $i++) {
 if (-not $bash) { Fail "Git's bash.exe was not found above $git. Install Git for Windows (winget id Git.Git)." }
 Note "bash: $bash"
 
+# The shader translator built into futari.exe for the Renut renderer (XenosRecomp, an ExternalProject) links the
+# DirectX Shader Compiler from XenosRecomp's dxc-bin, whose Windows binaries are not in this repository (they are
+# git-ignored), and its dxc.exe compiles Renut's host shaders to SPIR-V (the Windows SDK's dxc.exe cannot). Without
+# them the build stops near its end, so check before starting it.
+$dxcBin = Join-Path $Root 'thirdparty\reblue-XenosRecomp\thirdparty\dxc-bin'
+$dxcMissing = @(@('bin\x64\dxc.exe', 'bin\x64\dxcompiler.dll', 'lib\x64\dxcompiler.lib') |
+               Where-Object { -not (Test-Path (Join-Path $dxcBin $_)) })
+if ($dxcMissing.Count -gt 0) {
+    # Fetch them from renderbag's dxc-bin (XenosRecomp's submodule) at the commit XenosRecomp pins (a git repository of the binaries), the
+    # same source the other third-party trees come from; -NoInstall only says what to copy by hand.
+    $dxcRepo = 'https://github.com/renderbag/dxc-bin'
+    $dxcCommit = '737ac9f51c3d06f0cd1ee7e14dc065bafd52310d'
+    if ($NoInstall) {
+        Fail ("The DirectX Shader Compiler binaries are missing under $dxcBin ($($dxcMissing -join ', ')) and " +
+              "-NoInstall was given. Copy bin\x64 (dxc.exe, dxcompiler.dll, dxil.dll) and lib\x64 (dxcompiler.lib) " +
+              "from $dxcRepo at commit $dxcCommit into that folder, then re-run.")
+    }
+    Step "Fetching the DirectX Shader Compiler binaries ($dxcRepo @ $dxcCommit)"
+    $dxcTmp = Join-Path $Root 'out\dxc-bin-fetch'
+    if (Test-Path $dxcTmp) { Remove-Item -Recurse -Force $dxcTmp }
+    Invoke-Checked $git @('clone', '--quiet', '--no-checkout', $dxcRepo, $dxcTmp)
+    Invoke-Checked $git @('-C', $dxcTmp, 'checkout', '--quiet', $dxcCommit)
+    foreach ($sub in @('bin\x64', 'lib\x64')) {
+        $dst = Join-Path $dxcBin $sub
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        Copy-Item -Force -Path (Join-Path (Join-Path $dxcTmp $sub) '*') -Destination $dst
+    }
+    Remove-Item -Recurse -Force $dxcTmp
+    $dxcMissing = @(@('bin\x64\dxc.exe', 'bin\x64\dxcompiler.dll', 'lib\x64\dxcompiler.lib') |
+                   Where-Object { -not (Test-Path (Join-Path $dxcBin $_)) })
+    if ($dxcMissing.Count -gt 0) { Fail "dxc-bin was fetched but $($dxcMissing -join ', ') is still missing under $dxcBin." }
+}
+Note "DXC: $dxcBin"
+
 # ----------------------------------------------------------- 3. dev shell ---
 
 Step 'Entering the Visual Studio x64 developer environment'
@@ -338,6 +375,22 @@ if ($GameSource) {
 Step 'Generating the recompiled C++ (scripts\regen.sh)'
 $env:REXGLUE = 'thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe'
 Invoke-Checked $bash @('--noprofile', '--norc', 'scripts/regen.sh')
+
+# ------------------------------------------------ 6b. Renut shader dump ---
+# cmake/futari_renut_gpu.cmake refuses to configure without out\renut_shader_dump\manifest.csv (the shader
+# containers of default.xex and the eight cores, dumped from the game data by the rexglue CLI + Python). The
+# dump is game data and stays in out\ (ignored). Without this step a fresh clone stopped at configure
+# (found 2026-11-04 in a read-only review; never run on Windows yet, see docs\NOTES_v1.5.5_cut.md).
+Step 'Dumping the game shaders for the Renut renderer (scripts\renut_shader_dump.sh)'
+& $pyExe @($pyPre + @('-c', 'import xxhash')) 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Note 'Python module xxhash is missing; installing it for this user.'
+    Invoke-Checked $pyExe ($pyPre + @('-m', 'pip', 'install', '--user', '--quiet', 'xxhash'))
+}
+$env:PYTHON = $pyExe
+$env:PYTHON_ARGS = ($pyPre -join ' ')
+Invoke-Checked $bash @('--noprofile', '--norc', 'scripts/renut_shader_dump.sh')
+Remove-Item Env:PYTHON, Env:PYTHON_ARGS -ErrorAction SilentlyContinue
 
 # ---------------------------------------------------- 7. configure + build ---
 

@@ -12,6 +12,8 @@
 #include <rex/codegen/project_recompiler.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
@@ -210,6 +212,19 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
   ReportBinaryInfo(opts.reporter, entry_display_name,
                    *runtime->kernel_state()->GetExecutableModule()->xex_module());
 
+  // Analysis aid (futari-linux SDK fork, ported 2026-11-03): with REXGLUE_DUMP_IMAGE=<file>, write the loaded
+  // (decrypted, decompressed) entrypoint image, base..base+size, for tools that read the game's data (strings,
+  // tables, shader containers) without an XEX parser of their own.
+  if (const char* dump_path = std::getenv("REXGLUE_DUMP_IMAGE"); dump_path && *dump_path) {
+    const auto* xex = runtime->kernel_state()->GetExecutableModule()->xex_module();
+    const auto* image = runtime->memory()->TranslateVirtual<const uint8_t*>(xex->base_address());
+    if (std::FILE* f = std::fopen(dump_path, "wb")) {
+      std::fwrite(image, 1, xex->image_size(), f);
+      std::fclose(f);
+      REXLOG_INFO("image {:08X}+{:X} written to {}", xex->base_address(), xex->image_size(), dump_path);
+    }
+  }
+
   std::vector<rex::system::object_ref<rex::system::UserModule>> dllModules;
   for (size_t i = 1; i < targeted.size(); ++i) {
     const auto& dllConfig = targeted[i].config;
@@ -238,6 +253,22 @@ Result<void> ProjectRecompiler::Run(const ProjectRecompilerOptions& opts) {
                      userMod->xex_module()->base_address());
     auto dll_display_name = std::filesystem::path(targeted[i].config.filePath).filename().string();
     ReportBinaryInfo(opts.reporter, dll_display_name, *userMod->xex_module());
+    // Same analysis aid for each DLL module: REXGLUE_DUMP_IMAGE=out/default_image.bin also writes
+    // out/default_image.<dll file stem>.bin (palm_normal.xex -> default_image.palm_normal.bin).
+    if (const char* dump_path = std::getenv("REXGLUE_DUMP_IMAGE"); dump_path && *dump_path) {
+      const auto* xex = userMod->xex_module();
+      const auto* image = runtime->memory()->TranslateVirtual<const uint8_t*>(xex->base_address());
+      fs::path p(dump_path);
+      p.replace_filename(p.stem().string() + "." +
+                         std::filesystem::path(dll_display_name).stem().string() +
+                         p.extension().string());
+      if (std::FILE* f = std::fopen(p.string().c_str(), "wb")) {
+        std::fwrite(image, 1, xex->image_size(), f);
+        std::fclose(f);
+        REXLOG_INFO("image {:08X}+{:X} written to {}", xex->base_address(), xex->image_size(),
+                    p.string());
+      }
+    }
     dllModules.push_back(std::move(userMod));
   }
 

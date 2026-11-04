@@ -50,6 +50,11 @@
 #ifndef REX_PLATFORM_WIN32
 #define REX_PLATFORM_WIN32 0
 #endif
+// Never set here (no Switch build in this tree); defined so code shared with the Switch ports
+// (the Renut renderer) can test it with #if without -Wundef noise.
+#ifndef REX_PLATFORM_SWITCH
+#define REX_PLATFORM_SWITCH 0
+#endif
 #ifndef REX_PLATFORM_ANDROID
 #define REX_PLATFORM_ANDROID 0
 #endif

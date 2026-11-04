@@ -45,6 +45,16 @@ COMPONENTS=(
   "volk|MIT|https://github.com/zeux/volk|thirdparty/volk/LICENSE.md"
   "DES implementation|see text|(vendored in the SDK)|thirdparty/crypto/des/LICENSE"
   "SDL_GameControllerDB (gamecontrollerdb.txt data file)|Zlib|https://github.com/mdqinc/SDL_GameControllerDB|dist/gamecontrollerdb.LICENSE"
+  "Roboto Medium (font, launcher screens; Latin subset embedded in futari.exe)|Apache-2.0|https://github.com/googlefonts/roboto|dist/Roboto.LICENSE"
+  # The Renut renderer (FUTARI_RENUT_RENDERER, on by default) and what it links. Repo-relative paths.
+  "Renut renderer (src/renut_engine: reNut by masterspike52; banjo-nx and futari-nx by ChanseyIsTheBest; futari-linux by cerroverb; portions of UnleashedRecomp)|GPL-3.0|https://github.com/cerroverb/futari-linux|src/renut_engine/LICENSE"
+  "plume (render interface: Vulkan, D3D12, Metal back ends; renderbag)|MIT|https://github.com/renderbag/plume|thirdparty/plume/LICENSE"
+  "D3D12 Memory Allocator (plume)|MIT|https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator|thirdparty/plume/contrib/D3D12MemoryAllocator/LICENSE.txt"
+  "metal-cpp (plume, macOS)|Apache-2.0|https://developer.apple.com/metal/cpp/|thirdparty/plume/contrib/metal-cpp/LICENSE.txt"
+  "XenosRecomp (hedge-dev; in reblue's fork as futari-linux carries it; shader_common.h and the translator built into futari.exe)|MIT|https://github.com/hedge-dev/XenosRecomp|thirdparty/reblue-XenosRecomp/LICENSE.md"
+  "zstd (vendored with XenosRecomp; the decoder in the renderer, the encoder in the translator built into futari.exe)|BSD-3-Clause|https://github.com/facebook/zstd|thirdparty/reblue-XenosRecomp/thirdparty/zstd/LICENSE"
+  "smol-v (SPIR-V decoder, vendored with XenosRecomp)|MIT / Unlicense|https://github.com/aras-p/smol-v|thirdparty/reblue-XenosRecomp/thirdparty/smol-v/license.txt"
+  "DirectX Shader Compiler (dxcompiler.dll in renut_tools/, loaded by the translator built into futari.exe at extract time)|NCSA (LLVM Release License)|https://github.com/microsoft/DirectXShaderCompiler|thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/LICENSE.TXT"
 )
 
 # Components linked by the SDK that vendor no licence file. Named rather than
@@ -54,7 +64,6 @@ UNRESOLVED=(
   "picosha2 (MIT upstream)"
   "stb (MIT / public domain upstream)"
 
-  "DirectXShaderCompiler / dxc (Apache-2.0 with LLVM exceptions upstream)"
   "disruptorplus, o1heap-adjacent helpers, disasm, dxbc, pe, ffmpeg-overlay (SDK-local)"
 )
 
@@ -86,6 +95,37 @@ emit() {
   echo "libmspack as its thirdparty/FFmpeg and thirdparty/libmspack submodules and the"
   echo "build files used to produce the runtime. If you cannot obtain them there, open"
   echo "an issue in that repository and they will be provided."
+  echo
+  echo "GPL-3.0 NOTICE AND SOURCE OFFER (the Renut renderer)"
+  echo "----------------------------------------------------"
+  echo "The native renderer in src/renut_engine is licensed under the GNU General"
+  echo "Public License, version 3. Its authors, oldest first:"
+  echo
+  echo "  - reNut, by masterspike52 (https://github.com/masterspike52/reNut): the"
+  echo "    renderer itself. reNut carries no licence file; masterspike52 granted its"
+  echo "    reuse for this port at https://github.com/masterspike52/reNut/issues/74."
+  echo "  - banjo-nx and futari-nx, by ChanseyIsTheBest"
+  echo "    (https://github.com/ChanseyIsTheBest/futari-nx, GPL-3.0): the ReXGlue"
+  echo "    adaptation and this game's Direct3D layout, hooks and vblank thread."
+  echo "  - futari-linux, by cerroverb (https://github.com/cerroverb/futari-linux,"
+  echo "    GPL-3.0): the copy vendored here, with its display-locked vblank and the"
+  echo "    release-shader model; it carries frame-pacing code from hedge-dev's"
+  echo "    UnleashedRecomp (https://github.com/hedge-dev/UnleashedRecomp, GPL-3.0)."
+  echo
+  echo "futari.exe and the eight game-mode libraries link the renderer (the exe"
+  echo "directly, the libraries through its per-module hooks), so a build that"
+  echo "includes it (FUTARI_RENUT_RENDERER, the default) is a combined work"
+  echo "distributed under the GPL-3.0. Its full text is reproduced below, under"
+  echo "\"Renut renderer\". The port's own source files stay available under the BSD"
+  echo "3-Clause licence (LICENSE in the source repository); the GPL governs the"
+  echo "combined binaries. You are entitled to their complete corresponding source:"
+  echo "it is the port's repository above at the release tag matching this build,"
+  echo "with the renderer, plume, XenosRecomp and the SDK all vendored in it. If you"
+  echo "cannot obtain it there, open an issue in that repository and it will be"
+  echo "provided. The game's own program code, recompiled into these binaries, is"
+  echo "Cave's: it is generated on each player's machine from their own copy, is"
+  echo "not part of that source, and is licensed by neither the GPL nor the BSD"
+  echo "licence (see NOTICE.md)."
   echo
   echo "COMPONENTS"
   echo "----------"

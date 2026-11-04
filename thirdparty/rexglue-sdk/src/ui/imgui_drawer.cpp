@@ -9,7 +9,9 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <algorithm>
 #include <cfloat>
+#include <iterator>
 #include <cstring>
 #include <filesystem>
 #include <map>
@@ -23,6 +25,8 @@
 #include <rex/ui/window.h>
 
 #include <imgui.h>
+
+#include <SDL3/SDL.h>
 
 namespace rex {
 namespace ui {
@@ -40,6 +44,7 @@ ImGuiDrawer::ImGuiDrawer(rex::ui::Window* window, size_t z_order, FontSetupCallb
 }
 
 ImGuiDrawer::~ImGuiDrawer() {
+  ReleaseGamepadNavigation();
   SetPresenter(nullptr);
   if (!dialogs_.empty()) {
     window_->RemoveInputListener(this);
@@ -89,6 +94,15 @@ void ImGuiDrawer::RemoveDialog(ImGuiDialog* dialog) {
     }
   }
   dialogs_.erase(it);
+  if (!IsDrawingDialogs()) {
+    bool any_nav = false;
+    for (ImGuiDialog* d : dialogs_) {
+      any_nav = any_nav || d->WantsGamepadNavigation();
+    }
+    if (!any_nav) {
+      ReleaseGamepadNavigation();
+    }
+  }
   DetachIfLastDialogRemoved();
 }
 
@@ -402,6 +416,8 @@ void ImGuiDrawer::Draw(UIDrawContext& ui_draw_context) {
   io.DisplaySize.x = window_->GetActualPhysicalWidth() * physical_to_logical;
   io.DisplaySize.y = window_->GetActualPhysicalHeight() * physical_to_logical;
 
+  UpdateGamepadNavigation();
+
   ImGui::NewFrame();
 
   assert_true(!IsDrawingDialogs());
@@ -420,6 +436,18 @@ void ImGuiDrawer::Draw(UIDrawContext& ui_draw_context) {
   if (reset_mouse_position_after_next_frame_) {
     reset_mouse_position_after_next_frame_ = false;
     io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
+  }
+
+  // A navigation dialog closed during this frame: give the gamepads back now (the deferred work it queued, such as
+  // starting the runtime and its SDL input driver, runs before the next frame).
+  if (gamepad_nav_active_) {
+    bool any_nav = false;
+    for (ImGuiDialog* d : dialogs_) {
+      any_nav = any_nav || d->WantsGamepadNavigation();
+    }
+    if (!any_nav) {
+      ReleaseGamepadNavigation();
+    }
   }
 
   // Detaching is deferred if the last dialog is removed during drawing, perform
@@ -649,6 +677,167 @@ void ImGuiDrawer::SwitchToPhysicalMouseAndUpdateMousePosition(const MouseEvent& 
   }
   reset_mouse_position_after_next_frame_ = false;
   UpdateMousePosition(float(e.x()), float(e.y()));
+}
+
+namespace {
+
+struct NavButton {
+  SDL_GamepadButton button;
+  ImGuiKey key;
+};
+constexpr NavButton kNavButtons[] = {
+    {SDL_GAMEPAD_BUTTON_SOUTH, ImGuiKey_GamepadFaceDown},   // A / Cross: activate
+    {SDL_GAMEPAD_BUTTON_EAST, ImGuiKey_GamepadFaceRight},   // B / Circle: cancel
+    {SDL_GAMEPAD_BUTTON_WEST, ImGuiKey_GamepadFaceLeft},    // X / Square
+    {SDL_GAMEPAD_BUTTON_NORTH, ImGuiKey_GamepadFaceUp},     // Y / Triangle
+    {SDL_GAMEPAD_BUTTON_DPAD_UP, ImGuiKey_GamepadDpadUp},
+    {SDL_GAMEPAD_BUTTON_DPAD_DOWN, ImGuiKey_GamepadDpadDown},
+    {SDL_GAMEPAD_BUTTON_DPAD_LEFT, ImGuiKey_GamepadDpadLeft},
+    {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, ImGuiKey_GamepadDpadRight},
+    {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, ImGuiKey_GamepadL1},
+    {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, ImGuiKey_GamepadR1},
+    {SDL_GAMEPAD_BUTTON_START, ImGuiKey_GamepadStart},
+    {SDL_GAMEPAD_BUTTON_BACK, ImGuiKey_GamepadBack},
+};
+struct NavAxis {
+  SDL_GamepadAxis axis;
+  bool negative;
+  ImGuiKey key;
+};
+constexpr NavAxis kNavAxes[] = {
+    {SDL_GAMEPAD_AXIS_LEFTX, true, ImGuiKey_GamepadLStickLeft},
+    {SDL_GAMEPAD_AXIS_LEFTX, false, ImGuiKey_GamepadLStickRight},
+    {SDL_GAMEPAD_AXIS_LEFTY, true, ImGuiKey_GamepadLStickUp},
+    {SDL_GAMEPAD_AXIS_LEFTY, false, ImGuiKey_GamepadLStickDown},
+    {SDL_GAMEPAD_AXIS_LEFT_TRIGGER, false, ImGuiKey_GamepadL2},
+    {SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, false, ImGuiKey_GamepadR2},
+};
+constexpr size_t kNavKeyCount = std::size(kNavButtons) + std::size(kNavAxes);
+static_assert(kNavKeyCount <= 64, "one bit per key");
+constexpr float kNavDeadZone = 0.25f;
+
+ImGuiKey NavKey(size_t i) {
+  return i < std::size(kNavButtons) ? kNavButtons[i].key : kNavAxes[i - std::size(kNavButtons)].key;
+}
+
+}  // namespace
+
+void ImGuiDrawer::UpdateGamepadNavigation() {
+  bool want = false;
+  for (ImGuiDialog* d : dialogs_) {
+    want = want || d->WantsGamepadNavigation();
+  }
+  if (!want) {
+    ReleaseGamepadNavigation();
+    return;
+  }
+  ImGuiIO& io = GetIO();
+  if (!gamepad_nav_active_) {
+    gamepad_nav_active_ = true;
+    navigation_dialog_up_.store(true, std::memory_order_relaxed);
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+    nav_keys_down_ = 0;
+    nav_keys_armed_ = 0;
+    if (SDL_InitSubSystem(SDL_INIT_GAMEPAD)) {
+      gamepad_subsystem_held_ = true;
+    } else {
+      REXLOG_WARN("ImGui gamepad navigation: SDL_InitSubSystem(SDL_INIT_GAMEPAD) failed: {}", SDL_GetError());
+    }
+  }
+  if (!gamepad_subsystem_held_) {
+    return;
+  }
+  SDL_UpdateGamepads();
+  // Open what is connected and not open yet; drop what went away.
+  int count = 0;
+  SDL_JoystickID* ids = SDL_GetGamepads(&count);
+  for (int i = 0; ids && i < count; ++i) {
+    bool have = false;
+    for (void* pad : nav_gamepads_) {
+      have = have || SDL_GetGamepadID(static_cast<SDL_Gamepad*>(pad)) == ids[i];
+    }
+    if (!have) {
+      if (SDL_Gamepad* pad = SDL_OpenGamepad(ids[i])) {
+        nav_gamepads_.push_back(pad);
+      }
+    }
+  }
+  SDL_free(ids);
+  for (auto it = nav_gamepads_.begin(); it != nav_gamepads_.end();) {
+    if (!SDL_GamepadConnected(static_cast<SDL_Gamepad*>(*it))) {
+      SDL_CloseGamepad(static_cast<SDL_Gamepad*>(*it));
+      it = nav_gamepads_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  // Every pad navigates: OR the buttons, take the largest deflection per direction.
+  float values[kNavKeyCount] = {};
+  for (void* p : nav_gamepads_) {
+    auto* pad = static_cast<SDL_Gamepad*>(p);
+    for (size_t i = 0; i < std::size(kNavButtons); ++i) {
+      if (SDL_GetGamepadButton(pad, kNavButtons[i].button)) {
+        values[i] = 1.0f;
+      }
+    }
+    for (size_t i = 0; i < std::size(kNavAxes); ++i) {
+      float v = float(SDL_GetGamepadAxis(pad, kNavAxes[i].axis)) / 32767.0f;
+      v = kNavAxes[i].negative ? -v : v;
+      float& slot = values[std::size(kNavButtons) + i];
+      slot = std::max(slot, v);
+    }
+  }
+  for (size_t i = 0; i < kNavKeyCount; ++i) {
+    const uint64_t bit = uint64_t(1) << i;
+    float v = values[i] < kNavDeadZone ? 0.0f : std::min(1.0f, (values[i] - kNavDeadZone) / (1.0f - kNavDeadZone));
+    if (v == 0.0f) {
+      nav_keys_armed_ |= bit;
+    } else if (!(nav_keys_armed_ & bit)) {
+      v = 0.0f;  // held since before the dialog wanted navigation (the press that opened it, or a game input)
+    }
+    const bool down = v > 0.0f;
+    if (down || (nav_keys_down_ & bit)) {
+      io.AddKeyAnalogEvent(NavKey(i), down, v);
+    }
+    nav_keys_down_ = down ? (nav_keys_down_ | bit) : (nav_keys_down_ & ~bit);
+  }
+  io.BackendFlags = nav_gamepads_.empty() ? (io.BackendFlags & ~ImGuiBackendFlags_HasGamepad)
+                                          : (io.BackendFlags | ImGuiBackendFlags_HasGamepad);
+  // Nobody polls SDL's queue for these when no SDL input driver exists yet (the launcher's setup screen); the
+  // driver's own event watch has seen them at push time when it does.
+  SDL_FlushEvents(SDL_EVENT_JOYSTICK_AXIS_MOTION, SDL_EVENT_FINGER_DOWN - 1);
+}
+
+void ImGuiDrawer::ReleaseGamepadNavigation() {
+  if (!gamepad_nav_active_) {
+    return;
+  }
+  gamepad_nav_active_ = false;
+  navigation_dialog_up_.store(false, std::memory_order_relaxed);
+  if (internal_state_) {
+    ImGuiContext* previous = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(internal_state_);
+    ImGuiIO& io = ImGui::GetIO();
+    for (size_t i = 0; i < kNavKeyCount; ++i) {
+      if (nav_keys_down_ & (uint64_t(1) << i)) {
+        io.AddKeyAnalogEvent(NavKey(i), false, 0.0f);
+      }
+    }
+    io.ConfigFlags &= ~(ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad);
+    io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+    ImGui::SetCurrentContext(previous);
+  }
+  nav_keys_down_ = 0;
+  nav_keys_armed_ = 0;
+  for (void* pad : nav_gamepads_) {
+    SDL_CloseGamepad(static_cast<SDL_Gamepad*>(pad));
+  }
+  nav_gamepads_.clear();
+  if (gamepad_subsystem_held_) {
+    SDL_FlushEvents(SDL_EVENT_JOYSTICK_AXIS_MOTION, SDL_EVENT_FINGER_DOWN - 1);
+    SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+    gamepad_subsystem_held_ = false;
+  }
 }
 
 void ImGuiDrawer::DetachIfLastDialogRemoved() {

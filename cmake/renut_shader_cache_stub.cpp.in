@@ -1,0 +1,28 @@
+// futari_recomp: Renut's shader cache with NO shaders (FUTARI_RENUT_STUB_SHADER_CACHE, cmake/futari_renut_gpu.cmake).
+// Generated into the build tree from cmake/renut_shader_cache_stub.cpp.in in place of XenosRecomp's shader_cache.cpp;
+// it defines every symbol gpu/shaders/shader_cache.h declares, with zero entries. Each table holds one never-indexed
+// zero element (an empty array is not valid C++; XenosRecomp pads its own tables the same way), the compressed blobs
+// are one byte with a size of 0, and the layout number is the header's so shader_library.cpp's check passes. Every
+// shader the game creates misses this cache and goes to Renut's runtime capture (renut_shader_capture_dir).
+#include "shader_cache.h"
+
+ShaderCacheEntry g_shaderCacheEntries[] = {
+    { 0, 0, 0, 0, 0, 0, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0, 0, 0 }, 0, 0, 0, 0, 0 },
+};
+ShaderVertexInput g_shaderVertexInputs[] = {
+    { 0, 0, 0, 0, 0, 0, 0 },
+};
+ShaderLiteral g_shaderLiterals[] = {
+    { 0, { 0, 0, 0, 0 } },
+};
+
+const uint8_t g_compressedDxilCache[] = { 0 };
+const size_t g_dxilCacheCompressedSize = 0;
+const size_t g_dxilCacheDecompressedSize = 0;
+
+const uint8_t g_compressedSpirvCache[] = { 0 };
+const size_t g_spirvCacheCompressedSize = 0;
+const size_t g_spirvCacheDecompressedSize = 0;
+
+const size_t g_shaderCacheEntryCount = 0;
+extern const uint32_t g_shaderCacheLayout = kShaderCacheLayout;

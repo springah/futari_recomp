@@ -52,4 +52,10 @@ class InputSystem : public system::IInputSystem {
 /// In tool mode, only the NOP driver is added.
 std::unique_ptr<InputSystem> CreateDefaultInputSystem(bool tool_mode);
 
+// Input lag (futari-nx, 2026-10-16): a game that reads its controllers right after its Swap and then waits for its next
+// vertical blank can read them later. The first controller read after each Swap waits this function's answer, in
+// microseconds (input_frame_read_delay_us when none is set), before it samples the controllers. Called on the game's
+// thread; nullptr removes it. Ported from the futari-linux SDK fork for the Renut renderer, 2026-11-03.
+void SetFrameReadDelayFunction(uint32_t (*delay_us)());
+
 }  // namespace rex::input

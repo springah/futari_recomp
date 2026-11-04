@@ -261,6 +261,10 @@ bool ReXApp::ConstructRuntime(const PathConfig& paths) {
         if (!imgui_drawer_->HasDialogs()) {
           return true;
         }
+        // A dialog navigated by the pad (the futari launcher's settings screen) owns all input while it is up.
+        if (imgui_drawer_->HasNavigationDialog()) {
+          return false;
+        }
         const auto& io = imgui_drawer_->GetIO();
         return !io.WantCaptureMouse && !io.WantCaptureKeyboard;
       });

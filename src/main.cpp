@@ -12,6 +12,7 @@
 
 #include "ini_merge.h"
 
+#include <rex/chrono/clock.h>
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/input/input.h>
@@ -26,6 +27,96 @@
 #include <rex/ui/keybinds.h>
 #include <rex/ui/window.h>
 
+// The launcher (src/launcher, 2026-11-03): the first-run setup screen when assets/default.xex is missing (the
+// player's own disc image, console install or extracted folder goes into assets/ and dlc/, the Renut shaders are
+// translated, then the game starts), and the settings screen (F2 in the game). No Python, no batch file.
+#include "launcher/launcher_dialog.h"
+#include "launcher/shader_pipeline.h"
+#include "dev/input_script.h"
+
+REXCVAR_DEFINE_BOOL(futari_setup, false, "Futari",
+                    "Open the setup screen at start even when the game data is in place")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Dev aid: take the fresh-process route after ANY extraction (the console-install route takes it by itself), to
+// exercise the relaunch on a platform without a console install at hand.
+REXCVAR_DEFINE_BOOL(futari_setup_fresh_process, false, "Futari",
+                    "After the setup screen's extraction, always start the game in a new process (dev aid)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_setup_source, "", "Futari",
+                      "Setup: extract this disc image or folder at start without asking, then play (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_BOOL(futari_setup_settings, false, "Futari",
+                    "With futari_setup: open on the settings page instead of the setup page")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Dev aid (src/dev/input_script.h): a scripted SDL3 virtual gamepad, "ms:button[:hold_ms],...", e.g.
+//   --futari_input_script=3000:start,6000:a,8000:a
+REXCVAR_DEFINE_STRING(futari_input_script, "", "Futari",
+                      "Dev: press these virtual-gamepad buttons at these times, 'ms:button[:hold_ms],...' (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+#if FUTARI_RENUT_RENDERER
+// Renut's Direct3D-level renderer (src/renut_engine, GPL-3.0; docs/NOTES_renut_port_scoping.md). Chosen by the
+// init-only cvar futari_renderer = "renut"; every call below is gated on that, and with any other value the SDK's
+// xenos plugin renders exactly as before.
+#include "renut_engine/futari_renut_vblank.h"
+#include "renut_engine/gpu/banjo_renut_capture.h"
+#include "renut_engine/gpu/banjo_renut_select.h"
+#include "renut_engine/gpu/overlay/app_integration.h"
+#include "renut_shim/renut_shader_dump_tool.h"
+#include "renut_shim/renut_shader_translate_tool.h"
+#include <rex/ui/immediate_drawer.h>
+
+// Dev aid (the Renut gates): write the presented frame once, N seconds after the runtime is up, as a binary PPM
+// (P6; convert with any image tool). Empty path = off. Init-only, meant for the command line:
+//   --futari_renut_capture_path=out/frame.ppm --futari_renut_capture_after_s=25
+REXCVAR_DEFINE_STRING(futari_renut_capture_path, "", "Futari",
+                      "Renut: write the presented frame to this .ppm file once (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_INT32(futari_renut_capture_after_s, 20, "Futari",
+                     "Renut: seconds after the runtime is up to take futari_renut_capture_path")
+    .range(1, 600)
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
+// Tool mode for the extractor (scripts/make_shaders.py): dump the game's shader containers from the loaded
+// executables into this folder (the input of XenosRecomp, which makes vulkan_spirv.bin), then exit before the game
+// starts. Works with either renderer. Empty = off.
+//   futari.exe --futari_renut_dump_shaders=<folder>
+REXCVAR_DEFINE_STRING(futari_renut_dump_shaders, "", "Futari",
+                      "Tool: dump the game's shader containers to this folder and exit (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Tool mode for scripts/make_shaders.py, last step: write vulkan_spirv.stamp for the vulkan_spirv.bin in this folder
+// (the build that made it: launcher/shader_pipeline.h) and exit, so a package made by the script reads as current
+// and the launcher does not redo it with its one-pass translation. Empty = off.
+//   futari.exe --futari_renut_stamp=<folder holding vulkan_spirv.bin>
+REXCVAR_DEFINE_STRING(futari_renut_stamp, "", "Futari",
+                      "Tool: write vulkan_spirv.stamp for the vulkan_spirv.bin in this folder and exit (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+#if FUTARI_RENUT_TRANSLATOR
+// Tool mode for the extractor, step 2: translate that dump to SPIR-V (Renut's XenosRecomp built into this exe, the
+// DirectX Shader Compiler loaded from renut_tools/) and exit before anything of the game runs. The package and the
+// early-alpha pass's two runs are asked for through the environment, as for the standalone tool (make_shaders.py sets
+// XENOS_RECOMP_SPIRV_PACKAGE, BANJO_HLSL_DUMP_ONLY, BANJO_HLSL_OVERRIDE). Empty = off.
+//   futari.exe --futari_renut_translate=<dump folder> [--futari_renut_translate_out=<cache .cpp>]
+//              [--futari_renut_translate_common=<shader_common.h>] [--futari_renut_translate_hlsl=<HLSL dump folder>]
+//              [--futari_renut_dxcompiler=<dxcompiler.dll>]
+REXCVAR_DEFINE_STRING(futari_renut_translate, "", "Futari",
+                      "Tool: translate this shader dump folder to SPIR-V and exit (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_translate_out, "", "Futari",
+                      "Tool: the shader-cache .cpp the translation writes (empty: beside the dump)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_translate_common, "", "Futari",
+                      "Tool: shader_common.h for the translation (empty: renut_tools/ beside the exe)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_translate_hlsl, "", "Futari",
+                      "Tool: the HLSL dump folder of the early-alpha pass (empty: none)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_renut_dxcompiler, "", "Futari",
+                      "Tool: dxcompiler.dll for the translation (empty: renut_tools/ beside the exe)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+#endif
+#endif
+
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -36,12 +127,17 @@
 #include <charconv>
 #include <chrono>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -628,16 +724,124 @@ class FutariApp : public rex::ReXApp {
   }
 
  protected:
+  // The launcher's font, beside (after) the SDK's ProggyTiny, which stays the default for the F4 overlay.
+  void OnConfigureFonts(ImFontAtlas* atlas) override { futari::launcher::LauncherDialog::AddFonts(atlas); }
+
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     (void)drawer;
     instance_ = this;
     rex::ui::RegisterBind(
         "bind_title_exit", "Escape", "Exit the game from the title screen", [this] {
           // Leave Escape to an open overlay (it may be using it itself).
-          if (TitleScreenIdle() && !g_overlay_open.load(std::memory_order_acquire)) {
+          // The F2 screen uses Esc as "close" (LauncherDialog::BackPressed).
+          if (TitleScreenIdle() && !g_overlay_open.load(std::memory_order_acquire) &&
+              !futari::launcher::LauncherDialog::instance()) {
             RequestExit(TitleExitKeyName());
           }
         });
+    rex::ui::RegisterBind("bind_launcher", "F2", "Open the settings screen (renderer, display, DLC)", [this] {
+      if (auto* open = futari::launcher::LauncherDialog::instance()) {
+        (void)open;
+        return;  // one at a time; its own Close button ends it
+      }
+      if (auto* drawer = imgui_drawer()) {
+        auto env = MakeLauncherEnv();
+        env.in_game = runtime() != nullptr;
+        new futari::launcher::LauncherDialog(drawer, std::move(env),
+                                             futari::launcher::LauncherDialog::Mode::kSettings);
+      }
+    });
+  }
+
+  // What the launcher needs to know about this install. game_data_root_ is empty before the paths are final
+  // (OnFinalizePaths passes the pending root in explicitly).
+  futari::launcher::LauncherDialog::Env MakeLauncherEnv(std::filesystem::path assets_dir = {}) {
+    futari::launcher::LauncherDialog::Env env;
+    env.exe_dir = rex::filesystem::GetExecutableFolder();
+    {
+      const std::string user_data = REXCVAR_GET(user_data_root);
+      env.user_data_dir = std::filesystem::path(std::u8string(user_data.begin(), user_data.end()));
+    }
+    env.exe = rex::filesystem::GetExecutablePath();
+    env.assets_dir = assets_dir.empty() ? (game_data_root().empty() ? env.exe_dir / "assets" : game_data_root())
+                                        : assets_dir;
+    env.dlc_dir = env.exe_dir / "dlc";
+    env.version = FUTARI_VERSION_STRING;
+    env.native_window = window() ? window()->GetNativeWindowHandle() : nullptr;
+#if FUTARI_RENUT_RENDERER && FUTARI_RENUT_TRANSLATOR
+    env.renut_available = true;
+#else
+    env.renut_available = false;
+#endif
+    env.on_quit = [this] { RequestExit("launcher"); };
+    env.save_display_settings = [] { SaveFutariIni(rex::filesystem::GetExecutableFolder()); };
+    return env;
+  }
+
+  // The first-run route: with no assets/default.xex (or --futari_setup / --futari_setup_source) the setup screen
+  // takes over before the SDK loads the executable, and its Play hands the paths back through `resume`.
+  std::optional<rex::PathConfig> FinalizePathsThroughLauncher(const rex::PathConfig& defaults,
+                                                              std::function<void(rex::PathConfig)> resume) {
+    {
+      // The shader package stamp (shader_pipeline.h): say so at every start when vulkan_spirv.bin is from another
+      // build, since Renut then only shows shader misses. The launcher's setup flow and its Settings page redo it.
+      std::string detail;
+      const auto stamp = futari::launcher::CheckPackageStamp(rex::filesystem::GetExecutableFolder(), detail);
+      if (futari::launcher::StampWantsRedo(stamp)) {
+        REXLOG_WARN("Renut shaders are STALE: {} (F2 -> Settings -> Redo the shaders, or start with --futari_setup)",
+                    detail);
+      } else if (stamp == futari::launcher::StampState::kCurrent) {
+        REXLOG_INFO("Renut shaders: {}", detail);
+      }
+    }
+    const std::string auto_source = REXCVAR_GET(futari_setup_source);
+    std::error_code ec;
+    const bool have_game = std::filesystem::is_regular_file(defaults.game_data_root / "default.xex", ec);
+    if (have_game && !REXCVAR_GET(futari_setup) && auto_source.empty()) {
+      return defaults;
+    }
+    auto* drawer = imgui_drawer();
+    if (!drawer) {
+      REXLOG_WARN("Launcher: no overlay drawer, so no setup screen; the SDK reports the missing game data");
+      return defaults;
+    }
+    REXLOG_INFO("Launcher: setup screen ({})",
+                have_game ? "asked for" : "no default.xex in " + rex::path_to_utf8(defaults.game_data_root));
+    auto env = MakeLauncherEnv(defaults.game_data_root);
+    env.auto_source = rex::to_path(auto_source);
+    const auto opened = std::chrono::steady_clock::now();
+    env.on_play = [this, resume = std::move(resume), paths = defaults, opened](bool fresh_process) {
+      // After an extraction from a console install the game starts in a new process: constructing the runtime in
+      // this one, after the GoD/SVOD reader has hashed and copied the whole disc, ended in an access violation ~1 s
+      // into the game in 3-4 of 10 runs on Windows (guest sub_821911D0, a null pointer chain; never on a plain start,
+      // the loose folder or the disc image, nor with the drawer kept attached). Cause not understood.
+      if (fresh_process || REXCVAR_GET(futari_setup_fresh_process)) {
+        std::string error;
+        if (const uint32_t pid =
+                futari::launcher::RelaunchWithoutSetup(rex::filesystem::GetExecutablePath(), error)) {
+          REXLOG_INFO("Launcher: restarting the game in a fresh process after the console-install extraction "
+                      "(pid {})",
+                      pid);
+          RequestExit("restart after setup");
+          return;
+        }
+        REXLOG_WARN("Launcher: could not restart in a fresh process ({}); starting the game in this one", error);
+      }
+      // Deferred: the runtime is constructed outside the ImGui frame that pressed Play. The time spent in the
+      // setup screen is logged so a crash log after Play says how long the game waited for its clock (bd3f869).
+      REXLOG_INFO("Launcher: Play; constructing the runtime ({} ms in the setup screen)",
+                  std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - opened)
+                      .count());
+      app_context().CallInUIThreadDeferred([resume, paths] {
+        REXLOG_INFO("Launcher: resume running");
+        resume(paths);
+      });
+    };
+    new futari::launcher::LauncherDialog(drawer, std::move(env),
+                                         REXCVAR_GET(futari_setup_settings)
+                                             ? futari::launcher::LauncherDialog::Mode::kSettings
+                                             : futari::launcher::LauncherDialog::Mode::kSetup);
+    return std::nullopt;
   }
 
   void OnConfigurePaths(rex::PathConfig& paths) override {
@@ -672,6 +876,80 @@ class FutariApp : public rex::ReXApp {
     SaveFutariIni(rex::filesystem::GetExecutableFolder());
   }
 
+#if FUTARI_RENUT_RENDERER
+  // Renut's shipped shaders are SPIR-V only (vulkan_spirv.bin beside the exe, made at extract time), so its back end
+  // defaults to Vulkan here rather than its own d3d12 default. --renut_gpu_backend / the ini still win.
+  void OnPostInitLogging() override {
+    if (!rex::cvar::HasNonDefaultValue("renut_gpu_backend")) {
+      rex::cvar::SetFlagByName("renut_gpu_backend", "vulkan");
+    }
+    // The stamp tool mode (make_shaders.py's last step): no window, no runtime, exit with 0 or 1.
+    const std::string stamp_dir = REXCVAR_GET(futari_renut_stamp);
+    if (!stamp_dir.empty()) {
+      const std::filesystem::path dir(std::u8string(stamp_dir.begin(), stamp_dir.end()));
+      std::string error;
+      const bool ok = futari::launcher::WritePackageStamp(dir, error);
+      if (!ok) {
+        REXLOG_ERROR("Shader stamp FAILED: {}", error);
+        std::fprintf(stderr, "Shader stamp FAILED: %s\n", error.c_str());
+      } else {
+        REXLOG_INFO("Shader stamp: wrote vulkan_spirv.stamp in {} ({})", stamp_dir,
+                    futari::launcher::ShaderBuildId());
+      }
+      std::fflush(nullptr);
+      std::_Exit(ok ? 0 : 1);
+    }
+#if FUTARI_RENUT_TRANSLATOR
+    // The translate tool mode: nothing of the game is needed, so it runs here and the process ends with the tool's
+    // exit code (no window, no runtime; the SDK's shutdown has nothing to undo yet).
+    const std::string dump = REXCVAR_GET(futari_renut_translate);
+    if (!dump.empty()) {
+      // Cvar strings are UTF-8 (the SDK converts the wide command line); a path built from a std::string would
+      // read them as the ANSI code page and garble a non-ASCII folder.
+      const auto u8 = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
+      futari::renut_tool::TranslateArgs args;
+      args.dump = u8(dump);
+      args.out = u8(REXCVAR_GET(futari_renut_translate_out));
+      args.common = u8(REXCVAR_GET(futari_renut_translate_common));
+      args.hlsl_dump = u8(REXCVAR_GET(futari_renut_translate_hlsl));
+      args.dxcompiler = u8(REXCVAR_GET(futari_renut_dxcompiler));
+      REXLOG_INFO("Shader translate: {} (XenosRecomp built in)", dump);
+      std::string error;
+      const int rc = futari::renut_tool::Translate(args, error);
+      if (!error.empty()) {
+        REXLOG_ERROR("Shader translate FAILED: {}", error);
+        std::fprintf(stderr, "Shader translate FAILED: %s\n", error.c_str());
+      }
+      REXLOG_INFO("Shader translate: exit {}", rc);
+      futari::renut_tool::EndProcess(rc);
+    }
+#endif
+  }
+
+  // The dump tool mode: the entrypoint is loaded, nothing has run.
+  void OnPostLoadXexImage() override {
+    const std::string dir = REXCVAR_GET(futari_renut_dump_shaders);
+    if (dir.empty()) {
+      return;
+    }
+    futari::renut_tool::DumpResult result;
+    std::string error;
+    const bool ok = futari::renut_tool::DumpShaders(*runtime(), std::filesystem::path(dir), result, error);
+    if (ok) {
+      REXLOG_INFO("Shader dump: {} unique shaders from {} occurrences ({} rejected) written to {}", result.unique,
+                  result.occurrences, result.rejected, dir);
+    } else {
+      REXLOG_ERROR("Shader dump FAILED: {}", error);
+    }
+    for (const auto& note : result.notes) {
+      REXLOG_INFO("Shader dump: {}", note);
+    }
+    renut_dump_exit_code_ = ok ? 0 : 2;
+    RequestExit("shader dump done");
+  }
+  int renut_dump_exit_code_ = -1;
+#endif
+
   void OnPreSetup(rex::RuntimeConfig& config) override {
     // Since the SDK's v0.9 GPU-plugin split an empty gpu_plugin means headless;
     // futari always renders through the Xenos plugin. An explicit --gpu_plugin
@@ -689,6 +967,116 @@ class FutariApp : public rex::ReXApp {
     SetCvarInt("license_mask", 1);
     SetCvarBool("mnk_mode", true);
     SetCvarBool("mnk_mouse_capture", false);
+#if FUTARI_RENUT_RENDERER
+    // Renut: no SDK graphics system and no GPU plugin (the SDK's "detached"
+    // mode); the renderer owns the device, present timing and the overlay.
+    if (banjo::renut_gpu::Active()) {
+      renut::gpu::ConfigureRuntime(config);
+      REXLOG_INFO("Renderer: Renut (futari_renderer = renut); the xenos plugin is not loaded");
+    }
+#endif
+  }
+
+#if FUTARI_RENUT_RENDERER
+  // The SDK's detached-mode boot surface for Renut (the order the SDK calls
+  // these: OnPreSetup, OnCreateImmediateDrawer, OnFinalizePaths, OnPostSetup).
+  std::unique_ptr<rex::ui::ImmediateDrawer> OnCreateImmediateDrawer() override {
+    if (banjo::renut_gpu::Active()) {
+      return renut::gpu::CreateOverlayDrawer();
+    }
+    return rex::ReXApp::OnCreateImmediateDrawer();
+  }
+
+#endif
+
+  // UI thread, the window exists, the game has not started. Renut: create the host device and start presenting
+  // (overlay-only frames until the guest draws). Then the launcher's first-run route, which may hold the paths
+  // back until its setup is done (either renderer draws its screen).
+  std::optional<rex::PathConfig> OnFinalizePaths(
+      const rex::PathConfig& defaults, std::function<void(rex::PathConfig)> resume) override {
+#if FUTARI_RENUT_RENDERER
+    if (banjo::renut_gpu::Active()) {
+      if (!renut::gpu::StartRenderer(app_context(), [this] { return imgui_drawer(); })) {
+        REXLOG_ERROR("Renut: StartRenderer failed; the game will run without a picture");
+      }
+    }
+#endif
+    return FinalizePathsThroughLauncher(defaults, std::move(resume));
+  }
+
+  void OnPostSetup() override {
+#if FUTARI_RENUT_RENDERER
+    if (banjo::renut_gpu::Active()) {
+      futari::renut_vblank::Start();
+      StartRenutCapture();
+    }
+#endif
+    if (const std::string script = REXCVAR_GET(futari_input_script); !script.empty()) {
+      futari::dev::StartInputScript(script);
+    }
+  }
+
+#if FUTARI_RENUT_RENDERER
+
+  // The dev capture (futari_renut_capture_path): one frame, written on its own thread.
+  void StartRenutCapture() {
+    const std::string path = REXCVAR_GET(futari_renut_capture_path);
+    if (path.empty()) {
+      return;
+    }
+    const int after_s = REXCVAR_GET(futari_renut_capture_after_s);
+    renut_capture_thread_ = std::thread([this, path, after_s] {
+      for (int i = 0; i < after_s * 10 && !renut_capture_stop_.load(std::memory_order_acquire); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+      if (renut_capture_stop_.load(std::memory_order_acquire)) {
+        return;
+      }
+      rex::ui::RawImage image;
+      if (!renut::gpu::CaptureFrame(image, 2000)) {
+        REXLOG_ERROR("Renut capture: no frame within 2 s");
+        return;
+      }
+      std::ofstream out(path, std::ios::binary);
+      out << "P6\n" << image.width << ' ' << image.height << "\n255\n";
+      std::vector<char> row(size_t(image.width) * 3);
+      for (uint32_t y = 0; y < image.height; ++y) {
+        const uint8_t* src = image.data.data() + size_t(y) * image.stride;
+        for (uint32_t x = 0; x < image.width; ++x) {
+          row[size_t(x) * 3 + 0] = char(src[size_t(x) * 4 + 0]);
+          row[size_t(x) * 3 + 1] = char(src[size_t(x) * 4 + 1]);
+          row[size_t(x) * 3 + 2] = char(src[size_t(x) * 4 + 2]);
+        }
+        out.write(row.data(), std::streamsize(row.size()));
+      }
+      REXLOG_INFO("Renut capture: {}x{} frame at {} s written to {}", image.width, image.height, after_s, path);
+    });
+  }
+
+  std::thread renut_capture_thread_;
+  std::atomic<bool> renut_capture_stop_{false};
+
+  void OnWindowPixelSizeChanged(uint32_t pixel_width, uint32_t pixel_height) override {
+    rex::ReXApp::OnWindowPixelSizeChanged(pixel_width, pixel_height);
+    if (banjo::renut_gpu::Active()) {
+      renut::gpu::OnWindowResized();
+    }
+  }
+
+#endif
+
+  void OnShutdown() override {
+    futari::dev::StopInputScript();
+#if FUTARI_RENUT_RENDERER
+    if (banjo::renut_gpu::Active()) {
+      renut_capture_stop_.store(true, std::memory_order_release);
+      if (renut_capture_thread_.joinable()) {
+        renut_capture_thread_.join();
+      }
+      futari::renut_vblank::Stop();
+      renut::gpu::ShutdownRenderer();
+    }
+#endif
   }
 
   // Auto-install any DLC packages bundled next to the exe (a "dlc" folder)
