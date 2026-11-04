@@ -66,7 +66,8 @@ DLC (optional)
   and they install automatically on launch. See dlc\README.txt for details.
 
 REQUIREMENTS
-  - Windows 10/11 x64 with a Direct3D 12 GPU
+  - Windows 10/11 x64 with a Direct3D 12 GPU (the default renderer); for
+    Renut, a GPU driver with Vulkan 1.2
   - Microsoft Visual C++ Redistributable (x64):
       https://aka.ms/vs/17/release/vc_redist.x64.exe
 
@@ -118,11 +119,24 @@ STATUS
   Boots to title and full menu; all 8 game modes load and mode-switch. Some
   deeper gameplay paths may still hit rare recompiler edge cases - report any
   crash with its logs\ file.
+  Known limits of this version:
+    - The setup and settings screens have no gamepad navigation yet: use the
+      mouse and keyboard there.
+    - Renut is Vulkan-only (no Direct3D 12 path).
+    - The setup screen translates the shaders in one pass; extract_assets.bat
+      runs two, with an optimisation for a few pixel shaders. The picture is
+      the same either way.
 
 LICENCES
   This build links third-party open-source components (including FFmpeg and
-  libmspack under the LGPL-2.1). Their licences, and the LGPL's written offer of
-  source, are in THIRD-PARTY-NOTICES.txt beside this file.
+  libmspack under the LGPL-2.1). It also links the Renut renderer (reNut by
+  masterspike52, by way of ChanseyIsTheBest's futari-nx and cerroverb's
+  futari-linux), which is under the GPL-3.0, so futari.exe and the game-mode
+  DLLs are distributed under the GPL-3.0. Their licences, the full GPL-3.0
+  text, and the written offers of source are in THIRD-PARTY-NOTICES.txt beside
+  this file; the complete source is the GitHub repository above, at this
+  version's tag. Neither licence covers the game itself, whose recompiled code
+  these files contain: that is why this build is for owners only.
 
 Built with heavy use of AI tooling. Hobby project, no warranty. Cave own all
 rights to Mushihimesama Futari.
