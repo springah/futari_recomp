@@ -417,7 +417,10 @@ namespace plume {
             CLOSEST_HIT = 1U << 6,
             MISS = 1U << 7,
             INTERSECTION = 1U << 8,
-            CALLABLE = 1U << 9
+            CALLABLE = 1U << 9,
+            // futari_recomp (leg/rectlist): tessellation stages (hull, domain), Vulkan back end only (push constant ranges). Not DOMAIN: math.h defines it.
+            TESS_CONTROL = 1U << 10,
+            TESS_EVALUATION = 1U << 11
         };
     };
 

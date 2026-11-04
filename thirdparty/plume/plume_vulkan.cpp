@@ -1563,6 +1563,8 @@ namespace plume {
             dstRange.offset = srcRange.offset;
             dstRange.stageFlags |= (srcRange.stageFlags & RenderShaderStageFlag::VERTEX) ? VK_SHADER_STAGE_VERTEX_BIT : 0;
             dstRange.stageFlags |= (srcRange.stageFlags & RenderShaderStageFlag::GEOMETRY) ? VK_SHADER_STAGE_GEOMETRY_BIT : 0;
+            dstRange.stageFlags |= (srcRange.stageFlags & RenderShaderStageFlag::TESS_CONTROL) ? VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT : 0;  // futari_recomp
+            dstRange.stageFlags |= (srcRange.stageFlags & RenderShaderStageFlag::TESS_EVALUATION) ? VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT : 0;
             dstRange.stageFlags |= (srcRange.stageFlags & RenderShaderStageFlag::PIXEL) ? VK_SHADER_STAGE_FRAGMENT_BIT : 0;
             dstRange.stageFlags |= (srcRange.stageFlags & RenderShaderStageFlag::COMPUTE) ? VK_SHADER_STAGE_COMPUTE_BIT : 0;
             dstRange.stageFlags |= (srcRange.stageFlags & RenderShaderStageFlag::RAYGEN) ? VK_SHADER_STAGE_RAYGEN_BIT_KHR : 0;
