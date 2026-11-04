@@ -159,6 +159,13 @@ endif()
 # futari_recomp (2026-11-03): gpu.cmake keys on futari-linux's name for this switch (FUTARI_LINUX_RELEASE_SHADERS); ours is
 # FUTARI_RENUT_RELEASE_SHADERS, so hand it over as a normal variable (it shadows any cache entry, CMP0126 NEW).
 set(FUTARI_LINUX_RELEASE_SHADERS ${FUTARI_RENUT_RELEASE_SHADERS})
+# macOS (leg 6): plume sizes its swapchain from the NSWindow in backing pixels when PLUME_APPLE_RETINA_ENABLED (2x on a
+# Retina display), but the SDK window's SDL Metal layer is 1x (no SDL_WINDOW_HIGH_PIXEL_DENSITY unless
+# sdl_high_pixel_density), so MoltenVK answered VK_SUBOPTIMAL_KHR to every present and plume's Apple path, which counts
+# SUBOPTIMAL as a failure, rebuilt the swapchain every frame (2,700 rebuilds in 45 s). Points, as the layer is.
+if(APPLE)
+    set(PLUME_APPLE_RETINA_ENABLED OFF CACHE BOOL "plume: size Apple swapchains in backing pixels (futari: OFF, the SDK layer is 1x)" FORCE)
+endif()
 include("${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/gpu.cmake")
 
 add_library(futari_renut_gpu OBJECT
