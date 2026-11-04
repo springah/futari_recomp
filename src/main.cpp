@@ -32,6 +32,7 @@
 // translated, then the game starts), and the settings screen (F2 in the game). No Python, no batch file.
 #include "launcher/launcher_dialog.h"
 #include "launcher/shader_pipeline.h"
+#include "dev/input_script.h"
 
 REXCVAR_DEFINE_BOOL(futari_setup, false, "Futari",
                     "Open the setup screen at start even when the game data is in place")
@@ -41,6 +42,11 @@ REXCVAR_DEFINE_STRING(futari_setup_source, "", "Futari",
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 REXCVAR_DEFINE_BOOL(futari_setup_settings, false, "Futari",
                     "With futari_setup: open on the settings page instead of the setup page")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Dev aid (src/dev/input_script.h): a scripted SDL3 virtual gamepad, "ms:button[:hold_ms],...", e.g.
+//   --futari_input_script=3000:start,6000:a,8000:a
+REXCVAR_DEFINE_STRING(futari_input_script, "", "Futari",
+                      "Dev: press these virtual-gamepad buttons at these times, 'ms:button[:hold_ms],...' (empty: off)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 #if FUTARI_RENUT_RENDERER
@@ -973,14 +979,19 @@ class FutariApp : public rex::ReXApp {
     return FinalizePathsThroughLauncher(defaults, std::move(resume));
   }
 
-#if FUTARI_RENUT_RENDERER
-
   void OnPostSetup() override {
+#if FUTARI_RENUT_RENDERER
     if (banjo::renut_gpu::Active()) {
       futari::renut_vblank::Start();
       StartRenutCapture();
     }
+#endif
+    if (const std::string script = REXCVAR_GET(futari_input_script); !script.empty()) {
+      futari::dev::StartInputScript(script);
+    }
   }
+
+#if FUTARI_RENUT_RENDERER
 
   // The dev capture (futari_renut_capture_path): one frame, written on its own thread.
   void StartRenutCapture() {
@@ -1027,7 +1038,11 @@ class FutariApp : public rex::ReXApp {
     }
   }
 
+#endif
+
   void OnShutdown() override {
+    futari::dev::StopInputScript();
+#if FUTARI_RENUT_RENDERER
     if (banjo::renut_gpu::Active()) {
       renut_capture_stop_.store(true, std::memory_order_release);
       if (renut_capture_thread_.joinable()) {
@@ -1036,8 +1051,8 @@ class FutariApp : public rex::ReXApp {
       futari::renut_vblank::Stop();
       renut::gpu::ShutdownRenderer();
     }
-  }
 #endif
+  }
 
   // Auto-install any DLC packages bundled next to the exe (a "dlc" folder)
   // before the game launches, so they appear as owned marketplace content.

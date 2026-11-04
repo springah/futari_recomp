@@ -54,6 +54,8 @@ set(FUTARI_SOURCES
     src/launcher/launcher_dialog.cpp
     src/launcher/file_picker.cpp
     src/launcher/update_check.cpp
+    # Dev aid (2026-11-04): futari_input_script, a scripted virtual gamepad for renderer gates.
+    src/dev/input_script.cpp
 )
 if(APPLE)
     # The NSOpenPanel picker is Objective-C++ and the project() line names CXX only. OBJC too: with OBJCXX alone
