@@ -26,6 +26,7 @@ struct ImFontAtlas;
 #include "launcher/file_picker.h"
 #include "launcher/game_source.h"
 #include "launcher/shader_pipeline.h"
+#include "launcher/update_check.h"
 
 namespace futari::launcher {
 
@@ -75,6 +76,7 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   void DrawDone();
   void DrawSettings();
   void DrawFooterNote();
+  void DrawUpdateCheck();
 
   void UseSource(const std::filesystem::path& source);
   void StartExtraction(const std::filesystem::path& source);
@@ -132,6 +134,11 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   std::string package_status_;
   bool package_ok_ = false;
   std::string settings_note_;
+
+  // "Check for updates" (Settings page): pressed -> the future; answered -> the result line.
+  std::future<UpdateResult> update_future_;
+  UpdateResult update_result_;
+  bool update_answered_ = false;
 
   static inline LauncherDialog* instance_ = nullptr;
 };

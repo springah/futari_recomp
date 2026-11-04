@@ -5,6 +5,7 @@
 #include "launcher/launcher_dialog.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -502,6 +503,8 @@ void LauncherDialog::DrawSettings() {
       ImGui::BulletText("%s", n.c_str());
     }
   }
+  ImGui::Spacing();
+  DrawUpdateCheck();
   if (!settings_note_.empty()) {
     ImGui::Spacing();
     WrappedText(settings_note_);
@@ -537,6 +540,49 @@ void LauncherDialog::DrawSettings() {
         env_.on_quit();
       }
     }
+  }
+}
+
+void LauncherDialog::DrawUpdateCheck() {
+  const bool pending = update_future_.valid();
+  if (pending && update_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+    update_result_ = update_future_.get();
+    update_answered_ = true;
+    REXLOG_INFO("Launcher: update check: {}", update_result_.message);
+  }
+  ImGui::BeginDisabled(update_future_.valid());
+  if (ImGui::Button(update_future_.valid() ? "Checking..." : "Check for updates")) {
+    update_answered_ = false;
+    update_future_ = CheckForUpdates(env_.version);  // the only network request the port makes, and only here
+  }
+  ImGui::EndDisabled();
+  if (update_answered_) {
+    ImGui::SameLine();
+    switch (update_result_.status) {
+      case UpdateResult::Status::kNewer:
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 1.0f, 0.6f, 1.0f));
+        ImGui::TextUnformatted(update_result_.message.c_str());
+        ImGui::PopStyleColor();
+        ImGui::SameLine();
+        if (ImGui::Button("Open the release page")) {
+          if (!OpenInBrowser(update_result_.release_url)) {
+            update_result_.message = "Could not open a browser: " + update_result_.release_url;
+            update_result_.status = UpdateResult::Status::kError;
+          }
+        }
+        break;
+      case UpdateResult::Status::kUpToDate:
+        ImGui::TextUnformatted(update_result_.message.c_str());
+        break;
+      case UpdateResult::Status::kError:
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.45f, 1.0f));
+        WrappedText(update_result_.message);
+        ImGui::PopStyleColor();
+        break;
+    }
+  } else if (!update_future_.valid()) {
+    ImGui::SameLine();
+    ImGui::TextDisabled("asks github.com for the latest release; nothing else is sent");
   }
 }
 

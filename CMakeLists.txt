@@ -39,6 +39,7 @@ set(FUTARI_SOURCES
     src/launcher/shader_pipeline.cpp
     src/launcher/launcher_dialog.cpp
     src/launcher/file_picker.cpp
+    src/launcher/update_check.cpp
 )
 if(APPLE)
     # The NSOpenPanel picker is Objective-C++ and the project() line names CXX only. OBJC too: with OBJCXX alone
@@ -68,9 +69,11 @@ target_compile_definitions(futari PRIVATE FUTARI_VERSION_STRING="${PROJECT_VERSI
 target_include_directories(futari PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 if(WIN32)
     # The launcher's file dialogs (IFileOpenDialog) and its child processes.
-    target_link_libraries(futari PRIVATE ole32 uuid)
+    # The update check (WinHTTP) and opening the release page (ShellExecuteW).
+    target_link_libraries(futari PRIVATE ole32 uuid winhttp shell32)
 elseif(APPLE)
-    target_link_libraries(futari PRIVATE "-framework Cocoa")
+    # The update check: the system libcurl (/usr/lib/libcurl.4.dylib, on every Mac).
+    target_link_libraries(futari PRIVATE "-framework Cocoa" curl)
 endif()
 
 # Renut's Direct3D-level renderer (src/renut_engine, GPL-3; cmake/futari_renut_gpu.cmake), beside the SDK's xenos
