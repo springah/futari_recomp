@@ -46,6 +46,7 @@
 #include "renut_engine/gpu/render/vertex_format.h"
 #include "renut_engine/gpu/backend/video_internal.h"
 #include "renut_engine/gpu/banjo_renut_tuning.h"
+#include "renut_engine/gpu/futari_rect_timing.h"  // futari_recomp (leg/rectlist)
 #if defined(PLUME_DEKO3D)
 #include <plume_deko3d.h>  // banjo-nx (2026-10-17): Deko3DBindMemExport
 #endif
@@ -4315,6 +4316,7 @@ bool SameTargets(const Targets &a, const Targets &b) {
 }
 
 bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayConstants *replay) {
+  futari::renut_timing::Scope timing(futari::renut_timing::kDraw);  // futari_recomp (renut_draw_timing)
   ++g_trace_draws;
   auto &s = State();
   const GuestDevice device(device_state);
@@ -4978,6 +4980,8 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
     // banjo-nx: NVK's prefetch hint (the Switch); the record worker gives it itself, on the core that binds.
     if (!banjo::renut_gpu::record::IsProxy(cmd))
       banjo::renut_gpu::BeforePipelineBind(pipeline);
+    futari::renut_timing::Scope bind_timing(futari::renut_timing::kBind);  // futari_recomp (renut_draw_timing)
+    futari::renut_timing::CountBind();
     cmd->setPipeline(pipeline);
     g_bound.pipeline = pipeline;
     // Vulkan: a pipeline without the constant as dynamic state overwrites it.
@@ -5083,6 +5087,9 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
       targets.depth->stencil_used = true;  // banjo-nx (2026-10-19, banjo_deko3d_depth_handover)
   }
   Video::NoteDrawLocked();  // banjo-nx (2026-10-19, banjo_deko3d_kick_submit): the open list's draws
+  futari::renut_timing::CountDraw(key.rectangle_list || (call.primitive == kRectangleList),
+                                  key.rectangle_list && !s.rectangle_list_gs);
+  futari::renut_timing::Scope command_timing(futari::renut_timing::kCommand);  // futari_recomp (renut_draw_timing)
   if (geometry.indexed) {
     SetIndexBuffer(cmd, geometry.index_view);
     // banjo-nx: instanced for a tessellation grid (banjo_gpu_tess_grid); 1 for every other indexed draw.

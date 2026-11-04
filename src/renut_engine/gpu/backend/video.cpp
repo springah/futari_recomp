@@ -85,6 +85,8 @@
 #include "host_shaders/resolve_copy_ps.dxil.h"
 #endif
 
+#include "renut_engine/gpu/futari_rect_timing.h"  // futari_recomp (leg/rectlist)
+
 REXCVAR_DECLARE(bool, futari_renut_double_buffer);  // futari-nx: futari_renut_shim.cpp
 
 namespace renut::gpu {
@@ -331,7 +333,8 @@ void BuildRectangleListShader(VideoState &s) {
   const plume::RenderDeviceCapabilities &caps = s.device->getCapabilities();
   if (!caps.geometryShader) {
 #if !defined(PLUME_DEKO3D)
-    if (caps.tessellationShader) {
+    // futari_recomp: renut_rect_fallback = "plain" keeps the one-triangle form (timing comparisons).
+    if (caps.tessellationShader && !futari::renut_timing::RectFallbackPlain()) {
       s.rectangle_list_hs =
           CreateHostShader(s.device.get(), RENUT_HOST_SHADER(rectangle_list_hs), "rectangle_list_hs");
       s.rectangle_list_ds =
@@ -340,6 +343,8 @@ void BuildRectangleListShader(VideoState &s) {
         s.rectangle_list_hs.reset();
         s.rectangle_list_ds.reset();
       }
+    }
+    if (caps.tessellationShader) {
       s.point_sprite_hs =
           CreateHostShader(s.device.get(), RENUT_HOST_SHADER(point_sprite_hs), "point_sprite_hs");
       s.point_sprite_ds =
@@ -837,7 +842,10 @@ void SubmitAndWaitLocked(VideoState &s) {
   const plume::RenderCommandList *lists[] = {s.pending_list ? s.pending_list : current, current};
   const uint32_t count = s.pending_list ? 2 : 1;
   s.pending_list = nullptr;
-  s.queue->executeCommandLists(lists, count, nullptr, 0, nullptr, 0, s.fences[cur].get());
+  {
+    futari::renut_timing::Scope timing(futari::renut_timing::kSubmit);  // futari_recomp (renut_draw_timing)
+    s.queue->executeCommandLists(lists, count, nullptr, 0, nullptr, 0, s.fences[cur].get());
+  }
   {
     render_thread::WaitScope wait;
     s.queue->waitForCommandFence(s.fences[cur].get());
@@ -872,9 +880,12 @@ void SubmitAndAdvance(VideoState &s, plume::RenderCommandSemaphore *wait,
     s.pending_list = nullptr;
     plume::RenderCommandSemaphore *waits[] = {wait};
     plume::RenderCommandSemaphore *signals[] = {signal};
-    s.queue->executeCommandLists(lists, count, wait ? waits : nullptr, wait ? 1 : 0,
-                                 signal ? signals : nullptr, signal ? 1 : 0,
-                                 s.fences[cur].get());
+    {
+      futari::renut_timing::Scope timing(futari::renut_timing::kSubmit);  // futari_recomp (renut_draw_timing)
+      s.queue->executeCommandLists(lists, count, wait ? waits : nullptr, wait ? 1 : 0,
+                                   signal ? signals : nullptr, signal ? 1 : 0,
+                                   s.fences[cur].get());
+    }
     s.submitted[cur] = true;
     // banjo-nx (2026-10-20, input latency): the guest Swap this frame ends, for the probe's "input -> GPU done".
     g_slot_swap[cur] = g_presenting_swap;

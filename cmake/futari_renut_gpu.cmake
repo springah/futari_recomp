@@ -171,6 +171,7 @@ include("${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/gpu.cmake")
 add_library(futari_renut_gpu OBJECT
     "${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/banjo_renut_select.cpp"
     "${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/banjo_renut_tuning.cpp"
+    "${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/futari_rect_timing.cpp"  # futari_recomp (leg/rectlist)
     "${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/banjo_renut_checks.cpp"
     "${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/banjo_renut_record.cpp"
     "${CMAKE_SOURCE_DIR}/src/renut_engine/display_sync.cpp"
