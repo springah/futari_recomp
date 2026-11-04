@@ -129,8 +129,14 @@ STATUS
 
 LICENCES
   This build links third-party open-source components (including FFmpeg and
-  libmspack under the LGPL-2.1). Their licences, and the LGPL's written offer of
-  source, are in THIRD-PARTY-NOTICES.txt beside this file.
+  libmspack under the LGPL-2.1). It also links the Renut renderer (reNut by
+  masterspike52, by way of ChanseyIsTheBest's futari-nx and cerroverb's
+  futari-linux), which is under the GPL-3.0, so futari.exe and the game-mode
+  DLLs are distributed under the GPL-3.0. Their licences, the full GPL-3.0
+  text, and the written offers of source are in THIRD-PARTY-NOTICES.txt beside
+  this file; the complete source is the GitHub repository above, at this
+  version's tag. Neither licence covers the game itself, whose recompiled code
+  these files contain: that is why this build is for owners only.
 
 Built with heavy use of AI tooling. Hobby project, no warranty. Cave own all
 rights to Mushihimesama Futari.

@@ -17,8 +17,9 @@ This directory is futari_recomp's copy of the **Renut** Direct3D-level renderer,
 
 ## Licence
 
-Files in this directory are **GPL-3.0-or-later** (see `LICENSE` here, copied from
-futari-linux), with reNut's own permission above covering the reNut-derived parts. This is a
+Files in this directory are **GPL-3.0** (see `LICENSE` here, copied from futari-linux;
+neither futari-nx nor futari-linux states an "or any later version" grant, so none is
+claimed here), with reNut's own permission above covering the reNut-derived parts. This is a
 different licence from the rest of futari_recomp (BSD 3-Clause, see `../../LICENSE`):
 
 - Source: the BSD licence of the repository does not apply to this directory.

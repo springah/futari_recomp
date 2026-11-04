@@ -142,6 +142,17 @@ Packaging rules — each one is here because it broke once:
    offer is in the file's header and points at this repository's vendored SDK
    tree at the release tag. That is one more reason a tag must carry exactly the
    SDK the bundle was built from.
+
+   From v1.5.5 the binaries link the Renut renderer (`src/renut_engine/`,
+   GPL-3.0), so a bundle is a combined work distributed under the GPL-3.0. The
+   file's second header section says so, credits reNut's lineage
+   (masterspike52, ChanseyIsTheBest, cerroverb) and names this repository at the
+   release tag as the complete corresponding source, and the full GPL-3.0 text
+   is among the licence texts below it. Check before upload that the staged
+   copy has it: `grep -c "Version 3, 29 June 2007" THIRD-PARTY-NOTICES.txt`
+   must print 1 (the other "GNU GENERAL PUBLIC LICENSE" lines in the file are
+   from the SDK's glslang text, not the GPL-3.0), and that the
+   release tag is pushed with the release, since that tag is the source offer.
 3. **Zip with 7z** (or `stage_win_zip.sh`'s Python `zipfile`, which writes
    forward-slash entries the same way), under a single top-level
    `Mushihimesama-Futari-PC/` folder. .NET `Compress-Archive` writes non-spec

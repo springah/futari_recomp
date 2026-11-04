@@ -355,7 +355,10 @@ Nothing here is a substitute for owning the game:
   disc does. Don't redistribute it. The release bundles necessarily contain it,
   compiled, and are inert without a dump you provide. They are published on the
   same footing as other recompilation projects: for people who already own the
-  game. If you don't own it, don't download them.
+  game. If you don't own it, don't download them. The GPL-3.0 that covers the
+  release binaries (see [Licence](#licence)) applies to the port's code and the
+  libraries in them, not to the game's: it grants no right to Cave's code,
+  recompiled or not.
 - **Do not ask for game files.** Requests for dumps, links, or "where do I get
   the ISO" will be closed. [docs/DUMPING.md](docs/DUMPING.md) covers the only
   supported route: your own disc, read with your own console.
@@ -368,5 +371,16 @@ the build files, and the docs — are under the
 lineage behind it. That licence covers **this repository only**; it grants no
 rights whatsoever to the game, or to the recompiled code generated from it.
 [NOTICE.md](NOTICE.md) spells out exactly what is and is not covered.
+
+The vendored Renut renderer (`src/renut_engine/`) is under the **GPL-3.0**:
+masterspike52's reNut (reused with its author's permission,
+[reNut#74](https://github.com/masterspike52/reNut/issues/74)), by way of
+ChanseyIsTheBest's futari-nx and cerroverb's futari-linux. The release binaries
+link it, so from v1.5.5 they are a combined work distributed under the
+GPL-3.0. The full licence text ships in every bundle's
+`THIRD-PARTY-NOTICES.txt`, together with the notices of every other component
+(plume, XenosRecomp, the DirectX Shader Compiler, the SDK's own dependencies),
+and the complete corresponding source is this repository at the release tag.
+This repository's own files are not relicensed: they stay BSD 3-Clause.
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).

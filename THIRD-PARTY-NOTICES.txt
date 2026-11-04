@@ -26,15 +26,36 @@ libmspack as its thirdparty/FFmpeg and thirdparty/libmspack submodules and the
 build files used to produce the runtime. If you cannot obtain them there, open
 an issue in that repository and they will be provided.
 
-GPL-3.0 NOTICE (the Renut renderer)
------------------------------------
-The native renderer in src/renut_engine (reNut by masterspike52, adapted by
-banjo-nx, futari-nx and cerroverb/futari-linux) is licensed under the GNU GPL,
-version 3 or later. A build that includes it (the default) is a combined work
-distributed under the GPL-3.0; its complete corresponding source is the port's
-repository above at the release tag matching this build. reNut itself carries
-no licence file; its author's permission for this port is recorded at
-https://github.com/masterspike52/reNut/issues/74.
+GPL-3.0 NOTICE AND SOURCE OFFER (the Renut renderer)
+----------------------------------------------------
+The native renderer in src/renut_engine is licensed under the GNU General
+Public License, version 3. Its authors, oldest first:
+
+  - reNut, by masterspike52 (https://github.com/masterspike52/reNut): the
+    renderer itself. reNut carries no licence file; masterspike52 granted its
+    reuse for this port at https://github.com/masterspike52/reNut/issues/74.
+  - banjo-nx and futari-nx, by ChanseyIsTheBest
+    (https://github.com/ChanseyIsTheBest/futari-nx, GPL-3.0): the ReXGlue
+    adaptation and this game's Direct3D layout, hooks and vblank thread.
+  - futari-linux, by cerroverb (https://github.com/cerroverb/futari-linux,
+    GPL-3.0): the copy vendored here, with its display-locked vblank and the
+    release-shader model; it carries frame-pacing code from hedge-dev's
+    UnleashedRecomp (https://github.com/hedge-dev/UnleashedRecomp, GPL-3.0).
+
+futari.exe and the eight game-mode libraries link the renderer (the exe
+directly, the libraries through its per-module hooks), so a build that
+includes it (FUTARI_RENUT_RENDERER, the default) is a combined work
+distributed under the GPL-3.0. Its full text is reproduced below, under
+"Renut renderer". The port's own source files stay available under the BSD
+3-Clause licence (LICENSE in the source repository); the GPL governs the
+combined binaries. You are entitled to their complete corresponding source:
+it is the port's repository above at the release tag matching this build,
+with the renderer, plume, XenosRecomp and the SDK all vendored in it. If you
+cannot obtain it there, open an issue in that repository and it will be
+provided. The game's own program code, recompiled into these binaries, is
+Cave's: it is generated on each player's machine from their own copy, is
+not part of that source, and is licensed by neither the GPL nor the BSD
+licence (see NOTICE.md).
 
 COMPONENTS
 ----------
@@ -63,11 +84,11 @@ COMPONENTS
   volk                                                       MIT                    https://github.com/zeux/volk
   DES implementation                                         see text               (vendored in the SDK)
   SDL_GameControllerDB (gamecontrollerdb.txt data file)      Zlib                   https://github.com/mdqinc/SDL_GameControllerDB
-  Renut renderer (src/renut_engine: reNut via banjo-nx, futari-nx, futari-linux) GPL-3.0-or-later       https://github.com/cerroverb/futari-linux
-  plume (render interface: Vulkan, D3D12, Metal back ends; from rt64) MIT                    https://github.com/rt64/rt64
+  Renut renderer (src/renut_engine: reNut by masterspike52; banjo-nx and futari-nx by ChanseyIsTheBest; futari-linux by cerroverb; portions of UnleashedRecomp) GPL-3.0                https://github.com/cerroverb/futari-linux
+  plume (render interface: Vulkan, D3D12, Metal back ends; renderbag) MIT                    https://github.com/renderbag/plume
   D3D12 Memory Allocator (plume)                             MIT                    https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator
   metal-cpp (plume, macOS)                                   Apache-2.0             https://developer.apple.com/metal/cpp/
-  XenosRecomp (hedge-dev; shader_common.h and the shader translation) MIT                    https://github.com/hedge-dev/XenosRecomp
+  XenosRecomp (hedge-dev; in reblue's fork as futari-linux carries it; shader_common.h and the translator built into futari.exe) MIT                    https://github.com/hedge-dev/XenosRecomp
   zstd (vendored with XenosRecomp; the decoder in the renderer, the encoder in the translator built into futari.exe) BSD-3-Clause           https://github.com/facebook/zstd
   smol-v (SPIR-V decoder, vendored with XenosRecomp)         MIT / Unlicense        https://github.com/aras-p/smol-v
   DirectX Shader Compiler (dxcompiler.dll in renut_tools/, loaded by the translator built into futari.exe at extract time) NCSA (LLVM Release License) https://github.com/microsoft/DirectXShaderCompiler
@@ -3139,8 +3160,8 @@ freely, subject to the following restrictions:
 
 
 ===============================================================================
-Renut renderer (src/renut_engine: reNut via banjo-nx, futari-nx, futari-linux)
-GPL-3.0-or-later -- https://github.com/cerroverb/futari-linux
+Renut renderer (src/renut_engine: reNut by masterspike52; banjo-nx and futari-nx by ChanseyIsTheBest; futari-linux by cerroverb; portions of UnleashedRecomp)
+GPL-3.0 -- https://github.com/cerroverb/futari-linux
 ===============================================================================
 
                     GNU GENERAL PUBLIC LICENSE
@@ -3820,8 +3841,8 @@ Public License instead of this License.  But first, please read
 
 
 ===============================================================================
-plume (render interface: Vulkan, D3D12, Metal back ends; from rt64)
-MIT -- https://github.com/rt64/rt64
+plume (render interface: Vulkan, D3D12, Metal back ends; renderbag)
+MIT -- https://github.com/renderbag/plume
 ===============================================================================
 
 MIT License
@@ -4083,7 +4104,7 @@ Apache-2.0 -- https://developer.apple.com/metal/cpp/
 
 
 ===============================================================================
-XenosRecomp (hedge-dev; shader_common.h and the shader translation)
+XenosRecomp (hedge-dev; in reblue's fork as futari-linux carries it; shader_common.h and the translator built into futari.exe)
 MIT -- https://github.com/hedge-dev/XenosRecomp
 ===============================================================================
 

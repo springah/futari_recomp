@@ -93,7 +93,7 @@ binaries are now distributed under the GPL-3.0 (last bullet).
   GitHub address instead of naming a file that is not in the zip. DUMPING.md
   gained Route C, the already-extracted folder.
 - **The shipped binaries are now GPL-3.0.** Renut is GPL-3.0 as futari-nx and
-  futari-linux carry it, and a build that links it (every build, from this
+  futari-linux carry it, and a build that links it (the default, from this
   version) is a combined work distributed under that licence. reNut itself has
   no licence file; masterspike52 granted its reuse for this port in
   [masterspike52/reNut#74](https://github.com/masterspike52/reNut/issues/74).
