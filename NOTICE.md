@@ -48,3 +48,7 @@ The ReXGlue SDK (`thirdparty/rexglue-sdk`) is a vendored copy of a separate
 project under its own BSD 3-Clause licence, itself derived from the Xenia
 project (Copyright (c) 2022, Ben Vanik and Xenia project contributors). See
 `thirdparty/rexglue-sdk/VENDORED.md` for its provenance.
+
+The launcher's font, embedded in the executable as `src/launcher/launcher_font.h`, is a Latin subset of
+**Roboto Medium** (Copyright 2011 Google Inc.), licensed **Apache-2.0** (`dist/Roboto.LICENSE`, reproduced in
+`THIRD-PARTY-NOTICES.txt`); `scripts/make_launcher_font.sh` regenerates it from Dear ImGui's copy of the font.

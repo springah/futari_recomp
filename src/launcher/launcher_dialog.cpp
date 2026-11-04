@@ -14,6 +14,7 @@
 #include <system_error>
 
 #include <imgui.h>
+#include "launcher/launcher_font.h"
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/logging.h>
@@ -23,6 +24,22 @@ namespace futari::launcher {
 namespace {
 
 std::string Utf8(const std::filesystem::path& p) { return rex::path_to_utf8(p); }
+
+// Baked once (the SDK's renderer backends upload the atlas once; ImGui 1.92 without RendererHasTextures scales a
+// font only by stretching its bitmap), so a ladder of sizes covers 720p to 2160p crisply.
+constexpr float kFontSizes[] = {15.0f, 18.0f, 22.0f, 27.0f, 33.0f, 40.0f, 50.0f};
+ImFont* g_fonts[std::size(kFontSizes)] = {};
+
+ImFont* PickFont(float display_height) {
+  const float want = display_height / 36.0f;  // 30 px at 1080 lines -> the 27 px font; 20 at 720 -> 18
+  ImFont* best = nullptr;
+  for (size_t i = 0; i < std::size(kFontSizes); ++i) {
+    if (g_fonts[i] && (!best || kFontSizes[i] <= want)) {
+      best = g_fonts[i];
+    }
+  }
+  return best;
+}
 
 struct Resolution {
   const char* label;
@@ -63,6 +80,20 @@ void WrappedText(const std::string& text) { ImGui::TextWrapped("%s", text.c_str(
 bool RawDown(ImGuiKey key) { return ImGui::GetIO().KeysData[key - ImGuiKey_NamedKey_BEGIN].Down; }
 
 }  // namespace
+
+void LauncherDialog::AddFonts(ImFontAtlas* atlas) {
+  static const ImWchar kRanges[] = {0x0020, 0x00FF, 0x2013, 0x2014, 0x2018, 0x2019, 0x201C, 0x201D,
+                                    0x2022, 0x2022, 0x2026, 0x2026, 0};
+  for (size_t i = 0; i < std::size(kFontSizes); ++i) {
+    ImFontConfig config;
+    config.OversampleH = 2;
+    config.OversampleV = 1;
+    std::snprintf(config.Name, sizeof(config.Name), "Roboto Medium %.0fpx (launcher)", kFontSizes[i]);
+    g_fonts[i] = atlas->AddFontFromMemoryCompressedTTF(futari_launcher_font_compressed_data,
+                                                       int(futari_launcher_font_compressed_size), kFontSizes[i],
+                                                       &config, kRanges);
+  }
+}
 
 bool WriteRendererLine(const std::filesystem::path& ini_path, bool renut, std::string& error) {
   std::string original;
@@ -187,9 +218,12 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
     }
   }
 
-  const float scale = io.DisplaySize.y >= 1000.0f ? 2.0f : 1.5f;
-  const ImVec2 size(std::min(io.DisplaySize.x - 40.0f, 500.0f * scale),
-                    std::min(io.DisplaySize.y - 40.0f, 300.0f * scale));
+  ImFont* font = PickFont(io.DisplaySize.y);
+  const float font_px = font ? font->LegacySize : 20.0f;
+  if (font) {
+    ImGui::PushFont(font, font->LegacySize);
+  }
+  const ImVec2 size(std::min(io.DisplaySize.x - 40.0f, 46.0f * font_px), std::min(io.DisplaySize.y - 40.0f, 27.0f * font_px));
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Always,
                           ImVec2(0.5f, 0.5f));
   ImGui::SetNextWindowSize(size, ImGuiCond_Always);
@@ -202,7 +236,9 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove;
   bool open = true;
   if (ImGui::Begin(title.c_str(), env_.in_game ? &open : nullptr, kFlags)) {
-    ImGui::SetWindowFontScale(scale);
+    if (!font) {
+      ImGui::SetWindowFontScale(io.DisplaySize.y >= 1000.0f ? 2.0f : 1.5f);  // no launcher font: ProggyTiny, as before
+    }
     switch (page_) {
       case Page::kSetup:
         DrawSetup();
@@ -219,6 +255,9 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
     }
   }
   ImGui::End();
+  if (font) {
+    ImGui::PopFont();
+  }
   if (!open) {
     Close();
   }

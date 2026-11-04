@@ -45,6 +45,7 @@ COMPONENTS=(
   "volk|MIT|https://github.com/zeux/volk|thirdparty/volk/LICENSE.md"
   "DES implementation|see text|(vendored in the SDK)|thirdparty/crypto/des/LICENSE"
   "SDL_GameControllerDB (gamecontrollerdb.txt data file)|Zlib|https://github.com/mdqinc/SDL_GameControllerDB|dist/gamecontrollerdb.LICENSE"
+  "Roboto Medium (font, launcher screens; Latin subset embedded in futari.exe)|Apache-2.0|https://github.com/googlefonts/roboto|dist/Roboto.LICENSE"
   # The Renut renderer (FUTARI_RENUT_RENDERER, on by default) and what it links. Repo-relative paths.
   "Renut renderer (src/renut_engine: reNut via banjo-nx, futari-nx, futari-linux)|GPL-3.0-or-later|https://github.com/cerroverb/futari-linux|src/renut_engine/LICENSE"
   "plume (render interface: Vulkan, D3D12, Metal back ends; from rt64)|MIT|https://github.com/rt64/rt64|thirdparty/plume/LICENSE"

@@ -702,13 +702,18 @@ class FutariApp : public rex::ReXApp {
   }
 
  protected:
+  // The launcher's font, beside (after) the SDK's ProggyTiny, which stays the default for the F4 overlay.
+  void OnConfigureFonts(ImFontAtlas* atlas) override { futari::launcher::LauncherDialog::AddFonts(atlas); }
+
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     (void)drawer;
     instance_ = this;
     rex::ui::RegisterBind(
         "bind_title_exit", "Escape", "Exit the game from the title screen", [this] {
           // Leave Escape to an open overlay (it may be using it itself).
-          if (TitleScreenIdle() && !g_overlay_open.load(std::memory_order_acquire)) {
+          // The F2 screen uses Esc as "close" (LauncherDialog::BackPressed).
+          if (TitleScreenIdle() && !g_overlay_open.load(std::memory_order_acquire) &&
+              !futari::launcher::LauncherDialog::instance()) {
             RequestExit(TitleExitKeyName());
           }
         });
