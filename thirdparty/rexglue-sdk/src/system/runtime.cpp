@@ -111,6 +111,10 @@ X_STATUS Runtime::Setup(RuntimeConfig config) {
   chrono::Clock::set_guest_tick_frequency(50000000);
   chrono::Clock::set_guest_system_time_base(chrono::Clock::QueryHostSystemTime());
   chrono::Clock::set_guest_time_scalar(1.0);
+  // The guest boots now: without this the first guest clock query absorbs all
+  // host time since process start (static init of last_host_tick_count_),
+  // e.g. a whole setup screen, scaled to 50 MHz.
+  chrono::Clock::ResetGuestTickCount();
 
   // Enable threading affinity configuration
   thread::EnableAffinityConfiguration();

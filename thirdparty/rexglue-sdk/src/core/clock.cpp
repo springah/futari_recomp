@@ -155,6 +155,12 @@ void Clock::set_guest_system_time_base(uint64_t time_base) {
   guest_system_time_base_ = time_base;
 }
 
+void Clock::ResetGuestTickCount() {
+  std::lock_guard<std::mutex> lock(tick_mutex_);
+  last_host_tick_count_ = Clock::QueryHostTickCount();
+  last_guest_tick_count_ = 0;
+}
+
 uint64_t Clock::QueryGuestTickCount() {
   auto guest_tick_count = UpdateGuestClock();
   return guest_tick_count;

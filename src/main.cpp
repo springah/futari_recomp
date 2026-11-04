@@ -12,6 +12,7 @@
 
 #include "ini_merge.h"
 
+#include <rex/chrono/clock.h>
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/input/input.h>
@@ -768,7 +769,12 @@ class FutariApp : public rex::ReXApp {
     env.auto_source = rex::to_path(auto_source);
     env.on_play = [this, resume = std::move(resume), paths = defaults]() {
       // Deferred: the runtime is constructed outside the ImGui frame that pressed Play.
-      app_context().CallInUIThreadDeferred([resume, paths] { resume(paths); });
+      REXLOG_INFO("Launcher: Play; constructing the runtime (host uptime {} ms)",
+                  rex::chrono::Clock::QueryHostUptimeMillis());
+      app_context().CallInUIThreadDeferred([resume, paths] {
+        REXLOG_INFO("Launcher: resume running");
+        resume(paths);
+      });
     };
     new futari::launcher::LauncherDialog(drawer, std::move(env),
                                          REXCVAR_GET(futari_setup_settings)

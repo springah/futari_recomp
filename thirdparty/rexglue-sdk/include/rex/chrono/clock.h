@@ -67,6 +67,10 @@ class Clock {
   // Sets the guest time base, used for computing the system time.
   // By default this is the current system time.
   static void set_guest_system_time_base(uint64_t time_base);
+  // Restarts the guest tick count at zero from now. Called when the runtime is
+  // set up, so the guest's uptime/timebase starts at the guest's boot and not at
+  // host process start (an app may spend a long time in UI before the runtime).
+  static void ResetGuestTickCount();
 
   // Queries the current guest tick count, accounting for frequency adjustment
   // and scaling.
