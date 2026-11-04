@@ -7,9 +7,9 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 
 | OS | Build | Status |
 |----|-------|--------|
-| Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.4 (SDK v0.9.3.1) · test build [v1.5.5-rc3](https://github.com/springah/futari_recomp/releases/tag/v1.5.5-rc3) with the setup screen in the exe and the opt-in Renut renderer (branch `launcher`; the public zip comes from a tree configured with `-DFUTARI_RENUT_RELEASE_SHADERS=ON`, see `scripts/stage_win_zip.sh`) |
+| Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.5 (SDK v0.9.3.1): setup and settings screens in the exe, opt-in Renut renderer (Vulkan 1.2). The public zip comes from a tree configured with `-DFUTARI_RENUT_RELEASE_SHADERS=ON` and is staged by `scripts/stage_win_zip.sh` |
 | Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) — still builds, no longer shipped | ⏹ handed over to [futari-linux](https://github.com/cerroverb/futari-linux) from v1.5.4 ([#6](https://github.com/springah/futari_recomp/issues/6)); last bundle here v1.5.3 |
-| macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.4 (MoltenVK) |
+| macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.5 (MoltenVK) · Renut: <!-- MERGE-OWNER: "Vulkan over MoltenVK, opt-in" if leg/macos lands, otherwise "not in this release (default renderer only)" --> |
 
 **Windows builds use the `win-amd64-*` presets**, which name clang-cl from
 `C:/Program Files/LLVM` (the SDK's own presets still default to `clang++`, so the
@@ -17,6 +17,24 @@ SDK CLI is configured by hand; `build.ps1` does both). Configure from a VS
 developer shell so `rc.exe` is found. Build with no `--target`, or with the build
 preset, so the 8 module DLLs get the same optimisation flags as the exe. The
 `win-arm64-*` presets target `arm64-pc-windows-msvc` and are untested.
+
+**Public Windows zips come from a release-shader tree.** A plain configure
+builds the game's translated shaders into `futari.exe` (from
+`scripts/renut_shader_dump.sh`'s dump of your own game), which is game data. The
+public build ships the shader table only, and the player's setup screen makes
+`vulkan_spirv.bin` from their own copy:
+
+```sh
+cmake --preset win-amd64-release -B out/build/win-amd64-release-shaders -DFUTARI_RENUT_RELEASE_SHADERS=ON
+cmake --build out/build/win-amd64-release-shaders
+cmake --build out/build/win-amd64-release-shaders --target futari_renut_tools
+bash scripts/stage_win_zip.sh 1.5.5     # stages, checks, zips, writes the .sha256
+```
+
+`stage_win_zip.sh` refuses a tree without that option, a `renut_tools/` holding
+an executable, and anything of the game in the stage, and boot-checks the staged
+exe on both renderers (it needs `ASSETS=<a game data folder>` for that, never
+copied into the stage).
 
 ## SDK
 
@@ -83,7 +101,11 @@ Packaging rules — each one is here because it broke once:
    212 developer run logs.
 2. **A public bundle carries no game data.** Ship the exe, the 8 module DLLs, the
    SDK runtime + GPU plugin, `futari.ini`, `extract_assets.bat` +
-   `extract_iso.py` (so the user can populate `assets/` themselves), `RUN.txt`
+   `extract_iso.py` + `make_shaders.py` (the command-line route; the exe's own
+   setup screen is the primary one), `renut_tools/` with `dxcompiler.dll`,
+   `shader_common.h`, `renut_early_alpha.py` and `early_alpha.py` and no
+   executable (Windows Defender quarantined v1.5.5-rc1's `XenosRecomp.exe`),
+   `RUN.txt`
    copied from [`dist/RUN.txt`](dist/RUN.txt), `gamecontrollerdb.txt` copied from
    [`dist/gamecontrollerdb.txt`](dist/gamecontrollerdb.txt) (SDL's community
    gamepad-mapping database — the SDL input driver loads it from beside the exe
@@ -95,8 +117,10 @@ Packaging rules — each one is here because it broke once:
    clean clone. The exe carries its icon itself (`src/futari.ico`, embedded on
    Windows; `build_app.sh` turns it into the `.app` icon), so the dump's loose
    `icon*.ico` files are not needed. `assets/` and `dlc/` contents are the game —
-   they never go in a bundle that leaves your machine. Grep the staged tree for
-   `.xex` before zipping.
+   they never go in a bundle that leaves your machine. So does `vulkan_spirv.bin`
+   and any `shader_work/` or `shader_capture/` folder: translated game shaders
+   are game data, and only a `-DFUTARI_RENUT_RELEASE_SHADERS=ON` exe may ship.
+   Grep the staged tree for `.xex` and `.bin` before zipping.
 
    ⚠️ Note what "no game data" does and does not mean: the exe and the 8 module
    DLLs *are* the game's own program code, recompiled. That is unavoidable in a
@@ -118,8 +142,16 @@ Packaging rules — each one is here because it broke once:
    offer is in the file's header and points at this repository's vendored SDK
    tree at the release tag. That is one more reason a tag must carry exactly the
    SDK the bundle was built from.
-3. **Zip with 7z**, under a single top-level `Mushihimesama-Futari-PC/` folder.
-   .NET `Compress-Archive` writes non-spec backslash entries and no wrapper folder.
+3. **Zip with 7z** (or `stage_win_zip.sh`'s Python `zipfile`, which writes
+   forward-slash entries the same way), under a single top-level
+   `Mushihimesama-Futari-PC/` folder. .NET `Compress-Archive` writes non-spec
+   backslash entries and no wrapper folder. macOS: stage
+   `Mushihimesama-Futari-macOS/` (`Futari.app`, `RUN.txt`, `extract_iso.py`,
+   `THIRD-PARTY-NOTICES.txt`, `dlc/README.txt`) and zip it with
+   `ditto -c -k --keepParent --norsrc`. Nothing but Mach-O files may sit in
+   `Futari.app/Contents/MacOS/`: `--norsrc` strips the extended attributes a
+   non-Mach-O file's signature lives in, and the extracted app then fails
+   `codesign --verify --deep --strict`.
 4. **Diff the new zip's file list against the previous release** before publishing,
    and confirm every difference is intended.
 5. **Linux bundles: zip on Linux with `zip -X`**, never from Windows. A Windows

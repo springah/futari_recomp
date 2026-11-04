@@ -15,20 +15,16 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.4 (Windows, macOS), with the bundles attached to the
-[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.4).
+**Latest release:** v1.5.5 (Windows, macOS), with the bundles attached to the
+[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.5).
 See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging details:
 [PORTS.md](PORTS.md).
 
-**Test build:** [v1.5.5-rc3](https://github.com/springah/futari_recomp/releases/tag/v1.5.5-rc3)
-(Windows) adds a setup screen inside `futari.exe` (unzip, double-click, point
-it at your own dump; no Python) and a settings screen on F2, and keeps the
-opt-in second renderer, Renut (masterspike52's
-[reNut](https://github.com/masterspike52/reNut), as carried by futari-linux;
-GPL-3.0), beside the unchanged default one. It is a test build: try the setup
-screen, then play the same stage on both renderers and report what differs
-([#8](https://github.com/springah/futari_recomp/issues/8)). rc1 and rc2 are
-superseded.
+v1.5.5 adds a setup screen inside `futari.exe` (unzip, double-click, point it
+at your own dump; no Python), a settings screen on F2, and an opt-in second
+renderer, Renut, beside the unchanged default one: see [Renderers](#renderers).
+With Renut linked, the release binaries are distributed under the GPL-3.0; this
+repository's own files stay BSD 3-Clause (see [Licence](#licence)).
 
 **Linux and Steam Deck players: use [futari-linux](https://github.com/cerroverb/futari-linux)** instead.
 From v1.5.4 on this project ships Windows and macOS only. futari-linux is a
@@ -37,9 +33,10 @@ Deck it runs the game at a fraction of the CPU and power this one needs ([#6](ht
 to build this version, but it is no longer a supported target.
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
-load, run, and mode-switch cleanly. Nothing is known to be broken right now; the
-recompiler edge cases found so far, all fixed, are under
-[Known issues](#known-issues). Deeper gameplay may still turn up new ones.
+load, run, and mode-switch cleanly. The known limits of the
+new setup screen and of Renut, and the recompiler edge cases found so far (all
+fixed), are under [Known issues](#known-issues). Deeper gameplay may still turn
+up new ones.
 
 ## Just want to play?
 
@@ -49,15 +46,18 @@ v1.5.3 on; the v1.5.2 bundles were only ever shared privately, and v1.5.3 was
 the last release with a Steam Deck zip; Linux and Steam Deck players should use
 [futari-linux](https://github.com/cerroverb/futari-linux)). The bundles contain the game's own program code,
 recompiled, and are **for people who own the game only** — see [Legal](#legal).
-They contain no game data: unzip one, double-click `futari.exe`, and its setup
-screen asks for your own dump (your disc ISO, the install folder copied off
-your console, or an already-extracted game folder), puts it in place, prepares
-the shaders for the optional Renut renderer and starts the game; F2 in the
-game is the settings screen. Nothing else is needed (no Python; the
-`extract_assets.bat` command-line route is still in the zip). `RUN.txt` inside
-has the details. Upgrading: copy your `assets/` and `dlc/` folders (and
-`futari.ini`) into the new version's folder, start it, and redo the shaders
-from the settings screen.
+They contain no game data. On Windows, unzip one and double-click `futari.exe`:
+with no game data in place its setup screen asks for your own dump (your disc
+ISO, the install folder copied off your console, or an already-extracted game
+folder, picked with the normal file dialog or typed in), puts it in place,
+prepares the shaders for the optional Renut renderer and starts the game.
+Nothing else is needed: no Python, no batch file. F2 in the game opens the
+settings screen (renderer, fullscreen, vsync, window size, DLC, shaders), which
+saves into `futari.ini`. The command-line route is still in the zip: drag the
+same sources onto `extract_assets.bat` (needs Python 3). `RUN.txt` inside has
+the details, the macOS differences included. Upgrading: copy your `assets/` and
+`dlc/` folders (and `futari.ini`) into the new version's folder, start it, press
+F2 and "Redo the shaders" (the shader file must match the build).
 
 ## How it works
 
@@ -71,11 +71,43 @@ Almost none of that C++ is in this repo — it's generated into `generated/` by
 `scripts/regen.sh` from your own game dump, and gitignored. What's tracked here is
 the host app (`src/main.cpp`), the codegen inputs (`*.toml`), and the build.
 
+## Renderers
+
+Two renderers are built into the exe. The **default** one is the SDK's
+emulated Xenos GPU (Direct3D 12 on Windows, Vulkan over MoltenVK on macOS):
+faithful, and heavy. **Renut** is opt-in: it draws the game's own Direct3D
+calls directly through Vulkan with the game's own shaders, which is lighter on
+the CPU and has less input lag. It is masterspike52's
+[reNut](https://github.com/masterspike52/reNut), as ChanseyIsTheBest's
+[futari-nx](https://github.com/ChanseyIsTheBest/futari-nx) taught it this game
+and as cerroverb's [futari-linux](https://github.com/cerroverb/futari-linux)
+carries it, vendored in `src/renut_engine/` under the GPL-3.0. It came in
+answer to a game-speed report ([#8](https://github.com/springah/futari_recomp/issues/8))
+and futari-linux's measurements on a Steam Deck
+([#6](https://github.com/springah/futari_recomp/issues/6)).
+
+- **Turning it on:** pick it on the F2 settings screen and Save, or put
+  `futari_renderer = renut` at the top of `futari.ini` (above the first
+  `[section]`), or start the exe with `--futari_renderer=renut`. Delete the
+  line to go back.
+- **Needs a Vulkan 1.2 driver.** Renut is Vulkan-only: its Direct3D 12 backend
+  has no shaders to draw with.
+- **Its shaders come from your game.** Shaders are game data, so no zip carries
+  them: the setup screen (or `extract_assets.bat`) translates them from your own
+  executables into `vulkan_spirv.bin` beside the exe, in a few seconds, with
+  the translator built into `futari.exe`. Redo it after every update (F2,
+  "Redo the shaders"); without the file Renut shows a black game and the log
+  says why. The default renderer does not need it.
+- Windows only in this release.
+  <!-- MERGE-OWNER: if leg/macos lands, replace this bullet with the macOS Renut status (MoltenVK, how to turn it on, whether the macOS setup screen has the shader step). -->
+
 ## Game data
 
 You supply the game yourself, from a copy you own. Two pieces:
 
-**`assets/` — the disc (required).** The extractor takes a **Ver 1.5**
+**`assets/` — the disc (required).** From a release zip on Windows, the setup
+screen in `futari.exe` does this for you (see [Just want to play?](#just-want-to-play)).
+From a source build, or on the command line, the extractor takes a **Ver 1.5**
 disc ISO, the install folder copied straight off your console's storage
 (hash-verified, no conversion tools needed — see DUMPING.md), or an
 already-extracted game folder (`default.xex` and `media/` at its top):
@@ -86,8 +118,9 @@ python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 python scripts/extract_iso.py "path/to/435A07D7" --out assets/ --dlc-out dlc/
 ```
 
-On Windows you can drag the `.iso` — or that console folder — onto
-[`extract_assets.bat`](extract_assets.bat) instead. You should end up with
+On Windows you can drag the `.iso`, that console folder or a loose game folder
+onto [`extract_assets.bat`](extract_assets.bat) instead; it also translates the
+Renut shaders when `futari.exe` is beside it. You should end up with
 `assets/default.xex` and an `assets/media/` tree containing the 8 module XEXs.
 The game reads `assets/` next to the exe; `--game_data_root <path>` points
 elsewhere.
@@ -236,20 +269,42 @@ generated/                # gitignored — codegen output (scripts/regen.sh)
 futari_functions.toml     # function-entry hints for the shell (default.xex)
 <module>_functions.toml   # the same for each of the 8 game-mode modules
 src/                      # host app: main.cpp (ReXApp subclass, futari.ini, title exit), ini_merge.h, icon
+src/launcher/             # the setup and settings screens inside the exe (C++ extractor, shader pipeline, file pickers)
 src/renut_engine/, src/renut_shim/, tools/renut/   # the Renut renderer (vendored, GPL-3.0), its shims, its shader tools
 scripts/                  # extract_iso.py, make_shaders.py (ships in the zip), regen.sh, stage_win_zip.sh, notices generator
 build.ps1, build.bat      # one-shot Windows build
 extract_assets.bat        # drag-and-drop wrapper around extract_iso.py (also ships in the bundles, with make_shaders.py + renut_tools/)
 mac-build/build_app.sh    # macOS .app packaging
 dist/                     # files that ship inside release zips: RUN.txt, gamecontrollerdb.txt, dlc-README.txt
-docs/                     # DUMPING.md (getting your own game data), NOTES_renut_*.md (the Renut port), upstream/ (SDK notes)
+docs/                     # DUMPING.md (getting your own game data), NOTES_renut_*.md (the Renut port), NOTES_launcher.md, upstream/ (SDK notes)
 PORTS.md, CHANGELOG.md    # per-OS build/release notes; version history
 thirdparty/rexglue-sdk/   # the SDK, vendored (VENDORED.md); its deps are submodules
+thirdparty/plume/, thirdparty/reblue-XenosRecomp/   # Renut's render interface and shader translator (MIT, vendored)
 ```
 
 ## Known issues
 
-None currently known. Two earlier ones, for the record:
+Known limits of v1.5.5:
+
+- **The setup and settings screens have no gamepad navigation yet**: use the
+  mouse and keyboard there. The game itself takes the pad as before.
+  <!-- MERGE-OWNER: delete this bullet if leg/polish (gamepad navigation, font, "Check for updates", shader package version stamp) lands. -->
+- **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path),
+  and Windows-only in this release.
+  <!-- MERGE-OWNER: drop "and Windows-only in this release" if leg/macos lands. -->
+- **The setup screen translates the shaders in one pass**, where
+  `extract_assets.bat` (through `make_shaders.py`) runs two passes around an
+  early-alpha rewrite. A few pixel shaders run slower from the setup screen's
+  package; the picture is the same. Run the batch file with nothing dragged on
+  to get the optimised package.
+- **One unexplained crash on a launcher route.** One of three scripted runs
+  from a console-install source ended in an access violation about 4 s into the
+  game; the re-runs and plain starts on the same data did not. If you see a
+  crash right after the setup screen's Play, please report it with the log
+  ([docs/NOTES_launcher.md](docs/NOTES_launcher.md) has what is known).
+  <!-- MERGE-OWNER: delete this bullet if the launcher-route access violation fix lands. -->
+
+Two earlier recompiler issues, both fixed, for the record:
 
 - **The shell's one inexpressible branch (fixed).** Codegen used to split the
   block at `0x82081778` into its own function, though it is really an interior
@@ -272,7 +327,12 @@ None currently known. Two earlier ones, for the record:
 - [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) — Xbox 360 runtime + recompiler (Xenia-derived)
 - [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) — reference PPC → C++ recompiler
 - [Xenia](https://github.com/xenia-project) — the emulator ReXGlue's runtime is rooted in
-- [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp) — recomp reference project
+- [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp) — recomp reference project; parts of Renut's frame pacing come from it
+- [reNut](https://github.com/masterspike52/reNut) by masterspike52: the Renut renderer itself, reused with its author's permission ([reNut#74](https://github.com/masterspike52/reNut/issues/74))
+- [futari-nx](https://github.com/ChanseyIsTheBest/futari-nx) by ChanseyIsTheBest: the Switch port that taught Renut this game (by way of banjo-nx)
+- [futari-linux](https://github.com/cerroverb/futari-linux) by cerroverb: the Linux port whose Renut is the one vendored here, and its release-shader model
+- [XenosRecomp](https://github.com/hedge-dev/XenosRecomp) by hedge-dev, in reblue's fork as futari-linux carries it: the shader translator
+- [plume](https://github.com/renderbag/plume) by renderbag: the render interface Renut draws with
 
 Also worth a look: [SDOJ-Recomp](https://github.com/eandis/SDOJ-Recomp) — a recomp
 of another CAVE Xbox 360 shooter, DoDonPachi SaiDaiOuJou.

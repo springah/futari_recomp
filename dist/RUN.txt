@@ -66,7 +66,8 @@ DLC (optional)
   and they install automatically on launch. See dlc\README.txt for details.
 
 REQUIREMENTS
-  - Windows 10/11 x64 with a Direct3D 12 GPU
+  - Windows 10/11 x64 with a Direct3D 12 GPU (the default renderer); for
+    Renut, a GPU driver with Vulkan 1.2
   - Microsoft Visual C++ Redistributable (x64):
       https://aka.ms/vs/17/release/vc_redist.x64.exe
 
@@ -118,6 +119,13 @@ STATUS
   Boots to title and full menu; all 8 game modes load and mode-switch. Some
   deeper gameplay paths may still hit rare recompiler edge cases - report any
   crash with its logs\ file.
+  Known limits of this version:
+    - The setup and settings screens have no gamepad navigation yet: use the
+      mouse and keyboard there.
+    - Renut is Vulkan-only (no Direct3D 12 path).
+    - The setup screen translates the shaders in one pass; extract_assets.bat
+      runs two, with an optimisation for a few pixel shaders. The picture is
+      the same either way.
 
 LICENCES
   This build links third-party open-source components (including FFmpeg and
