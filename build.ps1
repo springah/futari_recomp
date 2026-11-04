@@ -15,7 +15,10 @@
       4. builds the ReXGlue CLI (the codegen tool) from the vendored SDK;
       5. extracts your game data into assets\ (and your DLC into dlc\) unless
          assets\ is already populated;
-      6. runs scripts\regen.sh to generate the recompiled C++;
+      6. runs scripts\regen.sh to generate the recompiled C++, then
+         scripts\renut_shader_dump.sh, which dumps the game's own shader
+         containers for the Renut renderer's shader cache (installs the
+         Python xxhash module if it is missing);
       7. configures with the win-amd64-<Config> preset and builds the exe plus
          the 8 module DLLs.
 
@@ -338,6 +341,22 @@ if ($GameSource) {
 Step 'Generating the recompiled C++ (scripts\regen.sh)'
 $env:REXGLUE = 'thirdparty/rexglue-sdk/out/win-amd64/rexglue.exe'
 Invoke-Checked $bash @('--noprofile', '--norc', 'scripts/regen.sh')
+
+# ------------------------------------------------ 6b. Renut shader dump ---
+# cmake/futari_renut_gpu.cmake refuses to configure without out\renut_shader_dump\manifest.csv (the shader
+# containers of default.xex and the eight cores, dumped from the game data by the rexglue CLI + Python). The
+# dump is game data and stays in out\ (ignored). Without this step a fresh clone stopped at configure
+# (found 2026-11-04 in a read-only review; never run on Windows yet, see docs\NOTES_v1.5.5_cut.md).
+Step 'Dumping the game shaders for the Renut renderer (scripts\renut_shader_dump.sh)'
+& $pyExe @($pyPre + @('-c', 'import xxhash')) 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Note 'Python module xxhash is missing; installing it for this user.'
+    Invoke-Checked $pyExe ($pyPre + @('-m', 'pip', 'install', '--user', '--quiet', 'xxhash'))
+}
+$env:PYTHON = $pyExe
+$env:PYTHON_ARGS = ($pyPre -join ' ')
+Invoke-Checked $bash @('--noprofile', '--norc', 'scripts/renut_shader_dump.sh')
+Remove-Item Env:PYTHON, Env:PYTHON_ARGS -ErrorAction SilentlyContinue
 
 # ---------------------------------------------------- 7. configure + build ---
 

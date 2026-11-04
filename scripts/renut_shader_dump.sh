@@ -73,4 +73,6 @@ else
 fi
 
 rm -rf out/renut_shader_dump
-python3 tools/renut/renut_dump_shaders.py
+# PYTHON / PYTHON_ARGS: the interpreter when it is not "python3" on PATH (build.ps1 passes the one it found, e.g.
+# PYTHON="C:/Program Files/Python312/python.exe", or PYTHON=py PYTHON_ARGS=-3).
+"${PYTHON:-python3}" ${PYTHON_ARGS:-} tools/renut/renut_dump_shaders.py
