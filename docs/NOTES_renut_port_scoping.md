@@ -143,7 +143,7 @@ ExternalProject + dxc-bin Windows binaries, absent from the vendored tree) fed b
   module). `scripts/renut_shader_dump.sh` does both steps.
 - The real pipeline runs unchanged from futari-linux: XenosRecomp (XENOS_RECOMP_RENUT, DXIL on) built as an
   ExternalProject with this tree's clang-cl, the early-alpha pass (copied 13, little 11), shader_cache.cpp 262 KB,
-  42 entries, layout 7. dxc-bin's Windows binaries (hedge-dev dxc-bin 737ac9f: dxc.exe, dxcompiler.dll, dxil.dll,
+  42 entries, layout 7. dxc-bin's Windows binaries (renderbag/dxc-bin 737ac9f: dxc.exe, dxcompiler.dll, dxil.dll,
   dxcompiler.lib) copied from projects/_tools/XenosRecomp and git-ignored; a fresh clone needs that copy (README owed).
 - Run: 0 shader misses, no warnings, 60 fps, draws live (19k in a 10 s window at the title). The capture aid
   (`futari_renut_capture_path` / `_after_s`, main.cpp) writes a P6 PPM from `renut::gpu::CaptureFrame`.

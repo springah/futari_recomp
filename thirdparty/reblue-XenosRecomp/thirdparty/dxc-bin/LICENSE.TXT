@@ -1,5 +1,5 @@
 DirectX Shader Compiler (dxcompiler.dll, dxc.exe) - https://github.com/microsoft/DirectXShaderCompiler
-The licence of the binaries in this folder (hedge-dev's dxc-bin ships no licence file; this is DirectXShaderCompiler's
+The licence of the binaries in this folder (renderbag's dxc-bin (https://github.com/renderbag/dxc-bin, XenosRecomp's dxc-bin submodule, commit 737ac9f) ships no licence file; this is DirectXShaderCompiler's
 LICENSE.TXT, its LLVM-derived part, fetched 2026-11-03 for futari_recomp's notices).
 
 ==============================================================================

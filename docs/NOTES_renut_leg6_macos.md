@@ -21,7 +21,7 @@ Only the title screen was seen. Nobody has played a stage on Renut on macOS yet.
 ## DXC decision
 
 No macOS DXC exists anywhere official: Homebrew has no formula (`brew info directx-shader-compiler`: none),
-hedge-dev's dxc-bin (vendored by XenosRecomp) ships Windows binaries only, and the one on this Mac
+renderbag's dxc-bin (XenosRecomp's dxc-bin submodule) ships Windows binaries only, and the one on this Mac
 (GPTK's D3DMetal `libdxcompiler.dylib`) is Apple's and not redistributable. Chosen: **build
 microsoft/DirectXShaderCompiler v1.8.2407 from source** (the release the Windows tree's dxc.exe/dxcompiler.dll
 are): `scripts/build_dxc_mac.sh`, ~10 min on 6 cores, AppleClang, two patches to the clone only (CMake 4 refuses
