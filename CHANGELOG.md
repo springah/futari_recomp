@@ -18,8 +18,6 @@ and what they turned up is folded in below. The default renderer is unchanged,
 there are no game-logic changes, and with the new renderer linked the shipped
 binaries are now distributed under the GPL-3.0 (last bullet).
 
-<!-- MERGE-OWNER: if leg/macos lands, add a bullet here for the macOS Renut path (Vulkan over MoltenVK through plume; how to turn it on; whether the macOS setup screen now has the shader step) and change "Windows-only" in the Renut bullet below. If it does not land, delete this comment and keep "Windows-only". -->
-
 - **A second renderer, Renut, opt-in.** The default renderer emulates the Xbox
   360's GPU, which is faithful but heavy. Renut instead draws the game's own
   Direct3D calls directly through Vulkan, with the game's own shaders: lighter on
@@ -32,8 +30,16 @@ binaries are now distributed under the GPL-3.0 (last bullet).
   `futari_renderer = renut` at the top of `futari.ini` (above the first
   `[section]`), or with `--futari_renderer=renut` on the command line; delete the
   line to go back. It needs a Vulkan 1.2 driver, and it is Vulkan-only: its
-  Direct3D 12 backend would have no shaders to draw with. Windows-only in this
-  release.
+  Direct3D 12 backend would have no shaders to draw with. On the Mac it draws
+  through MoltenVK, Vulkan over Metal, like the default renderer: the same
+  switch turns it on, and the macOS setup screen has the shader step too, with
+  the DirectX Shader Compiler built from source and bundled in the app
+  (`scripts/build_dxc_mac.sh`; no macOS binary of it exists to download).
+  Apple GPUs have no geometry shaders, so Renut's rectangle lists and point
+  sprites take a fallback path there, and it renders at 1x (the window's
+  points, upscaled by macOS) as the default renderer does. On the Mac this is
+  verified to the title screen at 60 fps; a stage on Renut on macOS has not
+  been played yet.
 - **Renut's shaders are made from your own game, on your PC.** The game's
   shaders are game data, so no zip carries them: the public build ships the
   renderer's shader table only, and the setup screen translates the shaders out

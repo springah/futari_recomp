@@ -98,8 +98,12 @@ and futari-linux's measurements on a Steam Deck
   the translator built into `futari.exe`. Redo it after every update (F2,
   "Redo the shaders"); without the file Renut shows a black game and the log
   says why. The default renderer does not need it.
-- Windows only in this release.
-  <!-- MERGE-OWNER: if leg/macos lands, replace this bullet with the macOS Renut status (MoltenVK, how to turn it on, whether the macOS setup screen has the shader step). -->
+- On macOS, Renut draws through MoltenVK (Vulkan over Metal), turned on the same
+  way; the setup screen there has the shader step as well (the DirectX Shader
+  Compiler ships inside the app, built from source). It renders at the window's
+  1x size like the default renderer, and Apple GPUs have no geometry shaders,
+  so rectangle lists take a fallback path. Verified to the title screen; a
+  stage on Renut on macOS is still unplayed.
 
 ## Game data
 
@@ -286,9 +290,9 @@ thirdparty/plume/, thirdparty/reblue-XenosRecomp/   # Renut's render interface a
 
 Known limits of v1.5.5:
 
-- **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path),
-  and Windows-only in this release.
-  <!-- MERGE-OWNER: drop "and Windows-only in this release" if leg/macos lands. -->
+- **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path).
+  On macOS it is verified to the title screen only: nobody has played a stage
+  on Renut through MoltenVK yet.
 - **The setup screen translates the shaders in one pass**, where
   `extract_assets.bat` (through `make_shaders.py`) runs two passes around an
   early-alpha rewrite. A few pixel shaders run slower from the setup screen's

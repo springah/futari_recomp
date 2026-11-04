@@ -74,8 +74,10 @@ REQUIREMENTS
 macOS
   The sections above are written for the Windows zip; the macOS bundle works
   the same way with these differences:
-  - Renut is Windows-only for now; the macOS bundle uses the default renderer,
-    and the setup screen has no shader step.
+  - Renut works on the Mac too (Vulkan over MoltenVK, the same way the default
+    renderer draws), turned on the same way, and the setup screen makes its
+    shaders here as well. Its macOS build is tested to the title screen only;
+    if a stage looks wrong on Renut, switch back (F2) and report it with the log.
   - The setup screen is the same (it opens when the app finds no game data).
     There is no extract_assets.bat; the terminal route is
       python3 extract_iso.py "<your .iso or 435A07D7 folder>" --out assets --dlc-out dlc
