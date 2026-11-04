@@ -120,8 +120,6 @@ STATUS
   deeper gameplay paths may still hit rare recompiler edge cases - report any
   crash with its logs\ file.
   Known limits of this version:
-    - The setup and settings screens have no gamepad navigation yet: use the
-      mouse and keyboard there.
     - Renut is Vulkan-only (no Direct3D 12 path).
     - The setup screen translates the shaders in one pass; extract_assets.bat
       runs two, with an optimisation for a few pixel shaders. The picture is

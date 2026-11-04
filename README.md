@@ -286,9 +286,6 @@ thirdparty/plume/, thirdparty/reblue-XenosRecomp/   # Renut's render interface a
 
 Known limits of v1.5.5:
 
-- **The setup and settings screens have no gamepad navigation yet**: use the
-  mouse and keyboard there. The game itself takes the pad as before.
-  <!-- MERGE-OWNER: delete this bullet if leg/polish (gamepad navigation, font, "Check for updates", shader package version stamp) lands. -->
 - **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path),
   and Windows-only in this release.
   <!-- MERGE-OWNER: drop "and Windows-only in this release" if leg/macos lands. -->
@@ -302,7 +299,6 @@ Known limits of v1.5.5:
   game; the re-runs and plain starts on the same data did not. If you see a
   crash right after the setup screen's Play, please report it with the log
   ([docs/NOTES_launcher.md](docs/NOTES_launcher.md) has what is known).
-  <!-- MERGE-OWNER: delete this bullet if the launcher-route access violation fix lands and is shown to be the cause (launcher's bd3f869, the guest clock reset, is a candidate only). -->
 
 Two earlier recompiler issues, both fixed, for the record:
 

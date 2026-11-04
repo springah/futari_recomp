@@ -105,12 +105,39 @@ binaries are now distributed under the GPL-3.0 (last bullet).
   Shader Compiler), and points at this repository at the v1.5.5 tag as the
   complete corresponding source.
 
-<!-- MERGE-OWNER: if leg/polish lands, add one bullet for it: gamepad navigation of the setup and settings screens, the new font, "Check for updates" (against GitHub releases), and the shader package version stamp (a stale vulkan_spirv.bin after an update is now detected and named instead of showing only as shader misses in the log). Then drop "no gamepad navigation" from the known limits below. If it does not land, delete this comment. -->
+- **The screens take a pad, and look like part of the game.** The setup and
+  settings screens navigate with a controller (d-pad or stick to move, A to
+  choose, B to go back) as well as the keyboard and mouse, and each page starts
+  with the obvious control focused. While a screen is up the game sees nothing
+  from the pad, and a button held when it opens is ignored until released, so
+  pressing Play never fires into the title. The screens draw in Roboto instead
+  of the SDK's scaled 10 px bitmap font (Dear ImGui's own copy, Latin subset,
+  Apache-2.0, `dist/Roboto.LICENSE`). The settings page has a "Check for
+  updates" button, which asks GitHub for the latest release only when pressed
+  (one request, a plain `futari_recomp/<version>` User-Agent, nothing else
+  sent) and offers to open the release page; a test build counts as older
+  than the release it leads to. And `vulkan_spirv.bin` now carries a stamp,
+  `vulkan_spirv.stamp` beside it, naming the build that made it: a package
+  from another build or a different size is called stale by name in the log
+  and on the settings page, and the setup flow redoes it by itself, where
+  before a stale package showed only as shader misses in the log.
+  `make_shaders.py` writes the stamp too (through a new `--futari_renut_stamp`
+  tool mode of the exe), so the two-pass package from `extract_assets.bat` is
+  not mistaken for a stale one.
 
-<!-- MERGE-OWNER: if the launcher-route access violation fix lands, add a "Fix:" bullet (the crash: one of three scripted runs from a console-install source died about 4 s into the game, exit 139, after the long overlay-only setup screen; see docs/NOTES_launcher.md "Not done / to watch") with its cause, and drop the last known limit below. Note: `launcher` already carries bd3f869 ("the guest clock starts at runtime setup, not at process start", SDK + main.cpp), written as a candidate for this crash but explicitly "not proven to be the crash"; if it ships without proof, describe it as a parity fix (a setup screen no longer hands the game a clock that is already tens of seconds into its boot) and keep the known limit. If nothing lands, delete this comment. -->
+- **Fix: the game's clock starts when the game does.** The guest tick count
+  took its host baseline at process start, so the first guest clock query
+  absorbed every second spent in the setup screen, scaled to the 50 MHz
+  timebase: a 25 s hash check handed the game a clock already 25 s into its
+  boot, and the timebase's low 32 bits wrap every 86 s. It now restarts when
+  the runtime is set up, so a launcher start and a plain start give the game
+  the same clock. This was the one route-length-dependent difference a code
+  read found while chasing the one access violation on the console-install
+  route; it is a parity fix, not a proven cause, and that limit stays listed.
+  The log also prints the host uptime at Play, so a future crash log shows how
+  long the setup phase was.
 
-Known limits in this release: the setup and settings screens have no gamepad
-navigation yet (mouse and keyboard); Renut is Vulkan-only; the setup screen's
+Known limits in this release: Renut is Vulkan-only; the setup screen's
 shader step is one translation pass where `extract_assets.bat` runs two around
 an early-alpha rewrite, so a few pixel shaders run slower that way, with the
 same picture; and one scripted launcher run from a console-install source ended
