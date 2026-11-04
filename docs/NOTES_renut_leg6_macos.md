@@ -155,7 +155,8 @@ Approaches 2 (vertex pulling in XenosRecomp) and 3 (CPU expansion) were not need
 subsystem; the driver opens it through its normal `SDL_EVENT_GAMEPAD_ADDED` hotplug path ("SDL OnControllerDeviceAdded:
 \"futari_input_script\" ... Added at index 0"). Each press is logged. Buttons: a b x y start back up down left right lb rb;
 held 100 ms by default. The exe imports SDL from librexruntime.dylib, so it is the same SDL instance as the driver's.
-Beware zsh: `"$t:a"` is a path modifier, write `${t}:a`.
+Beware zsh: `"$t:a"` is a path modifier, write `${t}:a`. Never pass it with an empty value (`--futari_input_script=`): the SDK's command line then takes the next argument as
+its value (seen: it swallowed `--user_data_root=...`, so the run fell back to the default save folder); leave the flag out.
 
 ### Verification
 
@@ -186,11 +187,29 @@ showed no extra first-run prompt on this route. The run is killed before the gam
 The `futari_024.log` "Renut shaders are STALE: ... no vulkan_spirv.stamp" warning is the out/run test dir's (its package
 was copied without the stamp before this leg); all 42 shaders load.
 
+### Point sprites by tessellation (c6eef37, 0275a48)
+
+Same pattern for `point_sprite_gs.hlsl`: `point_sprite_hs.hlsl` (patch of 1 control point, quad domain at level 1,
+tess factors 0 for a killed vertex = patch discarded, as the GS emits nothing) and `point_sprite_ds.hlsl` (the GS's size
+rule and corners: domain (u, v) -> corner (2u-1, 1-2v), point coordinate (u, v), same `triangle_cw` winding argument as
+above). The DS reads SharedConstants (point state at 1312, viewport at 1328) the GS's way, through the draw's push
+constants (buffer device address); plume gained `RenderShaderStageFlag::TESS_CONTROL/TESS_EVALUATION` (not `DOMAIN`:
+macOS math.h defines it) mapped to the Vulkan stage bits in push-constant ranges, and Renut's draw layout adds
+TESS_EVALUATION to its push range **only** when the device has no GS but has tessellation, so the Windows layout is
+byte-identical. Startup line now:
+`No geometry shader support; rectangle lists are drawn by tessellation (rectangle_list_hs/ds), point sprites by tessellation (point_sprite_hs/ds)`.
+The first point-list draw of a run is logged (`First point-sprite draw: <form>`).
+
+**Futari does not seem to draw point sprites.** Static: the 42 translated shaders (XenosRecomp's HLSL dump of
+`out/renut_shader_dump`) have no vertex shader writing a point size (`oPts` is only the zero-initialised default in all
+18) and no pixel shader reading the point coordinate. Runtime: a fresh-save Renut run through the Now Loading plate
+(ring particles visible, `out/shots/p1_*`) into stage 1 logged no point-list draw at all; the ring particles are ordinary
+geometry (they were already correct). So the point-sprite pipelines were never built in a run; the shaders compile
+(SPIR-V and DXIL) and the change is inert until a point list arrives.
+
 ### Left
 
-- **Point sprites** still draw as single pixels without a GS (`point_sprite_gs.hlsl`). The same tessellation pattern
-  works (patch of 1, quad domain, corners from the point size), but point_sprite_gs reads SharedConstants (point size /
-  viewport) so the DS would need that descriptor; not done. Nothing obviously missing in stage 1, but not audited.
+- Point-sprite tessellation is unexercised at runtime (no content draws point lists, see above).
 - **Cost**: MoltenVK runs tessellated draws as compute + render; stage 1 measured GPU 3.5-14 ms a frame, two 10 s windows
   at 58.0-58.6 fps when the screen was busy (render thread up to 13 ms). Later, denser stages are untested.
 - `FUTARI_PREBUILT_GPU_DIR` (the futari-linux prebuilt-header route) has no prebuilt `rectangle_list_hs/ds` headers.
