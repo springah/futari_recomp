@@ -286,10 +286,10 @@ $dxcBin = Join-Path $Root 'thirdparty\reblue-XenosRecomp\thirdparty\dxc-bin'
 $dxcMissing = @(@('bin\x64\dxc.exe', 'bin\x64\dxcompiler.dll', 'lib\x64\dxcompiler.lib') |
                Where-Object { -not (Test-Path (Join-Path $dxcBin $_)) })
 if ($dxcMissing.Count -gt 0) {
-    # Fetch them from hedge-dev's dxc-bin at the commit XenosRecomp pins (a git repository of the binaries), the
+    # Fetch them from renderbag's dxc-bin (XenosRecomp's submodule) at the commit XenosRecomp pins (a git repository of the binaries), the
     # same source the other third-party trees come from; -NoInstall only says what to copy by hand.
-    $dxcRepo = 'https://github.com/hedge-dev/dxc-bin'
-    $dxcCommit = '737ac9f'
+    $dxcRepo = 'https://github.com/renderbag/dxc-bin'
+    $dxcCommit = '737ac9f51c3d06f0cd1ee7e14dc065bafd52310d'
     if ($NoInstall) {
         Fail ("The DirectX Shader Compiler binaries are missing under $dxcBin ($($dxcMissing -join ', ')) and " +
               "-NoInstall was given. Copy bin\x64 (dxc.exe, dxcompiler.dll, dxil.dll) and lib\x64 (dxcompiler.lib) " +

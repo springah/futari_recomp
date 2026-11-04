@@ -83,7 +83,7 @@ if(CMAKE_HOST_WIN32)
     endif()
     if(NOT FUTARI_DXC)
         message(FATAL_ERROR "No SPIR-V-capable dxc.exe for Renut's host shaders: run build.ps1 (it fetches "
-                            "hedge-dev/dxc-bin into thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin), copy that "
+                            "renderbag/dxc-bin into thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin), copy that "
                             "repository's bin/x64 and lib/x64 there yourself, or configure with "
                             "-DFUTARI_DXC=<path to a dxc.exe with SPIR-V CodeGen, e.g. the Vulkan SDK's>. The "
                             "Windows SDK's dxc.exe cannot compile SPIR-V.")

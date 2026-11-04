@@ -26,6 +26,6 @@ __pycache__/
 # Renut leg 2: XenosRecomp builds zstd with ZSTD_LEGACY_SUPPORT=ON (the vendored tree must stay complete)
 !thirdparty/reblue-XenosRecomp/thirdparty/zstd/lib/legacy/
 
-# dxc-bin binaries (hedge-dev dxc-bin 737ac9f; copy them in from a XenosRecomp checkout, never commit them)
+# dxc-bin binaries (renderbag/dxc-bin 737ac9f, XenosRecomp's submodule; copy them in from a XenosRecomp checkout, never commit them)
 thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/bin/
 thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/lib/
