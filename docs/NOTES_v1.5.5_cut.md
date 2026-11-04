@@ -19,6 +19,33 @@ zip has passed step 5.
 - Placeholders for the legs in flight: `git grep -n MERGE-OWNER` lists them (CHANGELOG.md three, README.md four,
   PORTS.md one). The changelog date is `2026-11-DD`.
 
+## 0b. State on 2026-11-04 evening (merge owner)
+
+Everything up to the tag is done; the tag and the GitHub Release are the user's call.
+
+- `launcher` = **7b7f237**, pushed. Every leg merged: release docs, launcher polish (gamepad navigation, Roboto,
+  "Check for updates", shader stamp), macOS (Cocoa picker, Renut over MoltenVK, source-built DXC bundled), rectangle
+  lists and point sprites by tessellation on macOS, the fresh-process start after a console-install extraction
+  (ba1a9f0, 10/10 on iacon), the guest clock reset, build.ps1's shader dump and dxc-bin fetch (renderbag/dxc-bin), the
+  `--futari_renut_stamp` tool mode, the stage script's running-game refusal. Placeholders resolved; the changelog date
+  is still `2026-11-DD`: fill it at the tag.
+- Windows zip, from 7b7f237, every refusal and boot check passed, file list vs v1.5.4 = +`make_shaders.py` and the
+  four `renut_tools/` files: `C:\Users\shant\Desktop\projects\futari_recomp\out\Mushihimesama-Futari-PC-v1.5.5.zip`,
+  36,761,330 bytes, sha256 `af638ad234936e17665be19e37aad560b27503b9d1a5bb5c097333159b3be7ff`.
+- macOS zip, from 7b7f237 (release-shaders tree, seal OK, "no game shaders built in" boot check passed, file list vs
+  v1.5.4 = +`LICENSE-DirectXShaderCompiler.txt`, `renut_tools/shader_common.h`, `lib/libdxcompiler.dylib`):
+  `~/Desktop/projects/_stage/futari-v1.5.5-pub/Mushihimesama-Futari-macOS-v1.5.5.zip`, 43,373,062 bytes, sha256
+  `4cbed461d0e7a0b35eeb7d627008af22019467cedd70af0e508b51e16c692574`. The release notes draft with both checksums
+  is beside it (`release_notes_v1.5.5.md`).
+- Hands done: macOS setup/picker/Cancel/Settings/Check-for-updates/Quit by the merge owner; Black Label on Renut on
+  the Mac by the user ("seemed good"; 41-55 fps in heavy scenes, documented). Hands NOT done: the Windows zip by a
+  person (unzip, double-click, setup, F2, Renut stage: `docs/NOTES_renut_leg5_hands.md`), F2/typed path/gamepad on
+  the launcher pages, a stage on Renut on macOS beyond the user's Black Label run.
+- Follow-ups, not in this release: vertex pulling for rectangle lists on macOS (removes the tessellation cost,
+  4-7 days, `docs/NOTES_renut_leg6_macos.md`); the console-install crash's root cause (guest `sub_821911D0`, only
+  after in-process GoD/SVOD extraction); `MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS=0` for the render thread (needs a
+  soak); the launcher's F2 settings window's empty space; `build_app.sh` does not copy `gamecontrollerdb.txt`.
+
 ## 1. Merge the legs into `launcher` (Mac, main clone)
 
 ```fish
