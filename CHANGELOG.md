@@ -4,207 +4,140 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.5 — 2026-11-DD (Windows, macOS)
 
-v1.5.5-rc1 (2026-11-03): a Windows pre-release of the state below, for
-testers of the Renut renderer (opt-in; the default renderer is unchanged).
-v1.5.5-rc2 (2026-11-03): the same with the shader translator built into the
-exe and the extractor fixes under "After rc1".
+A second renderer, opt-in, and a setup screen inside the exe that replaces the
+batch file as the way in. The renderer is a response to the first gameplay
+report from a player, that the game felt slower than on a 360 (#8), and to
+futari-linux's Steam Deck measurements of the same renderer against this
+port's emulated GPU (#6).
+The setup screen answers the first test build: its separate shader translator
+was quarantined by Windows Defender, so nothing ships beside `futari.exe` any
+more. Three Windows test builds went out first (v1.5.5-rc1 to rc3, 2026-11-03)
+and what they turned up is folded in below. The default renderer is unchanged,
+there are no game-logic changes, and with the new renderer linked the shipped
+binaries are now distributed under the GPL-3.0 (last bullet).
 
-After rc2 (2026-11-03), the launcher (`src/launcher/`, `docs/NOTES_launcher.md`):
+<!-- MERGE-OWNER: if leg/macos lands, add a bullet here for the macOS Renut path (Vulkan over MoltenVK through plume; how to turn it on; whether the macOS setup screen now has the shader step) and change "Windows-only" in the Renut bullet below. If it does not land, delete this comment and keep "Windows-only". -->
 
-- **A setup screen inside `futari.exe`.** With no `assets/default.xex` the exe
-  opens a screen instead of the game (an ImGui dialog from the SDK's
-  `OnFinalizePaths` wizard hook): the player picks their disc `.iso`, their
-  console install folder or an already-extracted game folder with the OS's own
-  file dialog (or types the path), the game data is extracted into `assets/`
-  and the DLC into `dlc/`, the Renut shaders are prepared, and Play starts the
-  game. No Python and no batch file on the player's PC: the extractor is a C++
-  port of `scripts/extract_iso.py` (`game_source.cpp`: XDVDFS, the console
-  install's SHA-1 hash tree, the DLC packages, the loose folder; the same
-  refusals), and the shaders come from the exe's own tool modes run as child
-  processes (`shader_pipeline.cpp`, one translation pass: the early-alpha
-  rewrite stays with `make_shaders.py`, it is an optimisation, not a
-  correctness pass). `extract_assets.bat` and the scripts stay as the
-  command-line route.
-- **A settings screen (F2)**, also reachable from setup: renderer (default /
-  Renut), fullscreen, vsync, window size, the DLC found in `dlc/`, the shader
-  package with a "Redo the shaders" button; Save writes `futari.ini` (the
-  display lines through the existing merge, and the top-level
-  `futari_renderer = renut` line itself).
-- Scripted use: `--futari_setup` opens the setup screen with game data in
-  place (`--futari_setup_settings` the settings page), and
-  `--futari_setup_source=<path>` extracts that source without a click and
-  plays, which is how the routes are tested.
-- Not done: macOS has the file picker (`file_picker_mac.mm`, NSOpenPanel) but
-  no build of it yet (leg 6); gamepad navigation of the screens; an update
-  check against GitHub releases.
-
-After rc1 (2026-11-03), from a scripted player-path test of the rc1 zip:
-
-- **The shader translator is built into `futari.exe`** (`--futari_renut_translate`,
-  `src/renut_shim/renut_shader_translate_tool.cpp`; XenosRecomp compiled in with
-  `FUTARI_RENUT_IN_EXE`, the DirectX Shader Compiler loaded from
-  `renut_tools/dxcompiler.dll` only when the tool runs). No `XenosRecomp.exe`
-  ships any more: Windows Defender's cloud heuristics quarantined rc1's copy as
-  `Trojan:Win32/Bearfoos.B!ml` on a stock PC, so `make_shaders.py` could never
-  run and Renut stayed black for every player. `make_shaders.py` now also says
-  so in plain words when Windows refuses to start a tool (WinError 225).
-- **`extract_assets.bat` accepts an already-extracted game folder** (one with
-  `default.xex` and `media\` at its top): it is copied into `assets\` and its
-  DLC installed. Before, such a folder installed the DLC only, and the batch file
-  still printed `[DONE] ... double-click futari.exe` with no game data. A DLC-only
-  source now exits 4 with its own message; nothing dragged on with `assets\`
-  already in place (if no .iso is in the folder) runs only the shader
-  translation (the upgrade route). A failed shader translation now exits 3 and
-  the batch file says the game data is fine and only Renut lacks its shaders,
-  instead of "[FAILED] Extraction did not complete".
-- `RUN.txt`: the loose-folder route, the upgrade step (copy `futari.ini` too),
-  F11 for fullscreen (Alt+Enter presses START), and where DUMPING.md is: the
-  batch file and the extractor's messages pointed at a file that is not in the
-  zip, and now give its GitHub URL. DUMPING.md gained Route C, the
-  already-extracted folder.
-
-Groundwork for the native renderer (issue #8, `docs/NOTES_renut_port_scoping.md`),
-leg 1 of 6: the SDK additions the Renut renderer compiles against, ported from
-cerroverb/futari-linux's SDK fork onto the vendored v0.9.3.1. No renderer code
-yet; the xenos path is unchanged in behaviour.
-
-- **Frame latency probe** (`rex/frame_latency.h`): input read, guest swap,
-  present, GPU done and display vsync timestamps, a one-line report and an
-  event trace. `VdSwap` now feeds its swap counter.
-- **`GuestSwapCount` / `vblank_per_swap`** in the kernel video exports: a
-  swap counter any renderer can follow, and a deterministic one-vblank-per-swap
-  mode (`vblank_per_swap`, `vblank_per_swap_timeout_ms`, `vblank_per_swap_min_us`)
-  for lockstep comparisons between renderers. Off by default.
-- **Late input read** (`input_frame_read_delay_us`, default 0, and
-  `rex::input::SetFrameReadDelayFunction`): the first controller read after each
-  swap can be delayed, so a game that polls right after its swap samples closer
-  to the frame that shows it. No effect unless set.
-- `rex::memory::MarkStoreCardsAt` no-op, for Renut's draw path.
-
-Leg 2 of 6: the renderer itself is in the tree and compiles into the Windows
-build, but nothing selects it yet (its hooks forward to the recompiled code
-unless `futari_renderer = renut`, which leg 3 wires up). The xenos path is the
-default and boots unchanged.
-
-- **Renut vendored** at `src/renut_engine/` (105 files, GPL-3.0, see
-  `src/renut_engine/PROVENANCE.md` and NOTICE.md), with plume (Vulkan + D3D12
-  + Metal, MIT) and hedge-dev's XenosRecomp (MIT) under `thirdparty/`. A build
-  that includes the renderer (`FUTARI_RENUT_RENDERER`, on by default) is a
-  combined work under the GPL-3.0; THIRD-PARTY-NOTICES.txt carries the notice
-  and the seven new licence texts.
-- **`src/renut_shim/`**: futari_recomp's replacements for the six futari-nx
-  headers the renderer includes, plus the six `futari_vblank_*` /
-  `futari_late_input` cvars it expects. All banjo-nx "enhancements" are off;
-  Renut's own paths are complete without them.
-- **Build**: `cmake/futari_renut_gpu.cmake` (an OBJECT library, so the hooks
-  can override the generated weak symbols), the SDK's ImGui compiled a second
-  time for the overlay, 12 host shaders built by dxc (`FUTARI_DXC`, found from
-  XenosRecomp's dxc-bin or the Windows SDK), and
-  `FUTARI_RENUT_STUB_SHADER_CACHE` (on): an empty shader table so the tree
-  links without a game-shader dump. The real dump + translate pipeline is
-  leg 4. `FUTARI_RENUT_CORE_HOOKS` (off) is leg 3's per-core forwarding.
-- Analysis of the hook mechanics, the per-core forwarding and the boot surface
-  main.cpp needs: `docs/NOTES_renut_hooks_analysis.md`.
-
-Leg 3 of 6: **Renut boots.** `futari_renderer = renut` (an init-only cvar: the
-managed block of futari.ini, or `--futari_renderer=renut` on the command line)
-selects it; `renut_gpu_backend` picks `vulkan` or `d3d12` (default). First boot
-11-03 on Vulkan / RTX 3080: host device, guest Direct3D device, render thread
-and the display-locked vblank all come up, the game runs at 60 fps, and every
-draw is skipped because the shader cache is still the empty stub, so the window
-stays black. Leg 4 fills the cache. The default (xenos) path boots unchanged.
-
-- `tools/renut/renut_futari_hooks.py` runs in this tree (paths; a tree without
-  futari-nx's core natives) and regenerated `futari_renut_hooks.h` /
-  `futari_renut_core_hooks.cpp` against `generated/`: 70 default.xex hook
-  sites (the 7 futari-nx had yielded to its own natives are real here) and 45
-  per core.
-- `FUTARI_RENUT_CORE_HOOKS` is on: each core DLL forwards its own copies of the
-  Direct3D functions to the exe's renderer while Renut is active.
-- main.cpp: the SDK's detached-mode boot surface (OnPreSetup clears the GPU
-  plugin, OnCreateImmediateDrawer, OnFinalizePaths starts the renderer,
-  OnPostSetup starts the vblank thread, resize and shutdown), all gated on the
-  cvar.
-- Shaders the cache lacks are captured at run time to `shader_capture/` next to
-  the exe (`vs_<hash>.bin` / `ps_<hash>.bin`, one warning each): the first boot
-  wrote 38, which is leg 4's input.
-
-Leg 4 of 6: **Renut draws the game.** The shader cache is real: the game's 42
-shaders (24 pixel, 18 vertex; 22 + 22 in default.xex and 2 + 2 in each core,
-76 occurrences) translated by XenosRecomp to DXIL and SPIR-V and compiled into
-the exe. First picture 11-03: the title screen, Vulkan, from the renderer's own
-present.
-
-- `scripts/renut_shader_dump.sh`: the dump the real pipeline needs. The codegen
-  CLI gained futari-linux's `REXGLUE_DUMP_IMAGE` aid (writes the decrypted,
-  decompressed image of each module), the script runs it per module into a
-  scratch folder, then `tools/renut/renut_dump_shaders.py` lifts the shader
-  containers out of the nine images into `out/renut_shader_dump/`. Game data:
-  never committed. The build adds any run-time capture to it.
-- `FUTARI_RENUT_STUB_SHADER_CACHE` now defaults OFF: a configure without the
-  dump stops with the script's name. The real pipeline builds XenosRecomp as an
-  ExternalProject with this tree's clang and needs the dxc-bin Windows binaries
-  (dxc.exe, dxcompiler.dll, dxil.dll, dxcompiler.lib) under
-  `thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/`, which are not in the
-  repository (ignored; copy them from a XenosRecomp checkout).
-- Dev aid: `--futari_renut_capture_path=<file.ppm>` with
-  `--futari_renut_capture_after_s=<n>` writes one presented frame, for the
-  gates.
-
-Leg 4b: **the release route.** The leg-4 build compiles the translated game
-shaders into the exe, which is game data the public zips must not carry. The
-release build (`-DFUTARI_RENUT_RELEASE_SHADERS=ON`, futari-linux's route)
-ships the shader *table* only, and the player's extractor translates their own
-shaders on their machine. Verified 11-03: the release exe's dump is byte-identical
-to the build's, the translation takes 3 s, the title draws from the package with
-no misses, and without the package Renut logs what to do and draws nothing.
-
-- **`renut_tools/` ships in the zip**: XenosRecomp built SPIR-V-only (no
-  dxil.dll; rc1 only, from rc2 the translator is in futari.exe), dxcompiler.dll,
-  shader_common.h and the early-alpha pass. The
-  `futari_renut_tools` target stages it; the DXC licence (NCSA) joined
-  THIRD-PARTY-NOTICES.txt.
-- **`futari.exe --futari_renut_dump_shaders=<dir>`**: the exe loads its own
-  executables as it would to run, writes their 42 shader containers and exits.
-  The player never needs the codegen CLI.
-- **`make_shaders.py`** (ships beside the exe): dump, XenosRecomp twice around
-  the early-alpha pass, and XenosRecomp's new `XENOS_RECOMP_SPIRV_PACKAGE`
-  writes `vulkan_spirv.bin` (the renderer's BVKS package) directly. The work
-  folder, game data, is deleted. `extract_assets.bat` runs it at the end of an
-  extraction when `futari.exe` and `renut_tools/` are beside it; run it again
-  by hand after updating the port.
-- `renut_gpu_backend` defaults to Vulkan: the package is SPIR-V only, so the
-  D3D12 backend would have nothing to draw with.
-- `scripts/stage_win_zip.sh <version>`: the public Windows zip from a clean
-  clone, with the shipping checks (release table, no game data, boots on both
-  renderers).
-- **Fix (leg 5): the default renderer crashed a few seconds after boot** in
-  every Renut-era build (legs 2 to 4b), on the title hint dialog. Renut's
-  overlay compiles its own Dear ImGui into the exe, and `main.cpp`'s dialogs
-  had linked to that copy instead of the SDK's, whose context they run in.
-  The copy now lives in its own namespace (`ImGuiRenut`), so the SDK's is the
-  only `ImGui::` in the link. The crash leaves a log identical to a healthy
-  run's, which is why "boots unchanged" held through three legs.
-
-Two small follow-ups to the v1.5.4 vsync fix. SDK change in the vendored tree
-for the log line, a save-path change in `main.cpp`, no codegen regen needed.
-
+- **A second renderer, Renut, opt-in.** The default renderer emulates the Xbox
+  360's GPU, which is faithful but heavy. Renut instead draws the game's own
+  Direct3D calls directly through Vulkan, with the game's own shaders: lighter on
+  the CPU and with less input lag. It is masterspike52's
+  [reNut](https://github.com/masterspike52/reNut), as ChanseyIsTheBest's
+  [futari-nx](https://github.com/ChanseyIsTheBest/futari-nx) taught it this game
+  and as cerroverb's [futari-linux](https://github.com/cerroverb/futari-linux)
+  carries it; futari-linux's copy is the one vendored here, in
+  `src/renut_engine/`. Turn it on in the F2 settings screen, or with
+  `futari_renderer = renut` at the top of `futari.ini` (above the first
+  `[section]`), or with `--futari_renderer=renut` on the command line; delete the
+  line to go back. It needs a Vulkan 1.2 driver, and it is Vulkan-only: its
+  Direct3D 12 backend would have no shaders to draw with. Windows-only in this
+  release.
+- **Renut's shaders are made from your own game, on your PC.** The game's
+  shaders are game data, so no zip carries them: the public build ships the
+  renderer's shader table only, and the setup screen translates the shaders out
+  of your own executables into `vulkan_spirv.bin` beside the exe, in a few
+  seconds. The translator (XenosRecomp) is built into `futari.exe` and loads the
+  DirectX Shader Compiler from `renut_tools\dxcompiler.dll` only while it runs.
+  The file must match the build, so after every update press F2 and "Redo the
+  shaders". Without the file Renut shows a black game and says why in the log;
+  the default renderer does not need it.
+- **A setup screen inside `futari.exe`.** rc1 shipped the translator as its own
+  `XenosRecomp.exe`, and on a stock Windows PC Defender quarantined it as
+  `Trojan:Win32/Bearfoos.B!ml` (a false positive), so Renut stayed black for
+  every rc1 tester; and the batch-file route always needed Python. Now: unzip,
+  double-click `futari.exe`, and with no game data in place it opens a screen
+  instead of the game. Pick your disc `.iso`, the install folder copied off your
+  own console, or an already-extracted game folder, with the normal Windows file
+  dialog or by typing the path; the game data goes into `assets\`, your DLC into
+  `dlc\`, the shaders are prepared, and Play starts the game. No Python, no batch
+  file, and nothing ships beside `futari.exe` that an antivirus can judge on its
+  own (`renut_tools\` holds the compiler DLL, a shader header and two Python
+  scripts). The extractor is a C++ port of `extract_iso.py` with the same checks
+  and refusals: a console install is verified against its own hash tree, a
+  folder holding only DLC or a file that is not a disc image is refused with a
+  message saying so. `--futari_setup` opens the screen with game data already in
+  place, and `--futari_setup_source=<path>` extracts that source and plays
+  without a click.
+- **A settings screen on F2**, in the game or from the setup screen: renderer
+  (default or Renut), fullscreen, vsync, window size, the DLC found in `dlc\`,
+  and the shader package with its "Redo the shaders" button. Save writes
+  `futari.ini`, including the `futari_renderer = renut` line, so turning Renut
+  on needs no hand-editing. The renderer and window size apply at the next
+  start.
+- **`extract_assets.bat` stays as the command-line route, and is more
+  forgiving.** It now ends by translating the shaders (with one more
+  optimisation pass than the setup screen; the picture is the same), accepts an
+  already-extracted game folder (before, such a folder installed only its DLC
+  and the batch file still said `[DONE]`), says plainly when a source holds DLC
+  and no game, and with nothing dragged on and `assets\` in place it only redoes
+  the shaders. A failed shader step no longer reads as a failed extraction: the
+  game data is fine and only Renut lacks its shaders.
 - **A saved VSync-off setting no longer sticks when `vsync = true` is edited
   back in.** The F4 VSync checkbox sets both `vsync` and `present_vsync`, and
   "Save to config" wrote the second into the managed block of `futari.ini` as
-  well. The managed block is read last, so after saving with VSync off and
-  later hand-editing `vsync = true` under `[Display]`, the game paced at 60 but
-  the window still presented immediately and tore. `present_vsync` is now
-  written only when it deliberately differs from `vsync` (the variable refresh
-  rate case). An existing `present_vsync = false` line in the managed block
-  keeps working; delete it, or save once from F4, to follow `vsync` again.
+  well. The managed block is read last, so after saving with VSync off and later
+  hand-editing `vsync = true` under `[Display]`, the game paced at 60 but the
+  window still presented immediately and tore. `present_vsync` is now written
+  only when it deliberately differs from `vsync` (the variable refresh rate
+  case). An existing `present_vsync = false` line in the managed block keeps
+  working; delete it, or save once from F4, to follow `vsync` again.
 - **The log shows the Direct3D 12 present path.** One line when the swap chain
   is created (size, buffer count, whether tearing is supported) and one whenever
   the present path changes (sync interval and present flags), so a tearing or
   frame rate report can be read off the log. Vulkan already logged its
   presentation mode.
+- **`RUN.txt` fixes.** F11 is fullscreen (Alt+Enter presses START, since Enter is
+  the keyboard's Start), and the extractor's messages now give DUMPING.md's
+  GitHub address instead of naming a file that is not in the zip. DUMPING.md
+  gained Route C, the already-extracted folder.
+- **The shipped binaries are now GPL-3.0.** Renut is GPL-3.0 as futari-nx and
+  futari-linux carry it, and a build that links it (every build, from this
+  version) is a combined work distributed under that licence. reNut itself has
+  no licence file; masterspike52 granted its reuse for this port in
+  [masterspike52/reNut#74](https://github.com/masterspike52/reNut/issues/74).
+  This repository's own files stay under the BSD 3-Clause licence, and nothing
+  about the game changes: the GPL grants no rights to Cave's code, recompiled or
+  not. NOTICE.md says which files are which; `THIRD-PARTY-NOTICES.txt`, which
+  ships in both zips, carries the full GPL-3.0 text, credits every project in
+  Renut's lineage and the libraries it brings (plume, XenosRecomp, the DirectX
+  Shader Compiler), and points at this repository at the v1.5.5 tag as the
+  complete corresponding source.
+
+<!-- MERGE-OWNER: if leg/polish lands, add one bullet for it: gamepad navigation of the setup and settings screens, the new font, "Check for updates" (against GitHub releases), and the shader package version stamp (a stale vulkan_spirv.bin after an update is now detected and named instead of showing only as shader misses in the log). Then drop "no gamepad navigation" from the known limits below. If it does not land, delete this comment. -->
+
+<!-- MERGE-OWNER: if the launcher-route access violation fix lands, add a "Fix:" bullet (the crash: one of three scripted runs from a console-install source died about 4 s into the game, exit 139, after the long overlay-only setup screen; see docs/NOTES_launcher.md "Not done / to watch") with its cause. If it does not land, delete this comment and keep the last known limit below. -->
+
+Known limits in this release: the setup and settings screens have no gamepad
+navigation yet (mouse and keyboard); Renut is Vulkan-only; the setup screen's
+shader step is one translation pass where `extract_assets.bat` runs two around
+an early-alpha rewrite, so a few pixel shaders run slower that way, with the
+same picture; and one scripted launcher run from a console-install source ended
+in an access violation a few seconds into the game, not reproduced since.
+
+For builders (`docs/NOTES_renut_port_scoping.md`, `docs/NOTES_launcher.md`):
+
+- `FUTARI_RENUT_RENDERER` (on) links Renut, with plume (MIT) and XenosRecomp
+  (MIT) vendored under `thirdparty/`. A public zip must come from a tree
+  configured with `-DFUTARI_RENUT_RELEASE_SHADERS=ON`, which ships the shader
+  table and no game shader; `scripts/stage_win_zip.sh <version>` stages the
+  Windows zip from such a tree and refuses any other, and boot-checks both
+  renderers. A development tree builds the shaders in from
+  `scripts/renut_shader_dump.sh`'s dump of your own game (never committed) and
+  needs the dxc-bin Windows binaries, which are not in the repository.
+- SDK additions in the vendored tree, ported from futari-linux's SDK fork, all
+  inert unless set: a frame latency probe (`rex/frame_latency.h`), a guest swap
+  counter with a deterministic one-vblank-per-swap mode (`vblank_per_swap`), and
+  a late input read (`input_frame_read_delay_us`, default 0).
+- New tool modes on the exe: `--futari_renut_dump_shaders=<dir>` (write the
+  game's 42 shader containers and exit) and `--futari_renut_translate`; and
+  dev aids `--futari_renut_capture_path` / `--futari_renut_capture_after_s`.
+- Caught before any release: every Renut-era development build crashed on the
+  default renderer a few seconds after boot, because Renut's overlay compiled a
+  second Dear ImGui into the exe and the title hint dialog linked to it. That
+  copy now lives in its own namespace. `stage_win_zip.sh` checks the default
+  renderer is still alive at 20 s for that reason.
 
 ## v1.5.4 — 2026-11-02 (Windows, macOS)
 
