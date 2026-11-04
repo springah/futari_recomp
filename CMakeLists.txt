@@ -41,6 +41,9 @@ set(FUTARI_SOURCES
     src/launcher/file_picker.cpp
 )
 if(APPLE)
+    # The NSOpenPanel picker is Objective-C++ and the project() line names CXX only. OBJC too: with OBJCXX alone
+    # enabled at this scope, CMake hands the SDK's SDL3 .m files to the Objective-C++ compiler (-std=c++23 fails).
+    enable_language(OBJC OBJCXX)
     list(APPEND FUTARI_SOURCES src/launcher/file_picker_mac.mm)
 endif()
 
