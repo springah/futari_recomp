@@ -214,3 +214,37 @@ geometry (they were already correct). So the point-sprite pipelines were never b
   at 58.0-58.6 fps when the screen was busy (render thread up to 13 ms). Later, denser stages are untested.
 - `FUTARI_PREBUILT_GPU_DIR` (the futari-linux prebuilt-header route) has no prebuilt `rectangle_list_hs/ds` headers.
 - Only stage 1's first ~25 s were seen; no boss, no other mode.
+
+## Cost of the tessellation form (2026-11-04)
+
+The user's Black Label (kiniro_normal) play on Renut showed 41-55 fps with the render thread at 21-24 ms and the GPU at
+20-22 ms a frame. Measured on the scripted route, every run with a fresh `--user_data_root` under `out/fresh/`:
+
+- **Dev cvars (49102ce)**: `--renut_rect_fallback=plain` (init-only; default `tess`) keeps the one-triangle form on a
+  device without geometry shaders. The picture is wrong, but the draws and state are the same. `--renut_draw_timing=true`
+  adds a "[renut] draw timing" line every 10 s: render-thread ms per frame in `DrawStateLocked`, pipeline binds, draw
+  commands and queue submits, plus draw, rectangle-list and bind counts.
+- **Black Label route** from a fresh save:
+  `15000:a,17000:a,19000:a,27000:down,28000:down,29500:a,32000:a`, then `start`/`a` pairs every 5 s from 37000 to 69500,
+  then `x`, `y`, `rb`, `a` every 2 s from 72000. The first a's answer the new-save prompts, which appear on some runs.
+  The two downs pick Black Label on the TOP MENU, then the Black Label Arcade card. Stage 1 runs from about 90 to 105 s.
+
+Busiest 10 s window of each run (same route, same moment):
+
+| run | rect lists / frame | fps | render thread ms | of it in submits | GPU ms |
+|---|---|---|---|---|---|
+| Ver1.5 st.1, tess (`futari_027`) | 228 | 60.0 | 3.84 | 3.58 | 12.51 |
+| Ver1.5 st.1, plain (`futari_028`) | 231 | 60.0 | 0.68 | 0.40 | 0.58 |
+| Ver1.5 st.1, tess (`futari_027`) | 175 | 57.3 | 6.92 | 6.72 | 10.02 |
+| Black Label st.1, tess (`futari_031`) | 245 | 55.2 | 12.46 | 12.19 | 14.08 |
+| Black Label st.1, plain (`futari_032`) | 233 | 60.0 | 0.62 | 0.40 | 0.54 |
+| Black Label st.1, tess + `MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS=0` (`futari_033`) | 241 | 56.0 | 0.26 | 0.00 | 13.80 |
+
+How the time splits:
+- **Renut's own per-draw work** is the same in both forms and small: `DrawStateLocked` takes 0.1-0.2 ms a frame, binds
+  0.00 and draw commands 0.01.
+- **Render thread**: almost all of the extra time is the queue submit. MoltenVK encodes the Metal commands there, and for
+  each tessellated draw it adds a compute pass and a render-encoder split: about 16-50 µs of CPU per rectangle-list draw.
+  With asynchronous submits MoltenVK does that encoding on its own thread, and the render thread falls to 0.26 ms.
+- **GPU**: about 55 µs per tessellated draw, against about 2 µs plain. This cost does not move with submit mode. At the
+  user's 20-22 ms that is roughly 350-400 rectangle-list draws a frame.
