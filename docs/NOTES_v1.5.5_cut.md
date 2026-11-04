@@ -46,6 +46,23 @@ Everything up to the tag is done; the tag and the GitHub Release are the user's 
   after in-process GoD/SVOD extraction); `MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS=0` for the render thread (needs a
   soak); the launcher's F2 settings window's empty space; `build_app.sh` does not copy `gamecontrollerdb.txt`.
 
+## 0c. Released, 2026-11-04 evening
+
+- The user's hands pass on the Windows zip (unzipped on iacon's Desktop from the staged zip) passed: "Tag and release".
+- `main` = **dc588e2** (`Merge launcher: v1.5.5`, README.md and PORTS.md taken from `launcher`; `git diff launcher main`
+  empty; every commit author and committer the noreply identity), `launcher` = a77a1e6 (the changelog date commit),
+  tag **v1.5.5** on dc588e2, all three pushed; Guards on `main` green.
+- GitHub Release https://github.com/springah/futari_recomp/releases/tag/v1.5.5 (Latest) with the four assets:
+  `Mushihimesama-Futari-PC-v1.5.5.zip` (36,761,330 B, af638ad2...) and `Mushihimesama-Futari-macOS-v1.5.5.zip`
+  (43,373,062 B, 4cbed461...) with their `.sha256` files (the Windows one re-written LF; the one iacon wrote was CRLF).
+  Notes = the draft of §8 as it stood, title with the em-dash of the earlier releases. rc2 and rc3 notes carry a
+  "Superseded by v1.5.5" line like rc1's.
+- Replies posted: #8 (Scaloup: v1.5.5, setup screen + F2 replace the rc1 steps, same stage-for-stage question, log
+  and GPU asked for; issue left open) and #4 (itemzer0: F2 writes top-level `futari.ini` lines, a language key could
+  go the same way; map and injector welcome, dumped strings not).
+- Not done: the SHARED share got nothing (these zips carry no game data; the GitHub Release is the distribution, as
+  for v1.5.4). The hands folder on iacon was deleted after the pass. The follow-ups of §0b stand.
+
 ## 1. Merge the legs into `launcher` (Mac, main clone)
 
 ```fish
