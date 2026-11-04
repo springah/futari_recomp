@@ -55,8 +55,13 @@ if [ -n "$bad" ]; then echo "REFUSED: game data or run output in the stage:"; ec
 # The exe must not carry the game's shaders: started with Renut and no package it must say so (the dev build would
 # draw). This also proves the staged DLL set boots. ASSETS = a game data folder (never copied into the stage).
 ASSETS="${ASSETS:-$ROOT/assets}"
+# The boot checks run with a fresh, empty save folder under out/: never the user's own (Documents\futari), whose saves
+# and options they would otherwise read and could overwrite.
+UD="$ROOT/out/_stage_userdata"
+rm -rf "$UD"; mkdir -p "$UD"
+UDW="$(cygpath -m "$UD" 2>/dev/null || echo "$UD")"
 [ -f "$ASSETS/default.xex" ] || { echo "no $ASSETS/default.xex (set ASSETS=) for the boot check"; exit 1; }
-( cd "$STAGE" && timeout 12 ./futari.exe --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renderer=renut >/dev/null 2>&1 || true )
+( cd "$STAGE" && timeout 12 ./futari.exe --user_data_root="$UDW" --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renderer=renut >/dev/null 2>&1 || true )
 taskkill //F //IM futari.exe >/dev/null 2>&1 || true
 LOG=$(ls -t "$STAGE"/logs/*.log 2>/dev/null | head -1)
 grep -q "no game shaders built in" "${LOG:-/dev/null}" ||
@@ -68,7 +73,7 @@ echo "  boot check: release shader table, Renut up"
 # exist it must refuse with exit 2 within seconds. An exe without the mode ignores the unknown cvar, boots the game
 # and times out, and make_shaders.py would do the same on the player's PC.
 translate_rc=0
-( cd "$STAGE" && timeout 15 ./futari.exe --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renut_translate="$(cygpath -m "$STAGE")/no_such_dump" >/dev/null 2>&1 ) || translate_rc=$?
+( cd "$STAGE" && timeout 15 ./futari.exe --user_data_root="$UDW" --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renut_translate="$(cygpath -m "$STAGE")/no_such_dump" >/dev/null 2>&1 ) || translate_rc=$?
 taskkill //F //IM futari.exe >/dev/null 2>&1 || true
 rm -rf "$STAGE/logs"
 [ "$translate_rc" = "2" ] || { echo "REFUSED: the staged exe has no shader translator tool mode (exit $translate_rc, expected 2)"; exit 1; }
@@ -76,11 +81,12 @@ echo "  tool check: the translator is built in"
 # The default renderer must survive its first dialogs (the title hint appears a few seconds in): a crash there leaves a
 # log identical to a healthy run's, so judge by the exit: 124 = still running when timeout killed it.
 xenos_rc=0
-( cd "$STAGE" && timeout 20 ./futari.exe --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" >/dev/null 2>&1 ) || xenos_rc=$?
+( cd "$STAGE" && timeout 20 ./futari.exe --user_data_root="$UDW" --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" >/dev/null 2>&1 ) || xenos_rc=$?
 taskkill //F //IM futari.exe >/dev/null 2>&1 || true
 [ "$xenos_rc" = "124" ] || { echo "REFUSED: the staged exe died within 20 s on the default renderer (exit $xenos_rc)"; exit 1; }
 rm -rf "$STAGE/logs"
 echo "  boot check: default renderer alive at 20 s"
+rm -rf "$UD"
 
 rm -f "$ZIP"
 python3 - "$ROOT/out/_stage" "$NAME" "$ZIP" <<'EOF'
