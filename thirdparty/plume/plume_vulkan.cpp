@@ -1794,6 +1794,24 @@ namespace plume {
             stages.emplace_back(stageInfo);
         }
 
+        // futari_recomp (2026-11-04, leg/rectlist): tessellation control + evaluation (hull + domain).
+        const bool tessellated = (desc.hullShader != nullptr) && (desc.domainShader != nullptr);
+        if (tessellated) {
+            const VulkanShader *hullShader = static_cast<const VulkanShader *>(desc.hullShader);
+            const VulkanShader *domainShader = static_cast<const VulkanShader *>(desc.domainShader);
+            VkPipelineShaderStageCreateInfo stageInfo = {};
+            stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            stageInfo.stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+            stageInfo.module = hullShader->vk;
+            stageInfo.pName = hullShader->entryPointName.c_str();
+            stageInfo.pSpecializationInfo = pSpecInfo;
+            stages.emplace_back(stageInfo);
+            stageInfo.stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+            stageInfo.module = domainShader->vk;
+            stageInfo.pName = domainShader->entryPointName.c_str();
+            stages.emplace_back(stageInfo);
+        }
+
         if (desc.pixelShader != nullptr) {
             const VulkanShader *pixelShader = static_cast<const VulkanShader *>(desc.pixelShader);
             VkPipelineShaderStageCreateInfo stageInfo = {};
@@ -1841,6 +1859,29 @@ namespace plume {
         inputAssembly.topology = toVk(desc.primitiveTopology);
         if (desc.primitiveTopology == RenderPrimitiveTopology::LINE_STRIP || desc.primitiveTopology == RenderPrimitiveTopology::TRIANGLE_STRIP) {
             inputAssembly.primitiveRestartEnable = VK_TRUE;
+        }
+
+        // futari_recomp (leg/rectlist): patches of the list primitive's vertex count.
+        VkPipelineTessellationStateCreateInfo tessellationState = {};
+        if (tessellated) {
+            tessellationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+            switch (desc.primitiveTopology) {
+            case RenderPrimitiveTopology::POINT_LIST:
+                tessellationState.patchControlPoints = 1;
+                break;
+            case RenderPrimitiveTopology::LINE_LIST:
+                tessellationState.patchControlPoints = 2;
+                break;
+            case RenderPrimitiveTopology::TRIANGLE_LIST:
+                tessellationState.patchControlPoints = 3;
+                break;
+            default:
+                assert(false && "Tessellation needs a point, line or triangle list.");
+                tessellationState.patchControlPoints = 3;
+                break;
+            }
+            inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+            inputAssembly.primitiveRestartEnable = VK_FALSE;
         }
 
         uint32_t renderTargetCount = desc.renderTargetCount;
@@ -1992,6 +2033,7 @@ namespace plume {
         pipelineInfo.stageCount = uint32_t(stages.size());
         pipelineInfo.pVertexInputState = &vertexInput;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pTessellationState = tessellated ? &tessellationState : nullptr;
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterization;
         pipelineInfo.pMultisampleState = &multisampling;
@@ -4881,6 +4923,7 @@ namespace plume {
 
         // Fill capabilities.
         capabilities.geometryShader = deviceFeatures.features.geometryShader;
+        capabilities.tessellationShader = deviceFeatures.features.tessellationShader;  // futari_recomp (leg/rectlist)
         capabilities.raytracing = rayTracingSupported;
         capabilities.raytracingStateUpdate = false;
         capabilities.sampleLocations = (sampleLocationProperties.sampleLocationSampleCounts != 0);

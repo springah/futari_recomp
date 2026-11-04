@@ -1298,6 +1298,11 @@ namespace plume {
         const RenderPipelineLayout *pipelineLayout = nullptr;
         const RenderShader *vertexShader = nullptr;
         const RenderShader *geometryShader = nullptr;
+        // futari_recomp (2026-11-04, leg/rectlist): tessellation, Vulkan back end only (capabilities.tessellationShader).
+        // With a hull (control) shader the primitives are drawn as patches of as many control points as the
+        // primitiveTopology's primitive has (TRIANGLE_LIST: 3, LINE_LIST: 2, POINT_LIST: 1). Both or neither.
+        const RenderShader *hullShader = nullptr;
+        const RenderShader *domainShader = nullptr;
         const RenderShader *pixelShader = nullptr;
         RenderComparisonFunction depthFunction = RenderComparisonFunction::NEVER;
         bool depthClipEnabled = false;
@@ -1791,6 +1796,9 @@ namespace plume {
     struct RenderDeviceCapabilities {
         // Geometry shaders.
         bool geometryShader = false;
+
+        // Tessellation (hull and domain shaders), futari_recomp leg/rectlist: Vulkan back end only.
+        bool tessellationShader = false;
 
         // Raytracing.
         bool raytracing = false;
