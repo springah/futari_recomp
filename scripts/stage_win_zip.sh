@@ -26,6 +26,10 @@ STAGE="$ROOT/out/_stage/$NAME"
 ZIP="$ROOT/out/$NAME-v$VER.zip"
 
 [ -f "$BUILD_DIR/futari.exe" ] || { echo "no $BUILD_DIR/futari.exe"; exit 1; }
+# The boot checks below end with taskkill //IM futari.exe, which would also end a game someone is playing.
+if tasklist //FI "IMAGENAME eq futari.exe" 2>/dev/null | grep -qi 'futari.exe'; then
+  echo "REFUSED: a futari.exe is running; close it first (the boot checks kill every futari.exe)"; exit 1
+fi
 grep -q 'FUTARI_RENUT_RELEASE_SHADERS:BOOL=ON' "$BUILD_DIR/CMakeCache.txt" ||
   { echo "REFUSED: $BUILD_DIR was not configured with FUTARI_RENUT_RELEASE_SHADERS=ON (its exe would carry game shaders)"; exit 1; }
 for t in dxcompiler.dll shader_common.h renut_early_alpha.py early_alpha.py; do

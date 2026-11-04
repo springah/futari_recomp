@@ -286,9 +286,29 @@ $dxcBin = Join-Path $Root 'thirdparty\reblue-XenosRecomp\thirdparty\dxc-bin'
 $dxcMissing = @(@('bin\x64\dxc.exe', 'bin\x64\dxcompiler.dll', 'lib\x64\dxcompiler.lib') |
                Where-Object { -not (Test-Path (Join-Path $dxcBin $_)) })
 if ($dxcMissing.Count -gt 0) {
-    Fail ("The DirectX Shader Compiler binaries are missing under $dxcBin ($($dxcMissing -join ', ')). " +
-          'Copy bin\x64 (dxc.exe, dxcompiler.dll, dxil.dll) and lib\x64 (dxcompiler.lib) from hedge-dev''s dxc-bin ' +
-          '(https://github.com/hedge-dev/dxc-bin, commit 737ac9f) into that folder, then re-run.')
+    # Fetch them from hedge-dev's dxc-bin at the commit XenosRecomp pins (a git repository of the binaries), the
+    # same source the other third-party trees come from; -NoInstall only says what to copy by hand.
+    $dxcRepo = 'https://github.com/hedge-dev/dxc-bin'
+    $dxcCommit = '737ac9f'
+    if ($NoInstall) {
+        Fail ("The DirectX Shader Compiler binaries are missing under $dxcBin ($($dxcMissing -join ', ')) and " +
+              "-NoInstall was given. Copy bin\x64 (dxc.exe, dxcompiler.dll, dxil.dll) and lib\x64 (dxcompiler.lib) " +
+              "from $dxcRepo at commit $dxcCommit into that folder, then re-run.")
+    }
+    Step "Fetching the DirectX Shader Compiler binaries ($dxcRepo @ $dxcCommit)"
+    $dxcTmp = Join-Path $Root 'out\dxc-bin-fetch'
+    if (Test-Path $dxcTmp) { Remove-Item -Recurse -Force $dxcTmp }
+    Invoke-Checked $git @('clone', '--quiet', '--no-checkout', $dxcRepo, $dxcTmp)
+    Invoke-Checked $git @('-C', $dxcTmp, 'checkout', '--quiet', $dxcCommit)
+    foreach ($sub in @('bin\x64', 'lib\x64')) {
+        $dst = Join-Path $dxcBin $sub
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        Copy-Item -Force -Path (Join-Path (Join-Path $dxcTmp $sub) '*') -Destination $dst
+    }
+    Remove-Item -Recurse -Force $dxcTmp
+    $dxcMissing = @(@('bin\x64\dxc.exe', 'bin\x64\dxcompiler.dll', 'lib\x64\dxcompiler.lib') |
+                   Where-Object { -not (Test-Path (Join-Path $dxcBin $_)) })
+    if ($dxcMissing.Count -gt 0) { Fail "dxc-bin was fetched but $($dxcMissing -join ', ') is still missing under $dxcBin." }
 }
 Note "DXC: $dxcBin"
 

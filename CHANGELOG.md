@@ -152,8 +152,10 @@ binaries are now distributed under the GPL-3.0 (last bullet).
 Known limits in this release: Renut is Vulkan-only; the setup screen's
 shader step is one translation pass where `extract_assets.bat` runs two around
 an early-alpha rewrite, so a few pixel shaders run slower that way, with the
-same picture; and one scripted launcher run from a console-install source ended
-in an access violation a few seconds into the game, not reproduced since.
+same picture; and the setup screen's console-install route crashes about four
+runs in ten with an access violation a second after Play (the loose-folder and
+disc-image routes and plain starts do not), under investigation: use the disc
+image or an extracted folder as the source until it is fixed.
 
 For builders (`docs/NOTES_renut_port_scoping.md`, `docs/NOTES_launcher.md`):
 

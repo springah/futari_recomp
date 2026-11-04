@@ -69,26 +69,26 @@ endif()
 # developer's XenosRecomp checkouts beside this repo (projects/_tools, where the xenos pipeline's DXC lives, 1.8.2407),
 # then the Windows SDK's dxc.exe. -DFUTARI_DXC=<path> overrides.
 # ---------------------------------------------------------------------------------------------------------------------
+# The Windows SDK's dxc.exe is NOT a candidate: it has no SPIR-V back end ("SPIR-V CodeGen not available"), and a
+# configure that cached it broke the host shaders (2026-11-04). dxc-bin's binaries are fetched by build.ps1.
 if(CMAKE_HOST_WIN32)
-    file(GLOB _futari_winsdk_dxc_dirs "C:/Program Files (x86)/Windows Kits/10/bin/10.*/x64")
-    list(SORT _futari_winsdk_dxc_dirs ORDER DESCENDING)
     find_program(FUTARI_DXC NAMES dxc.exe dxc
         HINTS "${CMAKE_SOURCE_DIR}/thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/bin/x64"
               "${CMAKE_SOURCE_DIR}/../_tools/XenosRecomp/thirdparty/dxc-bin/bin/x64"
               "${CMAKE_SOURCE_DIR}/../_tools/XenosRecomp-main/thirdparty/dxc-bin/bin/x64"
-        PATHS ${_futari_winsdk_dxc_dirs}
-        DOC "DXC for Renut's host shaders (empty on other hosts: XenosRecomp's dxc-bin, or dxc on the PATH)"
+        DOC "DXC for Renut's host shaders: a SPIR-V-capable dxc.exe (XenosRecomp's dxc-bin, or the Vulkan SDK's)"
         NO_DEFAULT_PATH)
     if(NOT FUTARI_DXC)
-        find_program(FUTARI_DXC NAMES dxc.exe dxc DOC "DXC for Renut's host shaders")
+        find_program(FUTARI_DXC NAMES dxc.exe dxc DOC "DXC for Renut's host shaders (SPIR-V-capable)")
     endif()
     if(NOT FUTARI_DXC)
-        message(FATAL_ERROR "No dxc.exe for Renut's host shaders: put XenosRecomp's dxc-bin under "
-                            "thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/bin/x64, install the Windows SDK, "
-                            "or configure with -DFUTARI_DXC=<path to dxc.exe>")
+        message(FATAL_ERROR "No SPIR-V-capable dxc.exe for Renut's host shaders: run build.ps1 (it fetches "
+                            "hedge-dev/dxc-bin into thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin), copy that "
+                            "repository's bin/x64 and lib/x64 there yourself, or configure with "
+                            "-DFUTARI_DXC=<path to a dxc.exe with SPIR-V CodeGen, e.g. the Vulkan SDK's>. The "
+                            "Windows SDK's dxc.exe cannot compile SPIR-V.")
     endif()
     message(STATUS "futari: Renut's host shaders with DXC ${FUTARI_DXC}")
-    unset(_futari_winsdk_dxc_dirs)
 endif()
 
 # macOS (leg 6): scripts/build_dxc_mac.sh's DXC, which it installs into dxc-bin's bin/arm64 (dxc-bin's own CMakeLists

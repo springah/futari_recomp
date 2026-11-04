@@ -302,11 +302,12 @@ Known limits of v1.5.5:
   early-alpha rewrite. A few pixel shaders run slower from the setup screen's
   package; the picture is the same. Run the batch file with nothing dragged on
   to get the optimised package.
-- **One unexplained crash on a launcher route.** One of three scripted runs
-  from a console-install source ended in an access violation about 4 s into the
-  game; the re-runs and plain starts on the same data did not. If you see a
-  crash right after the setup screen's Play, please report it with the log
-  ([docs/NOTES_launcher.md](docs/NOTES_launcher.md) has what is known).
+- **The console-install route of the setup screen crashes about four runs in
+  ten**, an access violation a second after Play; the disc-image and extracted
+  folder routes and plain starts do not. Until it is fixed, point the setup
+  screen at your disc image or an extracted folder, or run the extraction once
+  and start the game normally afterwards (a plain start on the extracted data
+  is fine). [docs/NOTES_launcher.md](docs/NOTES_launcher.md) has what is known.
 
 Two earlier recompiler issues, both fixed, for the record:
 
