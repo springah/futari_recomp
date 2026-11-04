@@ -133,6 +133,8 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   std::vector<std::string> dlc_names_;
   std::string package_status_;
   bool package_ok_ = false;
+  bool package_stale_ = false;  // exists but made by another build (or by hand): StampWantsRedo
+  bool stale_redo_started_ = false;
   std::string settings_note_;
 
   // "Check for updates" (Settings page): pressed -> the future; answered -> the result line.

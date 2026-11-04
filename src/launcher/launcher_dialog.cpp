@@ -196,6 +196,18 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
     auto_started_ = true;
     UseSource(env_.auto_source);
   }
+  // The setup flow over a game that is already there (--futari_setup) and a package another build made: redo it
+  // now, the game would otherwise miss shaders on Renut. The Done page does the same after an extraction.
+  if (!stale_redo_started_ && mode_ == Mode::kSetup && env_.auto_source.empty() && page_ == Page::kSetup &&
+      package_stale_ && env_.renut_available && !worker_.joinable()) {
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec)) {
+      stale_redo_started_ = true;
+      REXLOG_WARN("Launcher: the Renut shaders were made by a different build; redoing them");
+      after_work_ = Page::kDone;
+      StartShaders();
+    }
+  }
   PollPicker();
   PollWorker();
   {
@@ -466,10 +478,16 @@ void LauncherDialog::DrawSettings() {
     }
     ImGui::SameLine();
     ImGui::TextDisabled("applies at the next start");
-    ImGui::TextUnformatted(package_status_.c_str());
+    if (package_stale_) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.45f, 1.0f));
+      ImGui::TextUnformatted(package_status_.c_str());
+      ImGui::PopStyleColor();
+    } else {
+      ImGui::TextUnformatted(package_status_.c_str());
+    }
     ImGui::SameLine();
     ImGui::BeginDisabled(!have_game || worker_.joinable());
-    if (ImGui::Button(package_ok_ ? "Redo the shaders" : "Prepare the shaders")) {
+    if (ImGui::Button(package_ok_ || package_stale_ ? "Redo the shaders" : "Prepare the shaders")) {
       after_work_ = Page::kSettings;
       StartShaders();
     }
@@ -617,7 +635,9 @@ void LauncherDialog::StartExtraction(const std::filesystem::path& source) {
   work_title_ = "Extracting from " + Utf8(source);
   GoTo(Page::kWorking);
   REXLOG_INFO("Launcher: extracting {} into {}", Utf8(source), Utf8(env_.assets_dir));
-  const bool shaders = make_shaders_ && env_.renut_available;
+  // A package from another build is redone even with the box unticked: it would only cause shader misses.
+  const bool shaders = (make_shaders_ || package_stale_) && env_.renut_available;
+  stale_redo_started_ = stale_redo_started_ || shaders;
   Progress* progress = progress_.get();
   worker_ = std::thread([this, source, shaders, progress] {
     extract_result_ = ExtractGame(source, env_.assets_dir, env_.dlc_dir, *progress);
@@ -716,9 +736,17 @@ void LauncherDialog::RefreshStatus() {
   int count = 0;
   uint64_t bytes = 0;
   package_ok_ = PackageStatus(env_.exe_dir, count, bytes);
-  package_status_ = package_ok_ ? "Renut shaders: ready (" + std::to_string(count) + " shaders, " +
-                                      std::to_string(bytes / 1024) + " KB)"
-                                : "Renut shaders: not prepared yet (Renut would draw nothing)";
+  std::string stamp_detail;
+  const StampState stamp = CheckPackageStamp(env_.exe_dir, stamp_detail);
+  package_stale_ = StampWantsRedo(stamp);
+  if (package_stale_) {
+    package_ok_ = false;
+    package_status_ = "Shaders were made by a different build, press Redo the shaders";
+  } else {
+    package_status_ = package_ok_ ? "Renut shaders: ready (" + std::to_string(count) + " shaders, " +
+                                        std::to_string(bytes / 1024) + " KB)"
+                                  : "Renut shaders: not prepared yet (Renut would draw nothing)";
+  }
   dlc_names_.clear();
   std::error_code ec;
   for (const auto& entry : std::filesystem::directory_iterator(env_.dlc_dir, ec)) {

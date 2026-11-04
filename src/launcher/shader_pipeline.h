@@ -38,6 +38,22 @@ bool CheckPackage(const std::filesystem::path& package, int& count, std::string&
 // The package beside the exe, if one is there and usable.
 bool PackageStatus(const std::filesystem::path& exe_dir, int& count, uint64_t& bytes);
 
+// The package stamp: vulkan_spirv.stamp beside vulkan_spirv.bin (a sidecar, so the BVKS format and every loader
+// stay as they are). It names the build that made the package -- FUTARI_VERSION_STRING, the SDK's
+// REXGLUE_VERSION_STRING and a hash of the translator's sources (FUTARI_SHADER_TRANSLATOR_HASH, CMakeLists.txt) --
+// and the package's size, so a package swapped in by hand (scripts/make_shaders.py) reads as unstamped.
+enum class StampState {
+  kNoPackage,   // nothing to judge
+  kCurrent,     // made by this build
+  kStale,       // made by a different build
+  kUnstamped,   // no stamp, or a stamp for another file: made by make_shaders.py or a build before the stamp
+};
+std::string ShaderBuildId();
+StampState CheckPackageStamp(const std::filesystem::path& exe_dir, std::string& detail);
+bool WritePackageStamp(const std::filesystem::path& exe_dir, std::string& error);
+// kStale or kUnstamped: the launcher redoes the shaders by itself when it can.
+inline bool StampWantsRedo(StampState s) { return s == StampState::kStale || s == StampState::kUnstamped; }
+
 // renut_tools/ beside the exe holds what the translation needs (the DXC DLL and the shader header).
 bool ToolsPresent(const std::filesystem::path& exe_dir, std::string& missing);
 

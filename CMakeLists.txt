@@ -66,6 +66,23 @@ endif()
 rexglue_setup_target(futari GPU_PLUGINS xenos)
 
 target_compile_definitions(futari PRIVATE FUTARI_VERSION_STRING="${PROJECT_VERSION}")
+# The shader package stamp (src/launcher/shader_pipeline.cpp, vulkan_spirv.stamp): an identifier of the translator
+# built into the exe, a hash of its sources (Renut's XenosRecomp + the in-exe entry point), so a package made by a
+# different translator is redone. Computed here for every build, Renut or not; editing a hashed file re-configures.
+file(GLOB _futari_translator_sources CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/reblue-XenosRecomp/XenosRecomp/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/reblue-XenosRecomp/XenosRecomp/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/renut_shim/renut_shader_translate_tool.cpp")
+list(SORT _futari_translator_sources)
+set(_futari_translator_digest "")
+foreach(_f IN LISTS _futari_translator_sources)
+    file(SHA256 "${_f}" _h)
+    string(APPEND _futari_translator_digest "${_h}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_f}")
+endforeach()
+string(SHA256 _futari_translator_hash "${_futari_translator_digest}")
+string(SUBSTRING "${_futari_translator_hash}" 0 12 _futari_translator_hash)
+target_compile_definitions(futari PRIVATE FUTARI_SHADER_TRANSLATOR_HASH="${_futari_translator_hash}")
 target_include_directories(futari PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 if(WIN32)
     # The launcher's file dialogs (IFileOpenDialog) and its child processes.
