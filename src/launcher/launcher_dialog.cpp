@@ -58,6 +58,10 @@ bool IsXContentFile(const std::filesystem::path& p) {
 
 void WrappedText(const std::string& text) { ImGui::TextWrapped("%s", text.c_str()); }
 
+// The key's state as the drawer fed it, whatever ImGui's key ownership says: ImGui's own navigation takes Esc and
+// the gamepad's B for "cancel" and IsKeyPressed then answers false to everyone else.
+bool RawDown(ImGuiKey key) { return ImGui::GetIO().KeysData[key - ImGuiKey_NamedKey_BEGIN].Down; }
+
 }  // namespace
 
 bool WriteRendererLine(const std::filesystem::path& ini_path, bool renut, std::string& error) {
@@ -162,6 +166,26 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
   }
   PollPicker();
   PollWorker();
+  {
+    const bool back_down = RawDown(ImGuiKey_GamepadFaceRight) || RawDown(ImGuiKey_Escape);
+    // Esc inside the path field only leaves the field (ImGui's own handling): the text field is the only item that
+    // stays active across frames here.
+    back_pressed_ = back_down && !back_was_down_ && !ImGui::IsAnyItemActive();
+    back_was_down_ = back_down;
+  }
+  if (after_release_) {
+    bool held = false;
+    for (ImGuiKey key : {ImGuiKey_GamepadFaceDown, ImGuiKey_GamepadFaceRight, ImGuiKey_Enter, ImGuiKey_KeypadEnter,
+                         ImGuiKey_Space, ImGuiKey_Escape}) {
+      held = held || RawDown(key);
+    }
+    if (!held) {
+      auto action = std::move(after_release_);
+      after_release_ = nullptr;
+      action();
+      return;  // the action may have closed the dialog
+    }
+  }
 
   const float scale = io.DisplaySize.y >= 1000.0f ? 2.0f : 1.5f;
   const ImVec2 size(std::min(io.DisplaySize.x - 40.0f, 500.0f * scale),
@@ -170,6 +194,9 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
                           ImVec2(0.5f, 0.5f));
   ImGui::SetNextWindowSize(size, ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(env_.in_game ? 0.92f : 1.0f);
+  if (focus_pending_) {
+    ImGui::SetNextWindowFocus();  // over the game, F2 must take the keyboard and the pad at once
+  }
   const std::string title = "Mushihimesama Futari (recompiled) v" + env_.version + "##futari_launcher";
   constexpr ImGuiWindowFlags kFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove;
@@ -197,6 +224,34 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
   }
 }
 
+void LauncherDialog::GoTo(Page page) {
+  if (page == Page::kSettings && page_ != Page::kSettings && page_ != Page::kWorking) {
+    settings_return_ = page_;
+  }
+  page_ = page;
+  focus_pending_ = true;
+}
+
+void LauncherDialog::FocusHere() {
+  if (focus_pending_) {
+    focus_pending_ = false;
+    ImGui::SetKeyboardFocusHere();
+  }
+}
+
+bool LauncherDialog::BackPressed() const {
+  if (after_release_) {
+    return false;
+  }
+  return back_pressed_;
+}
+
+void LauncherDialog::AfterRelease(std::function<void()> action) {
+  if (!after_release_) {
+    after_release_ = std::move(action);
+  }
+}
+
 void LauncherDialog::DrawFooterNote() {
   ImGui::Spacing();
   ImGui::TextDisabled("Game data goes into %s and %s. Nothing leaves this folder.",
@@ -209,6 +264,7 @@ void LauncherDialog::DrawSetup() {
   ImGui::Spacing();
   const bool busy = picker_.pending();
   ImGui::BeginDisabled(busy);
+  FocusHere();
   if (ImGui::Button("Disc image (.iso)...")) {
     picker_.Open(env_.native_window, false, "Pick your Mushihimesama Futari disc image", "iso");
   }
@@ -255,7 +311,7 @@ void LauncherDialog::DrawSetup() {
   if (ImGui::Button("Settings")) {
     LoadSettings();
     RefreshStatus();
-    page_ = Page::kSettings;
+    GoTo(Page::kSettings);
   }
 }
 
@@ -280,7 +336,8 @@ void LauncherDialog::DrawWorking() {
     const float t = float(ImGui::GetTime());
     ImGui::ProgressBar(-1.0f * t, ImVec2(-1, 0), "working...");
   }
-  if (ImGui::Button("Cancel")) {
+  FocusHere();
+  if (ImGui::Button("Cancel") || BackPressed()) {
     if (progress_) {
       progress_->cancel.store(true);
     }
@@ -325,21 +382,24 @@ void LauncherDialog::DrawDone() {
   ImGui::Separator();
   std::error_code ec;
   const bool have_game = std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec);
-  if (have_game && !env_.in_game && env_.on_play) {
+  const bool can_play = have_game && !env_.in_game && env_.on_play;
+  if (can_play) {
+    FocusHere();
     if (ImGui::Button("Play")) {
-      FinishPlay();
-      return;
+      AfterRelease([this] { FinishPlay(); });
     }
     ImGui::SameLine();
+  } else {
+    FocusHere();
   }
-  if (ImGui::Button(have_game ? "Settings" : "Back")) {
+  if (ImGui::Button(have_game ? "Settings" : "Back") || (!have_game && BackPressed())) {
     if (have_game) {
       LoadSettings();
       RefreshStatus();
-      page_ = Page::kSettings;
+      GoTo(Page::kSettings);
     } else {
       status_.clear();
-      page_ = Page::kSetup;
+      GoTo(Page::kSetup);
     }
   }
   ImGui::SameLine();
@@ -356,6 +416,7 @@ void LauncherDialog::DrawSettings() {
   if (env_.renut_available) {
     ImGui::TextUnformatted("Renderer");
     ImGui::SameLine();
+    FocusHere();
     if (ImGui::RadioButton("Default", !renderer_renut_)) {
       renderer_renut_ = false;
     }
@@ -375,6 +436,7 @@ void LauncherDialog::DrawSettings() {
     ImGui::EndDisabled();
     ImGui::Spacing();
   }
+  FocusHere();  // no-op when the renderer row took the focus
   ImGui::Checkbox("Fullscreen (F11 toggles it in the game)", &fullscreen_);
   ImGui::Checkbox("VSync", &vsync_);
   ImGui::TextUnformatted("Window size");
@@ -410,26 +472,25 @@ void LauncherDialog::DrawSettings() {
   if (ImGui::Button(env_.in_game ? "Save and close" : "Save")) {
     SaveSettings();
     if (env_.in_game) {
-      Close();
-      return;
+      AfterRelease([this] { Close(); });
     }
   }
   ImGui::SameLine();
   if (env_.in_game) {
-    if (ImGui::Button("Close")) {
-      Close();
-      return;
+    if (ImGui::Button("Close") || BackPressed()) {
+      AfterRelease([this] { Close(); });
     }
   } else {
     if (have_game && env_.on_play) {
       if (ImGui::Button("Play")) {
-        FinishPlay();
-        return;
+        AfterRelease([this] { FinishPlay(); });
       }
       ImGui::SameLine();
     }
     if (ImGui::Button("Setup")) {
-      page_ = Page::kSetup;
+      GoTo(Page::kSetup);
+    } else if (BackPressed()) {
+      GoTo(settings_return_ == Page::kDone && have_game ? Page::kDone : Page::kSetup);
     }
     ImGui::SameLine();
     if (ImGui::Button("Quit")) {
@@ -469,7 +530,7 @@ void LauncherDialog::StartExtraction(const std::filesystem::path& source) {
   log_.clear();
   fraction_ = -1.0f;
   work_title_ = "Extracting from " + Utf8(source);
-  page_ = Page::kWorking;
+  GoTo(Page::kWorking);
   REXLOG_INFO("Launcher: extracting {} into {}", Utf8(source), Utf8(env_.assets_dir));
   const bool shaders = make_shaders_ && env_.renut_available;
   Progress* progress = progress_.get();
@@ -497,7 +558,7 @@ void LauncherDialog::StartShaders() {
   log_.clear();
   fraction_ = -1.0f;
   work_title_ = "Preparing the Renut renderer's shaders";
-  page_ = Page::kWorking;
+  GoTo(Page::kWorking);
   Progress* progress = progress_.get();
   worker_ = std::thread([this, progress] {
     shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir}, *progress);
@@ -527,7 +588,7 @@ void LauncherDialog::PollWorker() {
   if (after_work_ == Page::kSettings) {
     settings_note_ = shader_result_.ok ? shader_result_.message : "Shaders: " + shader_result_.message;
   }
-  page_ = after_work_;
+  GoTo(after_work_);
   if (!env_.auto_source.empty() && ran_extract_ && extract_result_.status == ExtractResult::Status::kOk) {
     FinishPlay();
   }

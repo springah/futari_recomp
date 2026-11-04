@@ -52,6 +52,10 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
 
   static LauncherDialog* instance() { return instance_; }
 
+  // Keyboard and gamepad navigation, and the dialog owns the input while it is up (the game sees an untouched pad
+  // over F2): the SDK's ImGuiDrawer feeds SDL3's gamepads to ImGui for dialogs that ask.
+  bool WantsGamepadNavigation() const override { return true; }
+
  protected:
   void OnDraw(ImGuiIO& io) override;
   void OnClose() override;
@@ -71,6 +75,12 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   void PollWorker();
   void PollPicker();
   void FinishPlay();
+  void GoTo(Page page);
+  void FocusHere();         // the page's default item: call just before it
+  bool BackPressed() const;  // B / Circle, or Esc while no text field is being edited
+  // Runs `action` once A / B / Enter / Space / Esc are all released, so the press that closes the dialog or starts
+  // the game never reaches the game.
+  void AfterRelease(std::function<void()> action);
 
   void LoadSettings();
   void SaveSettings();
@@ -82,6 +92,11 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   Page after_work_ = Page::kDone;
   bool opened_ = false;
   bool auto_started_ = false;
+  bool focus_pending_ = true;    // the page changed: focus its default item and the window
+  Page settings_return_ = Page::kSetup;  // where B goes from Settings outside the game
+  std::function<void()> after_release_;
+  bool back_pressed_ = false;   // B or Esc went down this frame
+  bool back_was_down_ = false;
 
   // Setup page state.
   char path_buffer_[1024] = {};

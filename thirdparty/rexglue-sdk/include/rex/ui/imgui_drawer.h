@@ -12,6 +12,7 @@
 #ifndef REX_UI_IMGUI_DRAWER_H_
 #define REX_UI_IMGUI_DRAWER_H_
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -44,6 +45,9 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
 
   ImGuiIO& GetIO();
   bool HasDialogs() const { return !dialogs_.empty(); }
+  // A dialog that wants gamepad navigation is up (ImGuiDialog::WantsGamepadNavigation): it owns the input.
+  // Safe from any thread (the input drivers ask from guest threads): a flag the UI thread keeps.
+  bool HasNavigationDialog() const { return navigation_dialog_up_.load(std::memory_order_relaxed); }
 
   Window* window() const { return window_; }
 
@@ -89,6 +93,13 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
 
   std::optional<ImGuiKey> VirtualKeyToImGuiKey(VirtualKey vkey);
 
+  // Gamepad navigation (futari_recomp, 2026-11-04): while a dialog wants it, SDL3's gamepad subsystem is held open
+  // here and every pad's buttons and left stick are fed to ImGui as ImGuiKey_Gamepad* events, once per frame.
+  // Released (the subsystem's reference dropped) as soon as no such dialog remains, so a later SDL input driver
+  // sees its own GAMEPAD_ADDED events. A button held when navigation starts is ignored until it is released.
+  void UpdateGamepadNavigation();
+  void ReleaseGamepadNavigation();
+
   Window* window_;
   size_t z_order_;
   FontSetupCallback font_setup_;
@@ -122,6 +133,13 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
 
   double frame_time_tick_frequency_;
   uint64_t last_frame_time_ticks_;
+
+  std::atomic<bool> navigation_dialog_up_{false};
+  bool gamepad_nav_active_ = false;
+  bool gamepad_subsystem_held_ = false;
+  std::vector<void*> nav_gamepads_;  // SDL_Gamepad*
+  uint64_t nav_keys_down_ = 0;       // bit per entry of the drawer's gamepad key table, as last fed to ImGui
+  uint64_t nav_keys_armed_ = 0;      // seen released since navigation started
 };
 
 }  // namespace ui
