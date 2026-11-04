@@ -185,6 +185,11 @@ struct VideoState {
   // Expands rectangle-list draws (pipeline.cpp); null without geometry shader
   // support, which leaves them drawn as triangle lists.
   std::unique_ptr<plume::RenderShader> rectangle_list_gs;
+  // futari_recomp (2026-11-04, leg/rectlist): without geometry shaders but with
+  // tessellation (MoltenVK) rectangle lists are drawn as 3-point patches through
+  // these two instead (shaders/host/rectangle_list_hs.hlsl); null otherwise.
+  std::unique_ptr<plume::RenderShader> rectangle_list_hs;
+  std::unique_ptr<plume::RenderShader> rectangle_list_ds;
   // Expands point-list draws into point sprites (pipeline.cpp); null like
   // rectangle_list_gs, which leaves them single-pixel points.
   std::unique_ptr<plume::RenderShader> point_sprite_gs;

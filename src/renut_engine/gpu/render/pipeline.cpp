@@ -286,8 +286,14 @@ std::unique_ptr<plume::RenderPipeline> Build(const PipelineKey &key, const Pipel
   desc.pipelineLayout = s.draw_layout.get();
   desc.vertexShader = inputs.vertex_shader;
   desc.pixelShader = inputs.pixel_shader;
-  if (key.rectangle_list)
+  if (key.rectangle_list) {
     desc.geometryShader = s.rectangle_list_gs.get();
+    // futari_recomp (leg/rectlist): no geometry shader, so the tessellation form (3-point patches).
+    if (!desc.geometryShader) {
+      desc.hullShader = s.rectangle_list_hs.get();
+      desc.domainShader = s.rectangle_list_ds.get();
+    }
+  }
   if (key.point_sprite)
     desc.geometryShader = s.point_sprite_gs.get();
   desc.primitiveTopology = key.topology;

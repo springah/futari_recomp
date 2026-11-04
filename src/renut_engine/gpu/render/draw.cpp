@@ -2250,7 +2250,8 @@ void TrackIndices(const IndexKey &key, u32 lo, u32 max_index) {
 bool PrepareGeometry(const GuestDevice &device, const DrawCall &call, Geometry &g) {
   const bool expand = call.primitive == kTriangleFan || call.primitive == kQuadList;
   static uint32_t rect_logged = 0;
-  if (call.primitive == kRectangleList && !State().rectangle_list_gs && LogLimited(rect_logged, 1))
+  if (call.primitive == kRectangleList && !State().rectangle_list_gs && !State().rectangle_list_hs &&
+      LogLimited(rect_logged, 1))
     RGPU_WARN("Rectangle lists are drawn as triangle lists");
 
   u32 lo = 0, max_index = 0;  // host indices are g_indices - lo, the largest max_index
@@ -3088,7 +3089,7 @@ PipelineKey MakeKey(const GuestDevice &device, const ShaderRecord *vs, const Sha
   key.mode_control = u32(cp.ModeControl) & 0x7;
   key.alpha_to_coverage = (u32(cp.ColorControl) >> 4) & 1;
   if (primitive == kRectangleList) {
-    if (State().rectangle_list_gs)
+    if (State().rectangle_list_gs || State().rectangle_list_hs)  // futari_recomp (leg/rectlist): or tessellated
       key.rectangle_list = 1;
     // Rectangles are not culled. N&B's D3D clears through rectangles
     // (ClearRects_D3D, 0x822043D8) whose corners run clockwise on screen, under
