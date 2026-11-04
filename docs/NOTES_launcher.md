@@ -82,3 +82,24 @@ rejects the flipped copy with the same block number, so the C++ reader and the s
   screen has no shader step there (no translator).
 - Gamepad navigation (ImGui nav flags), a proper font, an update check against GitHub releases, a package version
   check (a stale `vulkan_spirv.bin` after an update shows only as shader misses in the log).
+
+## macOS, 2026-11-04
+
+Branch `leg/macos` (leg 6; full write-up in `docs/NOTES_renut_leg6_macos.md`). The launcher builds and runs on
+Apple Silicon:
+
+- `file_picker_mac.mm` is built: NSOpenPanel opened non-modally on the main thread (`beginWithCompletionHandler`),
+  polled by the dialog each frame like the Windows picker's thread, so the ImGui frame never blocks. Not yet clicked
+  by a person.
+- **The shader step exists on macOS.** The translator is in the macOS exe too; the DirectX Shader Compiler is a
+  `libdxcompiler.dylib` built from source (`scripts/build_dxc_mac.sh`, v1.8.2407; no macOS binary exists to
+  download), dlopened by the translate child. Build tree: `renut_tools/{libdxcompiler.dylib,shader_common.h}`.
+  Bundle: `Contents/lib/libdxcompiler.dylib` and `Contents/Resources/renut_tools/shader_common.h`
+  (Contents/MacOS takes Mach-O only). So Settings keeps the renderer choice on macOS; no "Windows-only" text needed.
+- Verified headless (`--game_data_root=<empty>/assets --futari_setup_source=<loose folder>`), both from the build
+  tree and from a SKIP_ASSETS `.app`: 54 files, 2 DLC, "Shaders ready: 42 translated into vulkan_spirv.bin
+  (71 KB, 1 s)", the game boots on the default renderer; then `--futari_renderer=renut` draws the title from that
+  package at 60 fps. The package is byte-identical to the Windows launcher's (sha256 `757af820…`).
+- Open: the picker, Cancel, Settings and F2 by hand; whether ImGui input reaches the dialog when Renut draws it
+  (Renut's own overlay input is Windows-only); the exe writes `vulkan_spirv.bin` (like logs/ and the ini) inside
+  Contents/MacOS, which breaks the bundle's code seal after the first run.

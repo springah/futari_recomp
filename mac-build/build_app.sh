@@ -134,6 +134,28 @@ cat > "$C/Resources/vulkan/icd.d/MoltenVK_icd.json" <<'JSON'
 }
 JSON
 
+# Renut's shader step (leg 6, 2026-11-04): the exe's translator dlopens the DirectX Shader Compiler, and the
+# translation includes shader_common.h. Contents/MacOS may hold only Mach-O files (the code seal), so the dylib goes
+# to Contents/lib beside MoltenVK and the header to Contents/Resources/renut_tools; the exe looks in both
+# (src/launcher/shader_pipeline.cpp, src/renut_shim/renut_shader_translate_tool.cpp). DXC is NCSA-licensed (LLVM
+# release licence): its text travels with it. Only for a build with the Renut renderer.
+if grep -q '^FUTARI_RENUT_RENDERER:BOOL=ON' "$BUILD/CMakeCache.txt" 2>/dev/null; then
+  if [ "${SKIP_ASSETS:-0}" = "1" ] && ! grep -q '^FUTARI_RENUT_RELEASE_SHADERS:BOOL=ON' "$BUILD/CMakeCache.txt"; then
+    echo "  ERROR: $BUILD has the translated game shaders built into the exe (game data); a bundle without" >&2
+    echo "         assets is for distribution: configure with -DFUTARI_RENUT_RELEASE_SHADERS=ON." >&2
+    exit 1
+  fi
+  [ -f "$BUILD/renut_tools/libdxcompiler.dylib" ] && [ -f "$BUILD/renut_tools/shader_common.h" ] || {
+    echo "  ERROR: $BUILD/renut_tools is incomplete (run scripts/build_dxc_mac.sh, then rebuild)" >&2; exit 1; }
+  cp "$BUILD/renut_tools/libdxcompiler.dylib" "$C/lib/libdxcompiler.dylib"
+  mkdir -p "$C/Resources/renut_tools"
+  cp "$BUILD/renut_tools/shader_common.h" "$C/Resources/renut_tools/"
+  DXC_LIC="$REPO/thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/lib/arm64/LICENSE-DirectXShaderCompiler.txt"
+  [ -f "$DXC_LIC" ] || { echo "  ERROR: $DXC_LIC missing (scripts/build_dxc_mac.sh copies it)" >&2; exit 1; }
+  cp "$DXC_LIC" "$C/Resources/LICENSE-DirectXShaderCompiler.txt"
+  echo "  Renut: libdxcompiler.dylib -> Contents/lib, shader_common.h -> Contents/Resources/renut_tools"
+fi
+
 if [ "${SKIP_ASSETS:-0}" = "1" ]; then
   echo "[4/8] game data — SKIPPED (SKIP_ASSETS=1, verification build)"
 else
