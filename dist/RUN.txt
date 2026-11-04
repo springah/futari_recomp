@@ -76,8 +76,10 @@ macOS
   the same way with these differences:
   - Renut works on the Mac too (Vulkan over MoltenVK, the same way the default
     renderer draws), turned on the same way, and the setup screen makes its
-    shaders here as well. Its macOS build is tested to the title screen only;
-    if a stage looks wrong on Renut, switch back (F2) and report it with the log.
+    shaders here as well. On the Mac it is experimental: the picture matches
+    the default renderer, but heavy scenes can drop to 41-55 fps where the
+    default renderer holds 60. If a stage looks or feels wrong on Renut, switch
+    back (F2) and report it with the log.
   - The setup screen is the same (it opens when the app finds no game data).
     There is no extract_assets.bat; the terminal route is
       python3 extract_iso.py "<your .iso or 435A07D7 folder>" --out assets --dlc-out dlc

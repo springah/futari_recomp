@@ -9,7 +9,7 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 |----|-------|--------|
 | Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.5 (SDK v0.9.3.1): setup and settings screens in the exe, opt-in Renut renderer (Vulkan 1.2). The public zip comes from a tree configured with `-DFUTARI_RENUT_RELEASE_SHADERS=ON` and is staged by `scripts/stage_win_zip.sh` |
 | Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) — still builds, no longer shipped | ⏹ handed over to [futari-linux](https://github.com/cerroverb/futari-linux) from v1.5.4 ([#6](https://github.com/springah/futari_recomp/issues/6)); last bundle here v1.5.3 |
-| macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.5 (MoltenVK) · Renut: Vulkan over MoltenVK, opt-in (title screen verified; `scripts/build_dxc_mac.sh` builds the DXC the setup screen's shader step needs; see `docs/NOTES_renut_leg6_macos.md`) |
+| macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.5 (MoltenVK) · Renut: Vulkan over MoltenVK, opt-in, EXPERIMENTAL (rectangle lists by tessellation; picture verified in Black Label and stage 1, 41-55 fps in heavy scenes; `scripts/build_dxc_mac.sh` builds the DXC the setup screen's shader step needs; see `docs/NOTES_renut_leg6_macos.md`) |
 
 **Windows builds use the `win-amd64-*` presets**, which name clang-cl from
 `C:/Program Files/LLVM` (the SDK's own presets still default to `clang++`, so the

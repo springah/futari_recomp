@@ -102,8 +102,10 @@ and futari-linux's measurements on a Steam Deck
   way; the setup screen there has the shader step as well (the DirectX Shader
   Compiler ships inside the app, built from source). It renders at the window's
   1x size like the default renderer, and Apple GPUs have no geometry shaders,
-  so rectangle lists take a fallback path. Verified to the title screen; a
-  stage on Renut on macOS is still unplayed.
+  so rectangle lists go through tessellation there. The picture matches the
+  default renderer, but treat it as experimental on the Mac: heavy scenes can
+  drop below 60 fps (41 to 55 fps seen in Black Label on an M3 Max), where the
+  default renderer holds 60.
 
 ## Game data
 
@@ -291,8 +293,10 @@ thirdparty/plume/, thirdparty/reblue-XenosRecomp/   # Renut's render interface a
 Known limits of v1.5.5:
 
 - **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path).
-  On macOS it is verified to the title screen only: nobody has played a stage
-  on Renut through MoltenVK yet.
+  On macOS it is experimental: the picture is right, but heavy scenes can run
+  at 41 to 55 fps where the default renderer holds 60, because Apple GPUs have
+  no geometry shaders and the tessellation that stands in for them costs a
+  compute pass per draw call under MoltenVK.
 - **The setup screen translates the shaders in one pass**, where
   `extract_assets.bat` (through `make_shaders.py`) runs two passes around an
   early-alpha rewrite. A few pixel shaders run slower from the setup screen's

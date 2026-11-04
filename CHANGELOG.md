@@ -35,11 +35,17 @@ binaries are now distributed under the GPL-3.0 (last bullet).
   switch turns it on, and the macOS setup screen has the shader step too, with
   the DirectX Shader Compiler built from source and bundled in the app
   (`scripts/build_dxc_mac.sh`; no macOS binary of it exists to download).
-  Apple GPUs have no geometry shaders, so Renut's rectangle lists and point
-  sprites take a fallback path there, and it renders at 1x (the window's
-  points, upscaled by macOS) as the default renderer does. On the Mac this is
-  verified to the title screen at 60 fps; a stage on Renut on macOS has not
-  been played yet.
+  Apple GPUs have no geometry shaders, which Renut uses to turn the game's
+  rectangle lists (every sprite and bullet) into quads, so on the Mac they go
+  through tessellation instead, a hull and domain shader pair with the same
+  arithmetic; point sprites have the same pair, though Futari draws none. It
+  renders at 1x (the window's points, upscaled by macOS) as the default
+  renderer does. Played on this Mac in Black Label and compared to the default
+  renderer in Original stage 1: the picture matches. **Treat Renut on macOS as
+  experimental:** MoltenVK runs tessellation as a compute pass plus a draw for
+  every rectangle-list draw call, and in a heavy Black Label scene the frame
+  rate fell to between 41 and 55 fps on an M3 Max where the default renderer
+  holds 60. The default renderer stays the default on the Mac.
 - **Renut's shaders are made from your own game, on your PC.** The game's
   shaders are game data, so no zip carries them: the public build ships the
   renderer's shader table only, and the setup screen translates the shaders out

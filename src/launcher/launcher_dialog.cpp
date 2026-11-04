@@ -166,6 +166,14 @@ LauncherDialog::LauncherDialog(rex::ui::ImGuiDrawer* drawer, Env env, Mode mode)
     : ImGuiDialog(drawer), env_(std::move(env)), mode_(mode) {
   instance_ = this;
   page_ = mode == Mode::kSettings ? Page::kSettings : Page::kSetup;
+  if (mode == Mode::kSetup && env_.auto_source.empty()) {
+    // --futari_setup over a game that is already in place: the Done page (Play / Settings / Quit), not the
+    // "this build contains no game data" page (seen 2026-11-04 on macOS).
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec)) {
+      page_ = Page::kDone;
+    }
+  }
   make_shaders_ = env_.renut_available;
   if (mode == Mode::kSettings) {
     LoadSettings();
@@ -198,8 +206,9 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
   }
   // The setup flow over a game that is already there (--futari_setup) and a package another build made: redo it
   // now, the game would otherwise miss shaders on Renut. The Done page does the same after an extraction.
-  if (!stale_redo_started_ && mode_ == Mode::kSetup && env_.auto_source.empty() && page_ == Page::kSetup &&
-      package_stale_ && env_.renut_available && !worker_.joinable()) {
+  if (!stale_redo_started_ && mode_ == Mode::kSetup && env_.auto_source.empty() &&
+      (page_ == Page::kSetup || page_ == Page::kDone) && package_stale_ && env_.renut_available &&
+      !worker_.joinable()) {
     std::error_code ec;
     if (std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec)) {
       stale_redo_started_ = true;

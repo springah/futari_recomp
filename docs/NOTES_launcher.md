@@ -128,3 +128,24 @@ Apple Silicon:
 - Open: the picker, Cancel, Settings and F2 by hand; whether ImGui input reaches the dialog when Renut draws it
   (Renut's own overlay input is Windows-only); the exe writes `vulkan_spirv.bin` (like logs/ and the ini) inside
   Contents/MacOS, which breaks the bundle's code seal after the first run.
+
+## Hands, macOS, 2026-11-04 (merge owner + the user)
+
+Test bundle `out/test/Futari.app` from the merged `launcher` tree (release shaders), driven by computer-use in the
+background (clicks reach the SDL window, keystrokes do not) and by the user at the keyboard:
+
+- Setup page: the "Extracted game folder..." button opens the macOS folder panel with the right prompt; Cancel
+  returns to the page. Settings page: draws in Roboto, "Check for updates" answered "You are up to date (v1.5.5; the
+  latest release is v1.5.4)", Setup returns. Quit exits cleanly (the log's title-exit lines).
+- The loose-folder route from the command line: 54 files, 2 DLC, 42 shaders in 1 s, `vulkan_spirv.stamp` written,
+  the game boots on the default renderer and on Renut.
+- The user played Black Label on Renut (fresh `--user_data_root`): "seemed good"; the log had no errors, one module
+  (kiniro_normal), a clean exit, and seven 10 s windows between 41 and 56 fps with the render thread busy 18-24 ms
+  and the GPU 18-22 ms a frame (see `docs/NOTES_renut_leg6_macos.md` for the follow-up).
+- Not done by hand: the typed path, F2 over the running game and Esc (keystrokes cannot be sent to the SDL window
+  from the background; the user's play covered the game's own keys), a physical gamepad on the launcher pages.
+- Gotcha: re-running `build_app.sh` replaces the whole `.app`, and with it the `vulkan_spirv.bin` the setup screen
+  had written inside `Contents/MacOS`; redo the shaders (or re-extract) after every re-bundle.
+- Fixed from this pass: `--futari_setup` over existing game data opened on the "no game data" page; it now opens on
+  the Done page (Play / Settings / Quit).
+
