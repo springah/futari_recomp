@@ -32,6 +32,12 @@ struct ShaderResult {
   uint64_t bytes = 0;
 };
 
+// Starts a new process of this exe with this process's own command line minus the setup arguments
+// (--futari_setup_source, --futari_setup, --futari_setup_settings), so it starts the game on the data the setup
+// screen just put in place. Windows: CreateProcessW, working directory = the exe's folder, no console. Elsewhere:
+// posix_spawn. Not waited for. Returns the child's process id, or 0 with `error`.
+uint32_t RelaunchWithoutSetup(const std::filesystem::path& exe, std::string& error);
+
 // The header and table of a BVKS package (render/shader_library.cpp): the shader count, or false with a reason.
 bool CheckPackage(const std::filesystem::path& package, int& count, std::string& why);
 

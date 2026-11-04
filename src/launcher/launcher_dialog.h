@@ -44,7 +44,9 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
     bool renut_available = false;      // the build carries the Renut renderer and its translator
     bool in_game = false;              // opened over the running game: no Play, settings apply at the next start
     std::filesystem::path auto_source; // --futari_setup_source: start on this at once and Play when done
-    std::function<void()> on_play;     // UI thread; the dialog closes itself right after calling it
+    // UI thread; the dialog closes itself right after calling it. fresh_process: the game data was just extracted
+    // from a console install in this process (src/main.cpp starts the game in a new process then).
+    std::function<void(bool fresh_process)> on_play;
     std::function<void()> on_quit;     // UI thread
     std::function<void()> save_display_settings;  // writes the [Display] lines from the cvars (SaveFutariIni)
   };
@@ -120,6 +122,7 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   ExtractResult extract_result_;
   ShaderResult shader_result_;
   bool ran_extract_ = false;
+  bool extracted_console_install_ = false;  // the last extraction's source was a console install (GoD/SVOD)
   bool ran_shaders_ = false;
   std::string work_title_;
   std::vector<std::string> log_;

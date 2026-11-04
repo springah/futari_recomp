@@ -637,6 +637,7 @@ void LauncherDialog::StartExtraction(const std::filesystem::path& source) {
   worker_done_.store(false);
   ran_extract_ = true;
   ran_shaders_ = false;
+  extracted_console_install_ = ClassifySource(source).kind == SourceKind::kConsoleInstall;
   extract_result_ = {};
   shader_result_ = {};
   log_.clear();
@@ -728,7 +729,7 @@ void LauncherDialog::FinishPlay() {
   if (env_.on_play) {
     auto play = std::move(env_.on_play);
     env_.on_play = nullptr;
-    play();
+    play(ran_extract_ && extract_result_.status == ExtractResult::Status::kOk && extracted_console_install_);
   }
   Close();
 }

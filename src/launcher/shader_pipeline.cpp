@@ -22,7 +22,11 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #else
+#ifdef __APPLE__
+#include <crt_externs.h>
+#endif
 #include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -137,12 +141,139 @@ int RunChild(const std::filesystem::path& exe, const std::vector<std::string>& a
 #endif
 }
 
+// The setup arguments a restarted game must not see again; `next_is_value`: the value came as its own word.
+bool IsSetupArg(const std::string& a, bool& next_is_value) {
+  next_is_value = false;
+  if (a.rfind("--futari_setup", 0) != 0) {
+    return false;
+  }
+  next_is_value = a.find('=') == std::string::npos && a.rfind("--futari_setup_source", 0) == 0;
+  return true;
+}
+
+#ifdef _WIN32
+std::string NarrowUtf8(const wchar_t* w) {
+  const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+  std::string s(size_t(n > 0 ? n - 1 : 0), '\0');
+  if (n > 0) {
+    WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
+  }
+  return s;
+}
+
+// One argument quoted the way CommandLineToArgvW (and the SDK's parser) reads it back: backslashes before a quote
+// and at the end are doubled, quotes escaped.
+std::wstring QuoteArg(const std::wstring& a) {
+  std::wstring out = L"\"";
+  size_t backslashes = 0;
+  for (wchar_t c : a) {
+    if (c == L'\\') {
+      ++backslashes;
+      continue;
+    }
+    if (c == L'"') {
+      out.append(backslashes * 2 + 1, L'\\');
+    } else {
+      out.append(backslashes, L'\\');
+    }
+    backslashes = 0;
+    out.push_back(c);
+  }
+  out.append(backslashes * 2, L'\\');
+  out.push_back(L'"');
+  return out;
+}
+#endif
+
 uint32_t LeU32(const uint8_t* p) {
   return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
 }
 uint64_t LeU64(const uint8_t* p) { return uint64_t(LeU32(p)) | (uint64_t(LeU32(p + 4)) << 32); }
 
 }  // namespace
+
+uint32_t RelaunchWithoutSetup(const std::filesystem::path& exe, std::string& error) {
+#ifdef _WIN32
+  int argc = 0;
+  LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  if (!argv) {
+    error = "could not read this process's command line (error " + std::to_string(GetLastError()) + ")";
+    return 0;
+  }
+  std::wstring cmd = QuoteArg(exe.wstring());
+  for (int i = 1; i < argc; ++i) {
+    bool next_is_value = false;
+    if (IsSetupArg(NarrowUtf8(argv[i]), next_is_value)) {
+      if (next_is_value && i + 1 < argc && std::wstring(argv[i + 1]).rfind(L"--", 0) != 0) {
+        ++i;
+      }
+      continue;
+    }
+    cmd += L" " + QuoteArg(argv[i]);
+  }
+  LocalFree(argv);
+  STARTUPINFOW si{};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi{};
+  std::vector<wchar_t> buffer(cmd.begin(), cmd.end());
+  buffer.push_back(L'\0');
+  if (!CreateProcessW(exe.c_str(), buffer.data(), nullptr, nullptr, FALSE, DETACHED_PROCESS, nullptr,
+                      exe.parent_path().c_str(), &si, &pi)) {
+    error = "Windows would not start " + Utf8(exe.filename()) + " (error " + std::to_string(GetLastError()) + ")";
+    return 0;
+  }
+  CloseHandle(pi.hThread);
+  CloseHandle(pi.hProcess);
+  return uint32_t(pi.dwProcessId);
+#else
+  std::vector<std::string> args;
+#ifdef __APPLE__
+  const int argc = *_NSGetArgc();
+  char** argv = *_NSGetArgv();
+  for (int i = 1; i < argc; ++i) {
+    args.emplace_back(argv[i]);
+  }
+#else
+  {
+    std::ifstream f("/proc/self/cmdline", std::ios::binary);
+    std::string all((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    size_t start = 0;
+    bool first = true;
+    for (size_t i = 0; i < all.size(); ++i) {
+      if (all[i] == '\0') {
+        if (!first) {
+          args.push_back(all.substr(start, i - start));
+        }
+        first = false;
+        start = i + 1;
+      }
+    }
+  }
+#endif
+  std::vector<std::string> words{exe.string()};
+  for (size_t i = 0; i < args.size(); ++i) {
+    bool next_is_value = false;
+    if (IsSetupArg(args[i], next_is_value)) {
+      if (next_is_value && i + 1 < args.size() && args[i + 1].rfind("--", 0) != 0) {
+        ++i;
+      }
+      continue;
+    }
+    words.push_back(args[i]);
+  }
+  std::vector<char*> argv_out;
+  for (auto& w : words) {
+    argv_out.push_back(w.data());
+  }
+  argv_out.push_back(nullptr);
+  pid_t pid = 0;
+  if (posix_spawn(&pid, words[0].c_str(), nullptr, nullptr, argv_out.data(), environ) != 0) {
+    error = "could not start " + Utf8(exe.filename());
+    return 0;
+  }
+  return uint32_t(pid);
+#endif
+}
 
 bool CheckPackage(const std::filesystem::path& package, int& count, std::string& why) {
   count = 0;

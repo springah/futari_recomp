@@ -801,7 +801,23 @@ class FutariApp : public rex::ReXApp {
     auto env = MakeLauncherEnv(defaults.game_data_root);
     env.auto_source = rex::to_path(auto_source);
     const auto opened = std::chrono::steady_clock::now();
-    env.on_play = [this, resume = std::move(resume), paths = defaults, opened]() {
+    env.on_play = [this, resume = std::move(resume), paths = defaults, opened](bool fresh_process) {
+      // After an extraction from a console install the game starts in a new process: constructing the runtime in
+      // this one, after the GoD/SVOD reader has hashed and copied the whole disc, ended in an access violation ~1 s
+      // into the game in 3-4 of 10 runs on Windows (guest sub_821911D0, a null pointer chain; never on a plain start,
+      // the loose folder or the disc image, nor with the drawer kept attached). Cause not understood.
+      if (fresh_process) {
+        std::string error;
+        if (const uint32_t pid =
+                futari::launcher::RelaunchWithoutSetup(rex::filesystem::GetExecutablePath(), error)) {
+          REXLOG_INFO("Launcher: restarting the game in a fresh process after the console-install extraction "
+                      "(pid {})",
+                      pid);
+          RequestExit("restart after setup");
+          return;
+        }
+        REXLOG_WARN("Launcher: could not restart in a fresh process ({}); starting the game in this one", error);
+      }
       // Deferred: the runtime is constructed outside the ImGui frame that pressed Play. The time spent in the
       // setup screen is logged so a crash log after Play says how long the game waited for its clock (bd3f869).
       REXLOG_INFO("Launcher: Play; constructing the runtime ({} ms in the setup screen)",
