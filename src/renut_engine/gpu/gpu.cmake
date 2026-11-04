@@ -352,6 +352,13 @@ function(renut_gpu_setup TARGET)
         ${RENUT_GPU_DIR}/render/textures.cpp
         ${RENUT_GPU_DIR}/render/upload_ring.cpp
         ${RENUT_GPU_DIR}/render/vertex_format.cpp)
+    # futari_recomp (2026-11-04, leg 6): macOS, the NSWindow / CAMetalLayer for plume's Vulkan surface over MoltenVK.
+    if(APPLE)
+        target_sources(${TARGET} PRIVATE ${RENUT_GPU_DIR}/backend/native_window_apple.mm)
+        set_source_files_properties(${RENUT_GPU_DIR}/backend/native_window_apple.mm PROPERTIES
+            SKIP_PRECOMPILE_HEADERS ON COMPILE_OPTIONS "-fobjc-arc")
+        target_link_libraries(${TARGET} PRIVATE "-framework Cocoa" "-framework QuartzCore" "-framework Metal")
+    endif()
 
     renut_host_shader(${TARGET} overlay_vs vs_6_0)
     renut_host_shader(${TARGET} overlay_ps ps_6_0)

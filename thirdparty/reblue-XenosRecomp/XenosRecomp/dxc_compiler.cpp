@@ -5,6 +5,33 @@
 // game's start (the game must boot without it). FUTARI_RENUT_DXCOMPILER names the DLL (the tool mode sets it to
 // renut_tools/dxcompiler.dll beside the exe); otherwise the loader's own search for dxcompiler.dll.
 #include <mutex>
+#ifndef _WIN32
+// futari_recomp (2026-11-04, leg 6): macOS, libdxcompiler.dylib by dlopen (FUTARI_RENUT_DXCOMPILER, else the loader's
+// search for the bare name).
+#include <cstdlib>
+#include <dlfcn.h>
+static DxcCreateInstanceProc futariDxcCreateInstance()
+{
+    static DxcCreateInstanceProc proc = nullptr;
+    static std::once_flag once;
+    std::call_once(once, []
+    {
+        const char* path = std::getenv("FUTARI_RENUT_DXCOMPILER");
+        void* module = dlopen(path && *path ? path : "libdxcompiler.dylib", RTLD_NOW | RTLD_LOCAL);
+        if (module == nullptr)
+        {
+            const char* why = dlerror();
+            fmt::println(stderr, "XenosRecomp: cannot load the DirectX Shader Compiler ({}): {}",
+                         path && *path ? path : "libdxcompiler.dylib", why ? why : "?");
+            return;
+        }
+        proc = reinterpret_cast<DxcCreateInstanceProc>(dlsym(module, "DxcCreateInstance"));
+        if (proc == nullptr)
+            fmt::println(stderr, "XenosRecomp: the DirectX Shader Compiler has no DxcCreateInstance");
+    });
+    return proc;
+}
+#else
 static DxcCreateInstanceProc futariDxcCreateInstance()
 {
     static DxcCreateInstanceProc proc = nullptr;
@@ -39,6 +66,7 @@ static DxcCreateInstanceProc futariDxcCreateInstance()
     });
     return proc;
 }
+#endif  // _WIN32
 #endif
 
 DxcCompiler::DxcCompiler()

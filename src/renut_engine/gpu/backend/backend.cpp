@@ -54,9 +54,62 @@ std::unique_ptr<RenderInterface> CreateD3D12Interface();
 #endif
 } // namespace plume
 
+#if defined(__APPLE__)
+#include <dlfcn.h>
+
+#include <rex/filesystem.h>
+#endif
+
 namespace renut::gpu {
 
 namespace {
+
+#if defined(__APPLE__)
+// futari_recomp (2026-11-04, leg 6): plume's volk dlopens "libvulkan.dylib" / "libMoltenVK.dylib" by bare name, which
+// dyld finds neither in the bundle (Contents/lib, where mac-build/build_app.sh puts MoltenVK) nor in Homebrew's
+// /opt/homebrew/lib. MoltenVK is loaded here by full path and volk is handed its vkGetInstanceProcAddr (plume skips
+// its own volkInitialize then). The same places the SDK's xenos path looks (src/ui/vulkan/vulkan_moltenvk.cpp): the
+// bundle first, then a Vulkan SDK, then Homebrew. MoltenVK directly, no loader: plume asks for nothing a loader adds.
+bool LoadMoltenVK() {
+  if (vkGetInstanceProcAddr != nullptr)
+    return true;
+  std::vector<std::filesystem::path> candidates;
+  const std::filesystem::path exe_dir = rex::filesystem::GetExecutableFolder();
+  candidates.push_back(exe_dir / ".." / "lib" / "libMoltenVK.dylib");
+  candidates.push_back(exe_dir / "libMoltenVK.dylib");
+  for (const char *env : {"REX_VULKAN_SDK", "VULKAN_SDK"}) {
+    if (const char *root = std::getenv(env); root && *root) {
+      candidates.push_back(std::filesystem::path(root) / "lib" / "libMoltenVK.dylib");
+      candidates.push_back(std::filesystem::path(root) / "macOS" / "lib" / "libMoltenVK.dylib");
+    }
+  }
+  candidates.push_back("/opt/homebrew/opt/molten-vk/lib/libMoltenVK.dylib");
+  candidates.push_back("/opt/homebrew/lib/libMoltenVK.dylib");
+  candidates.push_back("/usr/local/lib/libMoltenVK.dylib");
+  std::error_code ec;
+  for (const auto &path : candidates) {
+    if (!std::filesystem::is_regular_file(path, ec))
+      continue;
+    void *module = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (!module) {
+      const char *why = dlerror();
+      RGPU_WARN("MoltenVK at {} does not load: {}", path.string(), why ? why : "?");
+      continue;
+    }
+    auto gipa = reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(module, "vkGetInstanceProcAddr"));
+    if (!gipa) {
+      RGPU_WARN("MoltenVK at {} has no vkGetInstanceProcAddr", path.string());
+      continue;
+    }
+    volkInitializeCustom(gipa);
+    RGPU_INFO("Vulkan: MoltenVK from {}", path.lexically_normal().string());
+    return true;
+  }
+  RGPU_ERROR("No MoltenVK: looked beside the executable, in Contents/lib, the Vulkan SDK and Homebrew "
+             "(brew install molten-vk)");
+  return false;
+}
+#endif
 
 Backend ResolveBackend() {
 #if defined(_WIN32)
@@ -299,6 +352,10 @@ std::unique_ptr<plume::RenderInterface> CreateRenderInterface([[maybe_unused]] p
 #endif
   if (REXCVAR_GET(renut_vulkan_debug_layers))
     EnableVulkanDebugLayers();
+#if defined(__APPLE__)
+  if (!LoadMoltenVK())
+    return nullptr;
+#endif
 #if defined(PLUME_SDL_VULKAN_ENABLED)
   auto render_interface = plume::CreateVulkanInterface(window);
 #else

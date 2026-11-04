@@ -91,6 +91,19 @@ if(CMAKE_HOST_WIN32)
     unset(_futari_winsdk_dxc_dirs)
 endif()
 
+# macOS (leg 6): scripts/build_dxc_mac.sh's DXC, which it installs into dxc-bin's bin/arm64 (dxc-bin's own CMakeLists
+# finds the dylib beside it in lib/arm64 for XenosRecomp).
+if(CMAKE_HOST_APPLE AND NOT FUTARI_DXC)
+    set(_futari_mac_dxc "${CMAKE_SOURCE_DIR}/thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/bin/arm64/dxc-macos")
+    if(NOT EXISTS "${_futari_mac_dxc}")
+        message(FATAL_ERROR "No ${_futari_mac_dxc} for Renut's host shaders: run scripts/build_dxc_mac.sh once "
+                            "(DirectXShaderCompiler from source, ~10 min), or configure with -DFUTARI_DXC=<dxc>")
+    endif()
+    set(FUTARI_DXC "${_futari_mac_dxc}" CACHE FILEPATH "DXC for Renut's host shaders" FORCE)
+    unset(_futari_mac_dxc)
+    message(STATUS "futari: Renut's host shaders with DXC ${FUTARI_DXC}")
+endif()
+
 # Renut's XenosRecomp is built as an ExternalProject (gpu.cmake, the real pipeline only): it gets this build's whole
 # host toolchain, not only the compiler paths. On the PC, clang for the MSVC ABI.
 set(BANJO_RENUT_XENOS_RECOMP_ARGS "")
@@ -146,6 +159,13 @@ endif()
 # futari_recomp (2026-11-03): gpu.cmake keys on futari-linux's name for this switch (FUTARI_LINUX_RELEASE_SHADERS); ours is
 # FUTARI_RENUT_RELEASE_SHADERS, so hand it over as a normal variable (it shadows any cache entry, CMP0126 NEW).
 set(FUTARI_LINUX_RELEASE_SHADERS ${FUTARI_RENUT_RELEASE_SHADERS})
+# macOS (leg 6): plume sizes its swapchain from the NSWindow in backing pixels when PLUME_APPLE_RETINA_ENABLED (2x on a
+# Retina display), but the SDK window's SDL Metal layer is 1x (no SDL_WINDOW_HIGH_PIXEL_DENSITY unless
+# sdl_high_pixel_density), so MoltenVK answered VK_SUBOPTIMAL_KHR to every present and plume's Apple path, which counts
+# SUBOPTIMAL as a failure, rebuilt the swapchain every frame (2,700 rebuilds in 45 s). Points, as the layer is.
+if(APPLE)
+    set(PLUME_APPLE_RETINA_ENABLED OFF CACHE BOOL "plume: size Apple swapchains in backing pixels (futari: OFF, the SDK layer is 1x)" FORCE)
+endif()
 include("${CMAKE_SOURCE_DIR}/src/renut_engine/gpu/gpu.cmake")
 
 add_library(futari_renut_gpu OBJECT
@@ -182,8 +202,10 @@ renut_gpu_setup(futari_renut_gpu)
 # XenosRecomp.exe on every player's PC. SPIR-V only (no DXIL); the DirectX Shader Compiler stays a DLL, loaded from
 # renut_tools/dxcompiler.dll when the tool runs and never at the game's start. gpu.cmake's build-time XenosRecomp
 # (renut_xenos_recomp, the complete build's embedded cache) is a separate ExternalProject and stays as it is.
-# Windows only until leg 6 (macOS loads libdxcompiler.dylib the same way; not wired yet).
-if(WIN32)
+# macOS (leg 6, 2026-11-04): the same, with libdxcompiler.dylib loaded by dlopen (Contents/lib in the bundle). There is
+# no DXC binary for macOS anywhere official (no Homebrew formula, hedge-dev's dxc-bin ships none): it is built from
+# microsoft/DirectXShaderCompiler v1.8.2407 (docs/NOTES_renut_leg6_macos.md) into dxc-bin's bin/arm64 and lib/arm64.
+if(WIN32 OR APPLE)
     # The package writer compresses; renut_zstd (gpu.cmake) is the decoder only.
     file(GLOB renut_zstd_compress_sources "${RENUT_ZSTD_LIB_DIR}/compress/*.c")
     add_library(renut_zstd_compress STATIC ${renut_zstd_compress_sources})
@@ -208,6 +230,13 @@ if(WIN32)
         target_compile_options(futari_renut_translator PRIVATE -Wno-switch -Wno-unused-variable -Wno-null-arithmetic
                                -fms-extensions)
     endif()
+    if(APPLE)
+        # XenosRecomp's parallel loop is std::execution, which libc++ keeps behind -fexperimental-library (its own
+        # CMakeLists does the same on libc++). The DXC headers' WinAdapter.h stands in for <windows.h>.
+        target_compile_options(futari_renut_translator PRIVATE -fexperimental-library -Wno-unused-parameter
+                               -Wno-missing-field-initializers -Wno-sign-compare)
+        target_link_options(futari PRIVATE -fexperimental-library)
+    endif()
     target_precompile_headers(futari_renut_translator PRIVATE "${_futari_xr}/pch.h")
     target_link_libraries(futari_renut_translator PRIVATE fmt::fmt renut_xxhash renut_smolv renut_zstd_compress)
     target_link_libraries(futari PRIVATE futari_renut_translator)
@@ -230,6 +259,24 @@ if(FUTARI_RENUT_RELEASE_SHADERS AND NOT FUTARI_RENUT_STUB_SHADER_CACHE AND WIN32
         COMMENT "Renut's shader tool files for the extract step -> ${_futari_tools_out}"
         VERBATIM)
     message(STATUS "futari: Renut's shader tool files (DXC, shader_common.h, early-alpha pass) go to ${_futari_tools_out}")
+endif()
+# macOS (leg 6): the launcher's shader step needs the same two files beside a build-tree exe, in the dev build too (the
+# translator is in every macOS exe). The bundle splits them (mac-build/build_app.sh): the dylib to Contents/lib, the
+# header to Contents/Resources/renut_tools, as Contents/MacOS may hold only Mach-O files.
+if(APPLE AND NOT FUTARI_RENUT_STUB_SHADER_CACHE)
+    set(_futari_dxc_dylib "${RENUT_XENOS_RECOMP_DIR}/thirdparty/dxc-bin/lib/arm64/libdxcompiler.dylib")
+    if(NOT EXISTS "${_futari_dxc_dylib}")
+        message(FATAL_ERROR "No ${_futari_dxc_dylib}: build DirectXShaderCompiler for macOS first "
+                            "(scripts/build_dxc_mac.sh; docs/NOTES_renut_leg6_macos.md)")
+    endif()
+    set(_futari_tools_out "${CMAKE_BINARY_DIR}/renut_tools")
+    add_custom_target(futari_renut_tools ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_futari_dxc_dylib}" "${_futari_tools_out}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENUT_SHADER_COMMON_DIR}/shader_common.h" "${_futari_tools_out}"
+        COMMENT "Renut's shader tool files for the launcher's shader step -> ${_futari_tools_out}"
+        VERBATIM)
+    unset(_futari_dxc_dylib)
 endif()
 # The renderer's own code without the game code's -ffp-contract / aliasing rules: it is host code (as in banjo-nx).
 target_link_libraries(futari PRIVATE futari_renut_gpu)

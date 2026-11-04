@@ -207,6 +207,28 @@ bool PackageStatus(const std::filesystem::path& exe_dir, int& count, uint64_t& b
   return CheckPackage(package, count, why);
 }
 
+#ifdef _WIN32
+constexpr const char* kDxcompilerName = "dxcompiler.dll";
+#else
+constexpr const char* kDxcompilerName = "libdxcompiler.dylib";
+#endif
+
+// renut_tools/ beside the exe; in a macOS bundle, where Contents/MacOS may hold only Mach-O files (the code seal), the
+// header is in Contents/Resources/renut_tools and the dylib in Contents/lib (mac-build/build_app.sh).
+std::filesystem::path ToolFile(const std::filesystem::path& exe_dir, const std::string& name) {
+  std::error_code ec;
+  const auto beside = exe_dir / "renut_tools" / name;
+#ifdef __APPLE__
+  if (!std::filesystem::is_regular_file(beside, ec)) {
+    const auto bundled = name == kDxcompilerName ? exe_dir / ".." / "lib" / name
+                                                 : exe_dir / ".." / "Resources" / "renut_tools" / name;
+    if (std::filesystem::is_regular_file(bundled, ec)) {
+      return bundled.lexically_normal();
+    }
+  }
+#endif
+  return beside;
+
 #ifndef FUTARI_SHADER_TRANSLATOR_HASH
 #define FUTARI_SHADER_TRANSLATOR_HASH "unknown"
 #endif
@@ -281,8 +303,8 @@ bool WritePackageStamp(const std::filesystem::path& exe_dir, std::string& error)
 
 bool ToolsPresent(const std::filesystem::path& exe_dir, std::string& missing) {
   std::error_code ec;
-  for (const char* name : {"dxcompiler.dll", "shader_common.h"}) {
-    if (!std::filesystem::is_regular_file(exe_dir / "renut_tools" / name, ec)) {
+  for (const char* name : {kDxcompilerName, "shader_common.h"}) {
+    if (!std::filesystem::is_regular_file(ToolFile(exe_dir, name), ec)) {
       missing = "renut_tools/" + std::string(name);
       return false;
     }
@@ -301,7 +323,7 @@ bool TranslatorAvailable() {
 ShaderResult MakeShaderPackage(const ShaderEnv& env, Progress& progress) {
   ShaderResult result;
   if (!TranslatorAvailable()) {
-    result.message = "This build has no shader translator (Renut is Windows-only for now).";
+    result.message = "This build has no shader translator (Renut needs it to draw).";
     return result;
   }
   std::string missing;
@@ -312,7 +334,6 @@ ShaderResult MakeShaderPackage(const ShaderEnv& env, Progress& progress) {
   std::error_code ec;
   const auto work = env.exe_dir / "shader_work";
   const auto dump = work / "dump";
-  const auto tools = env.exe_dir / "renut_tools";
   std::filesystem::remove_all(work, ec);
   std::filesystem::create_directories(dump, ec);
   const auto started = std::chrono::steady_clock::now();
@@ -366,8 +387,9 @@ ShaderResult MakeShaderPackage(const ShaderEnv& env, Progress& progress) {
   rc = RunChild(env.exe,
                 {assets_arg, "--futari_renut_translate=" + Utf8(dump),
                  "--futari_renut_translate_out=" + Utf8(work / "cache.cpp"),
-                 "--futari_renut_translate_common=" + Utf8(tools / "shader_common.h"),
-                 "--futari_renut_dxcompiler=" + Utf8(tools / "dxcompiler.dll"), "--futari_renderer=default"},
+                 "--futari_renut_translate_common=" + Utf8(ToolFile(env.exe_dir, "shader_common.h")),
+                 "--futari_renut_dxcompiler=" + Utf8(ToolFile(env.exe_dir, kDxcompilerName)),
+                 "--futari_renderer=default"},
                 300, progress, error);
   SetEnv("XENOS_RECOMP_SPIRV_PACKAGE", {});
   if (rc == -3) {

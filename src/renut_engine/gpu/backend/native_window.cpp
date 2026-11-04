@@ -9,6 +9,10 @@
 #include <windows.h>
 #elif defined(__SWITCH__)
 #include <switch.h>
+#elif defined(__APPLE__)
+// futari_recomp (2026-11-04, leg 6): macOS, plume's Vulkan over MoltenVK on the SDK window's CAMetalLayer
+// (native_window_apple.mm).
+#include <SDL3/SDL_video.h>
 #else
 #include <cstdlib>
 #include <cstring>
@@ -92,6 +96,49 @@ bool GetRenderWindowPixelSize(uint32_t &width, uint32_t &height) {
   return true;
 }
 
+#elif defined(__APPLE__)
+
+// futari_recomp (2026-11-04, leg 6): plume's Apple RenderWindow is {NSWindow *, CAMetalLayer *}; the layer becomes
+// the VK_EXT_metal_surface. The SDK's macOS window (rex::ui::MacWindow) already carries an SDL Metal view, whose
+// layer is used; one is made only if there is none. native_window_apple.mm does the AppKit part.
+bool AppleRenderWindow(SDL_Window *window, void **ns_window, void **metal_layer);
+
+namespace {
+
+SDL_Window *FindGameSdlWindow() {
+  int count = 0;
+  SDL_Window **windows = SDL_GetWindows(&count);
+  SDL_Window *sdl_window = (windows && count > 0) ? windows[0] : nullptr;
+  SDL_free(windows);
+  return sdl_window;
+}
+
+} // namespace
+
+bool GetNativeRenderWindow(plume::RenderWindow &out) {
+  SDL_Window *sdl_window = FindGameSdlWindow();
+  if (!sdl_window) {
+    RGPU_ERROR("No SDL window for the Metal surface");
+    return false;
+  }
+  if (!AppleRenderWindow(sdl_window, &out.window, &out.view)) {
+    RGPU_ERROR("No NSWindow / CAMetalLayer for the SDL window");
+    return false;
+  }
+  RGPU_INFO("Vulkan surface on the window's CAMetalLayer (MoltenVK)");
+  return true;
+}
+
+bool GetRenderWindowPixelSize(uint32_t &width, uint32_t &height) {
+  SDL_Window *sdl_window = FindGameSdlWindow();
+  int w = 0, h = 0;
+  if (!sdl_window || !SDL_GetWindowSizeInPixels(sdl_window, &w, &h))
+    return false;
+  width = uint32_t(w);
+  height = uint32_t(h);
+  return true;
+}
+
 #else
 
 namespace {
@@ -147,7 +194,7 @@ bool GetRenderWindowPixelSize(uint32_t &width, uint32_t &height) {
 
 } // namespace renut::gpu
 
-#if !defined(_WIN32) && !defined(__SWITCH__)
+#if !defined(_WIN32) && !defined(__SWITCH__) && !defined(__APPLE__)  // futari_recomp: not macOS (Metal surface)
 
 // plume's Vulkan surface (its PLUME_SDL_VULKAN_ENABLED path, through
 // gpu/backend/sdl2_vulkan/SDL_vulkan.h), on whichever video driver SDL chose:

@@ -104,7 +104,27 @@ rejects the flipped copy with the same block number, so the C++ reader and the s
   and the hand-back of the pads to the game's driver after Play are untested), "Open the release page", the stale
   Settings line and the automatic redo (both need the Windows Renut build), every Windows-only line (WinHTTP,
   ShellExecuteW) — unbuilt.
-- **Release staging**: `vulkan_spirv.stamp` is a new file beside the exe that must never ship (it only exists after
-  a player's extraction); `scripts/stage_win_zip.sh`'s refusal list names `vulkan_spirv.bin` but not the stamp.
-- `make_shaders.py` writes no stamp, so its package always reads as stale to the launcher (a log line at start; the
-  setup flow would redo it with the one-pass translator).
+- **Release staging** (done on `launcher`, e42360b): `scripts/stage_win_zip.sh` refuses `vulkan_spirv.stamp` as it
+  refuses the package, and `make_shaders.py` writes the stamp through the exe's `--futari_renut_stamp=<folder>` tool
+  mode, so its two-pass package reads as current.
+
+## macOS, 2026-11-04
+
+Branch `leg/macos` (leg 6; full write-up in `docs/NOTES_renut_leg6_macos.md`). The launcher builds and runs on
+Apple Silicon:
+
+- `file_picker_mac.mm` is built: NSOpenPanel opened non-modally on the main thread (`beginWithCompletionHandler`),
+  polled by the dialog each frame like the Windows picker's thread, so the ImGui frame never blocks. Not yet clicked
+  by a person.
+- **The shader step exists on macOS.** The translator is in the macOS exe too; the DirectX Shader Compiler is a
+  `libdxcompiler.dylib` built from source (`scripts/build_dxc_mac.sh`, v1.8.2407; no macOS binary exists to
+  download), dlopened by the translate child. Build tree: `renut_tools/{libdxcompiler.dylib,shader_common.h}`.
+  Bundle: `Contents/lib/libdxcompiler.dylib` and `Contents/Resources/renut_tools/shader_common.h`
+  (Contents/MacOS takes Mach-O only). So Settings keeps the renderer choice on macOS; no "Windows-only" text needed.
+- Verified headless (`--game_data_root=<empty>/assets --futari_setup_source=<loose folder>`), both from the build
+  tree and from a SKIP_ASSETS `.app`: 54 files, 2 DLC, "Shaders ready: 42 translated into vulkan_spirv.bin
+  (71 KB, 1 s)", the game boots on the default renderer; then `--futari_renderer=renut` draws the title from that
+  package at 60 fps. The package is byte-identical to the Windows launcher's (sha256 `757af820…`).
+- Open: the picker, Cancel, Settings and F2 by hand; whether ImGui input reaches the dialog when Renut draws it
+  (Renut's own overlay input is Windows-only); the exe writes `vulkan_spirv.bin` (like logs/ and the ini) inside
+  Contents/MacOS, which breaks the bundle's code seal after the first run.

@@ -5406,7 +5406,10 @@ namespace plume {
         volkInitializeCustom(getInstanceProcAddr);
         VkResult res = VK_SUCCESS;
 #else
-        VkResult res = volkInitialize();
+        // futari_recomp (2026-11-04): macOS, the embedder may load MoltenVK by full path first and hand volk its
+        // vkGetInstanceProcAddr (volkInitializeCustom): volk's own dlopen asks for bare names, which dyld does not
+        // find in an app bundle's Contents/lib or in Homebrew's /opt/homebrew/lib.
+        VkResult res = vkGetInstanceProcAddr != nullptr ? VK_SUCCESS : volkInitialize();
         if (res != VK_SUCCESS) {
             fprintf(stderr, "volkInitialize failed with error code 0x%X.\n", res);
             return;
