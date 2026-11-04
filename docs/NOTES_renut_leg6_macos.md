@@ -64,9 +64,9 @@ committed.
   plume's Apple path counts as failure. Fixed with `PLUME_APPLE_RETINA_ENABLED OFF` (swapchain at the layer's
   size, 4 creations a run). The output is therefore 1x, upscaled by the compositor, the same as the xenos path
   without `sdl_high_pixel_density`. A Retina swapchain would need the layer's `contentsScale` set to match.
-- **No geometry shaders** (Apple GPUs): Renut logs "rectangle lists are drawn as triangle lists and point sprites as
-  points". Its own fallback; the title looked right, but sprites/bullets in a stage are where this would show.
-  Gate it in play.
+- **No geometry shaders** (Apple GPUs): rectangle lists were drawn as one triangle each, so every in-game screen was a
+  staircase of half-quads. **Fixed on `leg/rectlist` by tessellation** (section below). Point sprites are still single
+  pixels.
 - `VK_KHR_present_wait`: not checked; Renut runs without it.
 
 ## Not done / open
@@ -106,3 +106,92 @@ grep -iE 'error|miss|warn|fatal|10.0 s:' out/test/Futari.app/Contents/MacOS/logs
 
 Expected: "Shaders ready: 42 translated", "SPIR-V package …: 42 shaders", "MoltenVK from …/Contents/lib", ~60 fps
 lines, and only the two known warnings (no geometry shaders; overlay input).
+
+## leg/rectlist (2026-11-04): rectangle lists by tessellation on macOS
+
+Branch `leg/rectlist`, cut from `launcher` at a73058d.
+
+### The defect
+
+Xenos rectangle lists (three corners per rectangle, the GPU makes the fourth) are expanded by
+`rectangle_list_gs.hlsl`. Apple GPUs under MoltenVK have no geometry shaders, so `BuildRectangleListShader` left it null
+and draw.cpp drew the three corners as a plain triangle: one triangle per sprite, bullet, tile and full-screen pass.
+The title happened to survive; every stage screen was diagonal half-tiles.
+
+### Design (approach 1 of 3: tessellation)
+
+MoltenVK reports `tessellationShader` on Apple Silicon. Without geometry shaders but with tessellation:
+
+- **plume** (`thirdparty/plume`, commit 7f9dc71): `RenderGraphicsPipelineDesc::hullShader/domainShader` and
+  `RenderDeviceCapabilities::tessellationShader`. The Vulkan back end adds the TESSELLATION_CONTROL/EVALUATION stages,
+  `VkPipelineTessellationStateCreateInfo` with patchControlPoints = the list primitive's vertex count (triangle list: 3),
+  topology PATCH_LIST, no primitive restart. Device features were already enabled wholesale (`pEnabledFeatures` =
+  everything the device reports), so tessellation is on. D3D12 / Metal / deko3d ignore the new fields; nothing sets them
+  where geometry shaders exist, so the Windows path is untouched (no enum value was added either).
+- **Host shaders** (2bcb607): `rectangle_list.hlsli` (the GS's Vertex struct, right-angle choice and `Opposite`, verbatim),
+  `rectangle_list_hs.hlsl` (hs_6_0: hands the 3 corners on rotated so control point 0 is the right-angle corner c,
+  then a, b in the given cyclic order, exactly where the GS starts its strip; quad domain, integer partitioning, all tess
+  factors 1, `triangle_cw`), `rectangle_list_ds.hlsl` (ds_6_0: at (0,0)/(1,0)/(0,1) returns c/a/b untouched, at (1,1)
+  `Opposite(a, b, c)` = a + b - c for every output: the GS's arithmetic, bit for bit, no lerp rounding). Compiled by
+  `renut_host_shader()` to SPIR-V (and DXIL on Windows, unused there; both compile with DXC 1.8.2407). DXC gives the
+  HS->DS interface alphabetical locations on both sides and the VS->HS / DS->PS interfaces declaration-order locations,
+  the same as the GS, so the translated guest VS/PS link unchanged. `rectangle_list_gs.hlsl` is unchanged.
+- **Renut** (914cf61): video.cpp builds `rectangle_list_hs/ds` when `!geometryShader && tessellationShader`;
+  pipeline.cpp uses them for `key.rectangle_list` when there is no GS; draw.cpp sets `key.rectangle_list` for either
+  form. The startup line is now
+  `[info] No geometry shader support; rectangle lists are drawn by tessellation (rectangle_list_hs/ds), point sprites as points`
+  (a WARN remains only for a device with neither).
+- **Winding**: `triangle_cw` in Vulkan's upper-left domain makes (0,0)->(1,0)->(0,1) = c->a->b, so both triangles keep
+  the given vertices' winding, as the GS strip does. Checked on the GPU with a throwaway build (not committed) that forced
+  culling on rectangle lists: cull-front leaves the full picture with tessellation and the same front half-triangles with
+  the old fallback (`out/shots/cf78.png`), cull-back blanks both (`out/shots/cull78.png`). Same facing in both forms.
+
+Approaches 2 (vertex pulling in XenosRecomp) and 3 (CPU expansion) were not needed.
+
+### Dev aid: futari_input_script (1a8b23c)
+
+`--futari_input_script="ms:button[:hold_ms],..."` (init-only, src/dev/input_script.cpp): an SDL3 virtual gamepad
+(`SDL_AttachVirtualJoystick`, gamepad type, all buttons/axes) attached once the SDK's SDL driver has inited the gamepad
+subsystem; the driver opens it through its normal `SDL_EVENT_GAMEPAD_ADDED` hotplug path ("SDL OnControllerDeviceAdded:
+\"futari_input_script\" ... Added at index 0"). Each press is logged. Buttons: a b x y start back up down left right lb rb;
+held 100 ms by default. The exe imports SDL from librexruntime.dylib, so it is the same SDL instance as the driver's.
+Beware zsh: `"$t:a"` is a path modifier, write `${t}:a`.
+
+### Verification
+
+Run from `out/run` (staged build exe + dylibs, `librexgpu-xenos.dylib` copied as `.so`, the setup run's
+`vulkan_spirv.bin`), `--game_data_root=out/run/assets --user_data_root=<fresh empty folder under out/fresh/>`, one game
+window at a time under `/tmp/futari_drive.lock`. **Always pass a fresh `--user_data_root`**: the default
+(`~/.local/share/futari`) holds the user's own saves and options.
+
+Button script that reaches Original mode stage 1 (Ver1.5 -> Arcade -> Score Attack -> LIVE notice OK -> 1P SIDE START ->
+Mode Select -> Character Select -> Shot Type -> stage 1) from a fresh save, both renderers, ~70 s after start
+(timings drift by a few seconds between runs, hence the repeated pairs):
+
+```
+12000:start,14500:a,17000:start,19500:a,22000:start,24500:a,27000:start,29500:a,32000:start,34500:a,
+37000:start,39500:a,42000:start,44500:a,47000:start,49500:a,55000:x,57000:y,59000:rb,61000:a,... (x,y,rb,a every 2 s to 89000)
+```
+
+(Mode/character/shot-type selects did not take A in these runs; the x/y/rb/a cycle gets through them. The fresh save
+showed no extra first-run prompt on this route. The run is killed before the game-over replay-save prompt.)
+
+| run | renderer | result |
+|---|---|---|
+| `out/shots/f1_*` (grid `f1_grid.png`) | default | menus, stage 1 at 70-94 s |
+| `out/shots/f2_*` (grid `f2_grid.png`) | renut | same sequence; stage, ship, enemies, enemy bullets, shots, HUD, frame all whole quads |
+| `out/shots/fcmp82.png` | renut (left) vs default (right), 82 s | same picture |
+| `out/run/logs/futari_024.log` | renut | 0 errors, 0 MoltenVK warnings, 0 shader misses; 58-60 fps in stage 1, GPU 3.5-14 ms a frame |
+
+The `futari_024.log` "Renut shaders are STALE: ... no vulkan_spirv.stamp" warning is the out/run test dir's (its package
+was copied without the stamp before this leg); all 42 shaders load.
+
+### Left
+
+- **Point sprites** still draw as single pixels without a GS (`point_sprite_gs.hlsl`). The same tessellation pattern
+  works (patch of 1, quad domain, corners from the point size), but point_sprite_gs reads SharedConstants (point size /
+  viewport) so the DS would need that descriptor; not done. Nothing obviously missing in stage 1, but not audited.
+- **Cost**: MoltenVK runs tessellated draws as compute + render; stage 1 measured GPU 3.5-14 ms a frame, two 10 s windows
+  at 58.0-58.6 fps when the screen was busy (render thread up to 13 ms). Later, denser stages are untested.
+- `FUTARI_PREBUILT_GPU_DIR` (the futari-linux prebuilt-header route) has no prebuilt `rectangle_list_hs/ds` headers.
+- Only stage 1's first ~25 s were seen; no boss, no other mode.
