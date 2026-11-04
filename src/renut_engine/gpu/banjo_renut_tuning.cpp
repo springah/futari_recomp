@@ -4,6 +4,7 @@
 #include <rex/frame_latency.h>
 #include "renut_engine/display_sync.h"
 #include "renut_engine/gpu/banjo_renut_tuning.h"
+#include "renut_engine/gpu/futari_rect_timing.h"  // futari_recomp (leg/rectlist)
 #include "renut_engine/gpu/d3d/d3d.h"
 #include "renut_engine/gpu/backend/queued.h"
 #include "renut_engine/gpu/banjo_renut_record.h"
@@ -861,6 +862,7 @@ void StatsGameFrame() {
   // The generated code's self-checks (their "[verify]" line and any DIFFERENCE): banjo-nx's renderer reports them
   // in its own 10 s report; with Renut's renderer nobody did (package 27).
   banjo::CodegenChecksReport(static_cast<int>(since + 0.5));
+  futari::renut_timing::Report(since, t.render_frames);  // futari_recomp (renut_draw_timing)
   g_stats.total = {};
   g_stats.last_report = now;
 }
