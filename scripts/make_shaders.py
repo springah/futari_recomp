@@ -167,6 +167,10 @@ def main():
         print(f"3/3  {PACKAGE_NAME}: {count} shaders")
         out_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(tmp_package, package)
+        # The stamp beside the package names the build that made it; without it the launcher's setup flow would
+        # treat this two-pass package as stale and redo it with its own one-pass translation.
+        if not run([exe, f"--futari_renut_stamp={out_dir}"], timeout=60, log=log):
+            print("     note: could not write vulkan_spirv.stamp (an older futari.exe?); the game will warn that the shaders are unstamped")
         ok = True
         print(f"[DONE] {package} ({package.stat().st_size // 1024} KB, {time.time() - started:.0f} s)")
         return 0

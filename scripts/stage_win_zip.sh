@@ -16,7 +16,7 @@
 #     extract_assets.bat extract_iso.py make_shaders.py renut_tools/{dxcompiler.dll,shader_common.h,
 #     renut_early_alpha.py,early_alpha.py}
 #     RUN.txt gamecontrollerdb.txt THIRD-PARTY-NOTICES.txt dlc/README.txt
-# Not shipped: assets/, dlc/<ids>/, vulkan_spirv.bin, shader_work/, logs/, TracyClient.dll (not imported).
+# Not shipped: assets/, dlc/<ids>/, vulkan_spirv.bin + vulkan_spirv.stamp, shader_work/, logs/, TracyClient.dll (not imported).
 set -euo pipefail
 VER="${1:?usage: stage_win_zip.sh <version, e.g. 1.5.5>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -49,7 +49,7 @@ cores=$(ls "$STAGE"/futari_*.dll | wc -l)
 [ "$cores" -eq 8 ] || { echo "REFUSED: $cores core DLLs, need 8 (build every target)"; exit 1; }
 
 # Shipping rules: nothing of the game, nothing translated from it, nothing from a run.
-bad=$(cd "$STAGE" && find . \( -name '*.xex' -o -name 'vulkan_spirv.bin' -o -name '*.bin' -o -path './assets*' -o -path './logs*' \
+bad=$(cd "$STAGE" && find . \( -name '*.xex' -o -name 'vulkan_spirv.bin' -o -name 'vulkan_spirv.stamp' -o -name '*.bin' -o -path './assets*' -o -path './logs*' \
       -o -path './shader_work*' -o -path './shader_capture*' -o -name '*.log' \) | head)
 if [ -n "$bad" ]; then echo "REFUSED: game data or run output in the stage:"; echo "$bad"; exit 1; fi
 # The exe must not carry the game's shaders: started with Renut and no package it must say so (the dev build would

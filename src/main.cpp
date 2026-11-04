@@ -31,6 +31,7 @@
 // player's own disc image, console install or extracted folder goes into assets/ and dlc/, the Renut shaders are
 // translated, then the game starts), and the settings screen (F2 in the game). No Python, no batch file.
 #include "launcher/launcher_dialog.h"
+#include "launcher/shader_pipeline.h"
 
 REXCVAR_DEFINE_BOOL(futari_setup, false, "Futari",
                     "Open the setup screen at start even when the game data is in place")
@@ -72,6 +73,13 @@ REXCVAR_DEFINE_INT32(futari_renut_capture_after_s, 20, "Futari",
 REXCVAR_DEFINE_STRING(futari_renut_dump_shaders, "", "Futari",
                       "Tool: dump the game's shader containers to this folder and exit (empty: off)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Tool mode for scripts/make_shaders.py, last step: write vulkan_spirv.stamp for the vulkan_spirv.bin in this folder
+// (the build that made it: launcher/shader_pipeline.h) and exit, so a package made by the script reads as current
+// and the launcher does not redo it with its one-pass translation. Empty = off.
+//   futari.exe --futari_renut_stamp=<folder holding vulkan_spirv.bin>
+REXCVAR_DEFINE_STRING(futari_renut_stamp, "", "Futari",
+                      "Tool: write vulkan_spirv.stamp for the vulkan_spirv.bin in this folder and exit (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 #if FUTARI_RENUT_TRANSLATOR
 // Tool mode for the extractor, step 2: translate that dump to SPIR-V (Renut's XenosRecomp built into this exe, the
 // DirectX Shader Compiler loaded from renut_tools/) and exit before anything of the game runs. The package and the
@@ -108,6 +116,8 @@ REXCVAR_DEFINE_STRING(futari_renut_dxcompiler, "", "Futari",
 #include <charconv>
 #include <chrono>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -838,6 +848,22 @@ class FutariApp : public rex::ReXApp {
   void OnPostInitLogging() override {
     if (!rex::cvar::HasNonDefaultValue("renut_gpu_backend")) {
       rex::cvar::SetFlagByName("renut_gpu_backend", "vulkan");
+    }
+    // The stamp tool mode (make_shaders.py's last step): no window, no runtime, exit with 0 or 1.
+    const std::string stamp_dir = REXCVAR_GET(futari_renut_stamp);
+    if (!stamp_dir.empty()) {
+      const std::filesystem::path dir(std::u8string(stamp_dir.begin(), stamp_dir.end()));
+      std::string error;
+      const bool ok = futari::launcher::WritePackageStamp(dir, error);
+      if (!ok) {
+        REXLOG_ERROR("Shader stamp FAILED: {}", error);
+        std::fprintf(stderr, "Shader stamp FAILED: %s\n", error.c_str());
+      } else {
+        REXLOG_INFO("Shader stamp: wrote vulkan_spirv.stamp in {} ({})", stamp_dir,
+                    futari::launcher::ShaderBuildId());
+      }
+      std::fflush(nullptr);
+      std::_Exit(ok ? 0 : 1);
     }
 #if FUTARI_RENUT_TRANSLATOR
     // The translate tool mode: nothing of the game is needed, so it runs here and the process ends with the tool's
