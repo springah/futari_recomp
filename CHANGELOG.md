@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## v1.5.5 — 2026-11-DD (Windows, macOS)
+## v1.5.5 — 2026-11-04 (Windows, macOS)
 
 A second renderer, opt-in, and a setup screen inside the exe that replaces the
 batch file as the way in. The renderer is a response to the first gameplay
