@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.6 — 2026-11-07 (Windows, macOS)
 
 - **Renut: the VSync box works, and Renut has its own vsync line.** On Renut the F2
   VSync box always showed off and its save changed nothing, on Windows and macOS

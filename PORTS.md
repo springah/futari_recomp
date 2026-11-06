@@ -7,9 +7,9 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 
 | OS | Build | Status |
 |----|-------|--------|
-| Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.5 (SDK v0.9.3.1): setup and settings screens in the exe, opt-in Renut renderer (Vulkan 1.2). The public zip comes from a tree configured with `-DFUTARI_RENUT_RELEASE_SHADERS=ON` and is staged by `scripts/stage_win_zip.sh` |
+| Windows (x64) | `win-amd64-release` preset (clang-cl), or `build.ps1` → `out/build/win-amd64-release` | ✅ v1.5.6 (SDK v0.9.3.1): setup and settings screens in the exe, opt-in Renut renderer (Vulkan 1.2). The public zip comes from a tree configured with `-DFUTARI_RENUT_RELEASE_SHADERS=ON` and is staged by `scripts/stage_win_zip.sh` |
 | Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) — still builds, no longer shipped | ⏹ handed over to [futari-linux](https://github.com/cerroverb/futari-linux) from v1.5.4 ([#6](https://github.com/springah/futari_recomp/issues/6)); last bundle here v1.5.3 |
-| macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.5 (MoltenVK) · Renut: Vulkan over MoltenVK, opt-in, EXPERIMENTAL (rectangle lists by tessellation; picture verified in Black Label and stage 1, 41-55 fps in heavy scenes; `scripts/build_dxc_mac.sh` builds the DXC the setup screen's shader step needs; see `docs/NOTES_renut_leg6_macos.md`) |
+| macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.6 (MoltenVK) · Renut: Vulkan over MoltenVK, opt-in, EXPERIMENTAL (rectangle lists by tessellation; picture verified in Black Label and stage 1, 41-55 fps in heavy scenes; `scripts/build_dxc_mac.sh` builds the DXC the setup screen's shader step needs; see `docs/NOTES_renut_leg6_macos.md`) |
 
 **Windows builds use the `win-amd64-*` presets**, which name clang-cl from
 `C:/Program Files/LLVM` (the SDK's own presets still default to `clang++`, so the
@@ -28,7 +28,7 @@ public build ships the shader table only, and the player's setup screen makes
 cmake --preset win-amd64-release -B out/build/win-amd64-release-shaders -DFUTARI_RENUT_RELEASE_SHADERS=ON
 cmake --build out/build/win-amd64-release-shaders
 cmake --build out/build/win-amd64-release-shaders --target futari_renut_tools
-bash scripts/stage_win_zip.sh 1.5.5     # stages, checks, zips, writes the .sha256
+bash scripts/stage_win_zip.sh 1.5.6     # stages, checks, zips, writes the .sha256
 ```
 
 `stage_win_zip.sh` refuses a tree without that option, a `renut_tools/` holding
