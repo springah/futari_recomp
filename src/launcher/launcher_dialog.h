@@ -43,7 +43,8 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
     std::string version;               // "1.5.5"
     void* native_window = nullptr;     // for the file dialogs' parent
     bool renut_available = false;      // the build carries the Renut renderer and its translator
-    bool in_game = false;              // opened over the running game: no Play, settings apply at the next start
+    std::string renderer_fallback;     // non-empty: Renut was asked for but the default renderer runs this session (why)
+    bool in_game = false;             // opened over the running game: no Play, settings apply at the next start
     std::filesystem::path auto_source; // --futari_setup_source: start on this at once and Play when done
     // UI thread; the dialog closes itself right after calling it. fresh_process: the game data was just extracted
     // from a console install in this process (src/main.cpp starts the game in a new process then).

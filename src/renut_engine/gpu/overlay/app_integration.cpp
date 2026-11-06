@@ -97,6 +97,9 @@ bool StartRenderer(rex::ui::WindowedAppContext &app_context,
     RGPU_ERROR("Renderer initialisation failed");
     return false;
   }
+  // futari_recomp (2026-11-07): the boot's last two steps on this side, named for the same reason as video.cpp's
+  // "Host device:" lines (a crash between them and the runtime's first line is in the overlay or the present pump).
+  RGPU_INFO("Renderer: host device ready; starting the overlay and the present pump");
   // reNut's own overlay (overlay_ui.h), built on the UI thread with the SDK's.
 #if !defined(__SWITCH__)
   if (!overlay::Start([&app_context](std::function<void()> build) {
@@ -116,6 +119,7 @@ bool StartRenderer(rex::ui::WindowedAppContext &app_context,
   });
 
   g_pump.Start(app_context, std::move(imgui_drawer));
+  RGPU_INFO("Renderer: presenting");
   return true;
 }
 

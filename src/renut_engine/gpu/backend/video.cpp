@@ -1006,17 +1006,45 @@ bool Video::CreateHostDevice() {
     RGPU_INFO("Swapchain: the window has no size yet (minimized); presenting starts when it has one");
   }
 
-  if (!BuildUtilityLayout(s) || !BuildSamplers(s) || !BuildNullTexture(s) ||
-      !BuildPresentPipeline(s) || !BuildDepthResolvePipelines(s) || !BuildDrawLayout(s)) {
+  // futari_recomp (2026-11-07): one line before each step, so a player's log names the step a driver dies in (a
+  // hard crash in here leaves no error line of its own; issue #8, AMD Renoir: the log ended at the swapchain).
+  const auto step = [](const char *name) { RGPU_INFO("Host device: {}", name); };
+  const auto build = [&](const char *name, bool ok) {
+    if (!ok)
+      RGPU_ERROR("Host device: {} failed", name);
+    return ok;
+  };
+  step("utility layout");
+  if (!build("utility layout", BuildUtilityLayout(s)))
     return false;
-  }
+  step("samplers");
+  if (!build("samplers", BuildSamplers(s)))
+    return false;
+  step("null texture");
+  if (!build("null texture", BuildNullTexture(s)))
+    return false;
+  step("present pipeline");
+  if (!build("present pipeline", BuildPresentPipeline(s)))
+    return false;
+  step("depth resolve pipelines");
+  if (!build("depth resolve pipelines", BuildDepthResolvePipelines(s)))
+    return false;
+  step("draw layout");
+  if (!build("draw layout", BuildDrawLayout(s)))
+    return false;
+  step("rectangle list shader");
   BuildRectangleListShader(s);
+  step("stream convert pipeline");
   BuildStreamConvertPipeline(s);
+  step("target readback pipeline");
   BuildTargetReadbackPipeline(s);
   // Optional: without it, scaled resolve destinations keep one level.
+  step("texture mip shader");
   s.texture_mip_ps =
       CreateHostShader(s.device.get(), RENUT_HOST_SHADER(texture_mip_ps), "texture_mip_ps");
+  step("pipeline prebuild");
   StartPipelinePrebuild();
+  step("ready");
 
   s.host_ready = true;
   return true;

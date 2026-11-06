@@ -101,6 +101,12 @@ bool AttachSpirvPackage(SpirvPackage &p) {
 
 void ExportBuiltInSpirvPackage(const std::string &path);
 
+}  // namespace
+
+bool GameShadersBuiltIn() { return g_spirvCacheCompressedSize != 0; }
+
+namespace {
+
 SpirvPackage &OpenSpirvPackage() {
   std::call_once(g_package.once, [] {
     SpirvPackage &p = g_package;

@@ -487,6 +487,12 @@ void LauncherDialog::DrawSettings() {
     }
     ImGui::SameLine();
     ImGui::TextDisabled("applies at the next start");
+    if (!env_.renderer_fallback.empty()) {
+      ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.45f, 1.0f));
+      WrappedText("This session runs on the default renderer: " + env_.renderer_fallback +
+                  ". Prepare the shaders below, then start the game again for Renut.");
+      ImGui::PopStyleColor();
+    }
     if (package_stale_) {
       ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.45f, 1.0f));
       ImGui::TextUnformatted(package_status_.c_str());
