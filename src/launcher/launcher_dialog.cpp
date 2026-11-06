@@ -747,7 +747,10 @@ void LauncherDialog::FinishPlay() {
 void LauncherDialog::LoadSettings() {
   renderer_renut_ = env_.renut_available && rex::cvar::Query<std::string>("futari_renderer") == "renut";
   fullscreen_ = rex::cvar::Query<bool>("fullscreen");
-  vsync_ = rex::cvar::Query<bool>("vsync");
+  // The SDK's `vsync` is registered by the xenos plugin; a Renut session loads
+  // none, so there the box reads Renut's own switch (both follow the one
+  // [Display] vsync line, and Save sets them all).
+  vsync_ = rex::cvar::Query<bool>(rex::cvar::GetFlagByName("vsync").empty() ? "renut_vsync" : "vsync");
   resolution_index_ = 0;
   settings_note_.clear();
 }
@@ -782,6 +785,7 @@ void LauncherDialog::SaveSettings() {
   rex::cvar::SetFlagByName("fullscreen", fullscreen_ ? "true" : "false");
   rex::cvar::SetFlagByName("vsync", vsync_ ? "true" : "false");
   rex::cvar::SetFlagByName("present_vsync", vsync_ ? "true" : "false");
+  rex::cvar::SetFlagByName("renut_vsync", vsync_ ? "true" : "false");  // applies at once on Renut
   if (resolution_index_ > 0 && resolution_index_ <= int(std::size(kResolutions))) {
     const auto& r = kResolutions[resolution_index_ - 1];
     rex::cvar::SetFlagByName("window_width", std::to_string(r.w));
