@@ -14,7 +14,8 @@
 #                   its dylibs come from $SDK/out/mac-arm64/)
 #   ASSETS_SRC=...  directory containing assets/ and (optionally) dlc/
 #   APP=...         output bundle path
-#   VER=...         CFBundleShortVersionString (keep in sync with CMakeLists.txt)
+#   VER=...         CFBundleShortVersionString (default: the project version in
+#                   CMakeLists.txt; CFBundleVersion adds the git build id)
 #   SKIP_ASSETS=1   build the bundle without game data (ASSETS_SRC not needed)
 #   ICON_SRC=...    .ico to turn into the app icon (default: $REPO/src/futari.ico)
 #
@@ -23,10 +24,25 @@
 set -euo pipefail
 
 PROJ="${PROJ:-$HOME/Desktop/projects}"
-VER="${VER:-1.5.5}"
-# The checkout is wherever this script lives; the build dir and the SDK are
-# derived from it so one bundle never mixes two trees.
+# Version: read from CMakeLists.txt (the same number the executable bakes in as
+# FUTARI_VERSION_STRING), so the bundle cannot drift from the build. BUILD_ID is
+# git's description of HEAD -- the bare tag on a release commit, otherwise
+# "<tag>-<commits since>-g<hash>", plus "-dirty" for uncommitted changes -- and
+# goes in CFBundleVersion so two bundles of the same version are still telling.
 REPO="${REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+cmake_ver="$(sed -nE 's/^project\(futari VERSION ([0-9][0-9.]*).*/\1/p' "$REPO/CMakeLists.txt" | head -1)"
+if [ -z "${VER:-}" ]; then
+  if [ -z "$cmake_ver" ]; then
+    echo "ERROR: could not read 'project(futari VERSION x.y.z' from $REPO/CMakeLists.txt; set VER=..." >&2
+    exit 1
+  fi
+  VER="$cmake_ver"
+fi
+BUILD_ID="${BUILD_ID:-$(git -C "$REPO" describe --tags --always --dirty 2>/dev/null || echo unknown)}"
+BUILD_ID="${BUILD_ID#v}"
+echo "version $VER, build $BUILD_ID"
+# The checkout is wherever this script lives (REPO, above); the build dir and
+# the SDK are derived from it so one bundle never mixes two trees.
 BUILD="${BUILD:-$REPO/out/build/mac-arm64-release}"
 # SDK source tree. Its runtime dylibs land in $SDK/out/mac-arm64/.
 # THE VENDORED TREE WINS: builds link thirdparty/rexglue-sdk, so the bundle must
@@ -200,7 +216,7 @@ cat > "$C/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>           <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
     <key>CFBundleShortVersionString</key>    <string>${VER}</string>
-    <key>CFBundleVersion</key>               <string>${VER}</string>
+    <key>CFBundleVersion</key>               <string>${BUILD_ID}</string>
     <key>LSMinimumSystemVersion</key>        <string>13.0</string>
     <key>NSHighResolutionCapable</key>       <true/>
     <key>LSApplicationCategoryType</key>     <string>public.app-category.games</string>
@@ -218,8 +234,16 @@ echo "[8/8] version consistency check"
 # (|| true: a missing marker must reach the check below, not abort silently.)
 exe_v="$(strings "$C/MacOS/futari" | grep -oE 'rexglue-v[0-9][0-9.]*' | sort -u | head -1 || true)"
 rt_v="$(strings "$C/MacOS/librexruntime.dylib" | grep -oE 'rexglue-v[0-9][0-9.]*' | sort -u | head -1 || true)"
-echo "  futari:            ${exe_v:-?}"
+exe_app_v="$(strings "$C/MacOS/futari" | grep -oE 'Mushihimesama Futari v[0-9][0-9.]*' | sed 's/.* v//' | sort -u | head -1 || true)"
+echo "  futari:            ${exe_v:-?} (app v${exe_app_v:-?})"
 echo "  librexruntime:     ${rt_v:-?}"
+echo "  Info.plist:        v${VER} build ${BUILD_ID}"
+# The executable bakes FUTARI_VERSION_STRING from the same CMakeLists.txt; a
+# different number here means $BUILD is a stale tree, not this checkout.
+if [ -n "$exe_app_v" ] && [ "$exe_app_v" != "$VER" ]; then
+  echo "  ERROR: the executable is v$exe_app_v but the bundle says v$VER -- rebuild $BUILD first." >&2
+  exit 1
+fi
 if [ -z "$exe_v" ] || [ -z "$rt_v" ]; then
   echo "  ERROR: could not read the SDK version marker from one of the binaries." >&2
   exit 1
