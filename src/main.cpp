@@ -302,11 +302,13 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# display you can keep the game at 60 but let the window present\n"
        << "# immediately again with \"present_vsync = false\" in the F4 cvar list.\n"
        << "vsync = true\n"
+#if FUTARI_RENUT_RENDERER
        << "# Renut (the Vulkan renderer, futari_renderer = renut) has its own switch:\n"
        << "# off shows each frame at once (lowest latency, tearing possible); on\n"
        << "# waits for the display's refresh, which can hitch on a panel that is\n"
        << "# not exactly 60 Hz. The F2 VSync box sets this one while Renut runs.\n"
        << "renut_vsync = false\n"
+#endif
        << "refresh_rate = 60\n"
        << "letterbox = true\n"
        << "\n"
@@ -799,6 +801,7 @@ class FutariApp : public rex::ReXApp {
 #endif
 #if FUTARI_RENUT_RENDERER
     env.renderer_fallback = banjo::renut_gpu::FallbackReason();
+    env.renut_running = banjo::renut_gpu::Active();
 #endif
     env.on_quit = [this] { RequestExit("launcher"); };
     env.save_display_settings = [] { SaveFutariIni(rex::filesystem::GetExecutableFolder()); };
@@ -1005,7 +1008,8 @@ class FutariApp : public rex::ReXApp {
       const auto stamp = futari::launcher::CheckPackageStamp(rex::filesystem::GetExecutableFolder(), detail);
       if (stamp == futari::launcher::StampState::kNoPackage || stamp == futari::launcher::StampState::kStale) {
         banjo::renut_gpu::FallBackToDefault(detail);
-        REXLOG_WARN("Renderer: default (the xenos plugin) this session, not Renut (futari_renderer = renut): {}. "
+        // "[renut-fallback]" is the token scripts/stage_win_zip.sh keys on; the prose after it may change.
+        REXLOG_WARN("[renut-fallback] Renderer: default (the xenos plugin) this session, not Renut (futari_renderer = renut): {}. "
                     "Renut would draw a black game without this build's shaders. F2 -> Settings -> {} the shaders, "
                     "then start the game again",
                     detail, stamp == futari::launcher::StampState::kNoPackage ? "Prepare" : "Redo");

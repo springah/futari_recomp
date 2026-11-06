@@ -68,15 +68,33 @@ UDW="$(cygpath -m "$UD" 2>/dev/null || echo "$UD")"
 ( cd "$STAGE" && timeout 12 ./futari.exe --user_data_root="$UDW" --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renderer=renut >/dev/null 2>&1 || true )
 taskkill //F //IM futari.exe >/dev/null 2>&1 || true
 LOG=$(ls -t "$STAGE"/logs/*.log 2>/dev/null | head -1)
-# v1.5.6: with no vulkan_spirv.bin a release build falls back to the default renderer and says so in one warning
-# (main.cpp OnPreSetup takes that path only when no game shaders are built in); a dev build runs Renut on its own
-# table and never prints it. Older builds printed "no game shaders built in" and brought Renut up instead; either
-# line proves the release table. Renut itself coming up on this build is proven on a test install with a package
-# made by it (F2 -> Prepare the shaders), not here, since a clean stage has no package to give it.
-grep -q -e "no game shaders built in" -e "not Renut (futari_renderer = renut): no vulkan_spirv.bin" "${LOG:-/dev/null}" ||
+# v1.5.6: with no vulkan_spirv.bin a release build falls back to the default renderer and logs a line that starts
+# with the token "[renut-fallback]" (main.cpp OnPreSetup takes that path only when no game shaders are built in); a
+# dev build runs Renut on its own table and never prints it. Older builds printed "no game shaders built in" and
+# brought Renut up instead; either proves the release table. The token is the contract; the prose after it may change.
+grep -q -e "no game shaders built in" -e "\[renut-fallback\]" "${LOG:-/dev/null}" ||
   { echo "REFUSED: the staged exe did not report an empty shader table (dev build with the shaders built in, or it did not boot); see $LOG"; exit 1; }
 rm -rf "$STAGE/logs" "$STAGE/shader_capture"
 echo "  boot check: release shader table (Renut fell back to the default renderer with no package, as it should)"
+# Renut's device coming up on the staged DLL set: needs a package made by THIS build (F2 -> Prepare the shaders on a
+# test install, or make_shaders.py). RENUT_PKG=<folder holding vulkan_spirv.bin + vulkan_spirv.stamp> lends it for
+# this one run; both files are removed from the stage again before anything is zipped. Without it the check is
+# skipped and says so, so a cut log always shows whether Renut-up was proven.
+if [ -n "${RENUT_PKG:-}" ]; then
+  [ -f "$RENUT_PKG/vulkan_spirv.bin" ] && [ -f "$RENUT_PKG/vulkan_spirv.stamp" ] ||
+    { echo "REFUSED: RENUT_PKG=$RENUT_PKG has no vulkan_spirv.bin + vulkan_spirv.stamp"; exit 1; }
+  cp "$RENUT_PKG/vulkan_spirv.bin" "$RENUT_PKG/vulkan_spirv.stamp" "$STAGE/"
+  ( cd "$STAGE" && timeout 12 ./futari.exe --user_data_root="$UDW" --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renderer=renut >/dev/null 2>&1 || true )
+  taskkill //F //IM futari.exe >/dev/null 2>&1 || true
+  rm -f "$STAGE/vulkan_spirv.bin" "$STAGE/vulkan_spirv.stamp"
+  LOG=$(ls -t "$STAGE"/logs/*.log 2>/dev/null | head -1)
+  grep -q "Renderer: Vulkan" "${LOG:-/dev/null}" ||
+    { echo "REFUSED: the staged exe did not bring Renut up on the lent package (stale package for this build, or a device regression); see $LOG"; exit 1; }
+  rm -rf "$STAGE/logs" "$STAGE/shader_capture"
+  echo "  boot check: Renut up on the lent package"
+else
+  echo "  boot check: Renut-up SKIPPED (set RENUT_PKG=<folder with vulkan_spirv.bin + .stamp made by this build>)"
+fi
 # The exe must carry the translator (the tool mode make_shaders.py drives): asked to translate a folder that does not
 # exist it must refuse with exit 2 within seconds. An exe without the mode ignores the unknown cvar, boots the game
 # and times out, and make_shaders.py would do the same on the player's PC.

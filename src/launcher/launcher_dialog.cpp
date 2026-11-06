@@ -517,8 +517,9 @@ void LauncherDialog::DrawSettings() {
   ImGui::Checkbox("Fullscreen (F11 toggles it in the game)", &fullscreen_);
   ImGui::Checkbox("VSync", &vsync_);
   if (vsync_renut_) {
-    ImGui::SameLine();
-    ImGui::TextDisabled("Renut: off shows frames at once; on waits for the display's refresh");
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+    WrappedText("Renut: off shows frames at once; on waits for the display's refresh");
+    ImGui::PopStyleColor();
   }
   ImGui::TextUnformatted("Window size");
   ImGui::SameLine();
@@ -754,7 +755,7 @@ void LauncherDialog::LoadSettings() {
   // The SDK's `vsync` is registered by the xenos plugin; a Renut session loads
   // none, so there the box is Renut's own switch (the renut_vsync line, off by
   // default: on can hitch on a panel that is not exactly 60 Hz).
-  vsync_renut_ = rex::cvar::GetFlagByName("vsync").empty();
+  vsync_renut_ = env_.renut_running;
   vsync_ = rex::cvar::Query<bool>(vsync_renut_ ? "renut_vsync" : "vsync");
   resolution_index_ = 0;
   settings_note_.clear();
