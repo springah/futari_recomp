@@ -54,15 +54,19 @@ fi
 APP="${APP:-$PROJ/Futari.app}"
 C="$APP/Contents"
 
-# Copy a file from the first place it exists: the game build dir (old in-tree
-# layout colocated the SDK dylibs there) or the SDK's own out/mac-arm64/ dir
-# (where the shared external SDK emits librexruntime.dylib / libTracyClient.dylib).
+# Copy a file from the first place it exists: the SDK's own out/mac-arm64/ dir,
+# where ninja links librexruntime.dylib / librexgpu-xenos.dylib / libTracyClient.dylib,
+# then the game build dir (the old in-tree layout colocated the SDK dylibs there).
+# 2026-11-07: the SDK out dir goes FIRST. The copy of the GPU plugin in $BUILD is
+# the SDK's POST_BUILD step on the futari target, refreshed only when futari itself
+# relinks, so after an SDK-only change it is stale while ninja's output is fresh;
+# the bundle took the stale one (an SDK change never reached the staged app).
 copy_first() {
   local name="$1" dest="$2" c
-  for c in "$BUILD/$name" "$SDK/out/mac-arm64/$name"; do
+  for c in "$SDK/out/mac-arm64/$name" "$BUILD/$name"; do
     if [ -f "$c" ]; then cp "$c" "$dest"; return 0; fi
   done
-  echo "  ERROR: $name not found in \$BUILD or \$SDK/out/mac-arm64" >&2; return 1
+  echo "  ERROR: $name not found in \$SDK/out/mac-arm64 or \$BUILD" >&2; return 1
 }
 
 echo "[1/8] fresh bundle skeleton"
@@ -82,7 +86,7 @@ copy_first libTracyClient.dylib "$C/MacOS/"
 # (src/system/gpu_plugin_loader.cpp) -- even though dynlib_posix.cpp does know
 # about .dylib. dlopen ignores the extension, so staging it under the name the
 # loader wants works. Remove the rename once the SDK learns .dylib on Apple.
-for c in "$BUILD/librexgpu-xenos.dylib" "$SDK/out/mac-arm64/librexgpu-xenos.dylib"; do
+for c in "$SDK/out/mac-arm64/librexgpu-xenos.dylib" "$BUILD/librexgpu-xenos.dylib"; do
   if [ -f "$c" ]; then cp "$c" "$C/MacOS/librexgpu-xenos.so"; break; fi
 done
 [ -f "$C/MacOS/librexgpu-xenos.so" ] || { echo "  ERROR: librexgpu-xenos.dylib not found" >&2; exit 1; }

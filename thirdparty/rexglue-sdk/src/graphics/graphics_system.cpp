@@ -15,15 +15,19 @@
 #include <cctype>
 #include <cstdint>
 #include <functional>
+#include <chrono>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <utility>
 
 #include <rex/cvar.h>
+#include <rex/frame_latency.h>
 #include <rex/graphics/command_processor.h>
 #include <rex/graphics/flags.h>
 #include <rex/kernel/xboxkrnl/video.h>
 #include <rex/logging.h>
+#include <rex/thread.h>
 #include <rex/stream.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xthread.h>
@@ -42,6 +46,11 @@ REXCVAR_DEFINE_STRING(swap_post_effect, "none", "GPU", "Swap post effect: none, 
 REXCVAR_DEFINE_BOOL(store_shaders, true, "GPU",
                     "Store shaders persistently and load them when loading games to avoid "
                     "runtime spikes and freezes when playing the game not for the first time.");
+
+// futari_recomp (2026-11-07): see the vblank worker in GraphicsSystem::Setup.
+REXCVAR_DEFINE_BOOL(vsync_sleep_exact, true, "GPU",
+                    "The guest vblank timer runs above the game's threads and sleeps to just before the next vblank "
+                    "(false: normal priority, 1 ms steps, which delivers vblanks in bursts on a busy machine)");
 
 namespace {
 
@@ -161,16 +170,82 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
         uint64_t vsync_interval_ticks =
             std::max(uint64_t(1), uint64_t(double(guest_tick_frequency) / refresh_rate_hz));
         uint64_t no_vsync_interval_ticks = std::max(uint64_t(1), guest_tick_frequency / 1000);
+        // futari_recomp (2026-11-07): this worker slept 1 ms at normal priority and caught up in a loop, so on a
+        // busy or laptop machine a late wake delivered several vblanks in one burst, which the game's handler can
+        // take as one tick (the game ran 35-40 fps under a steady 60 Hz window: futari_recomp issue #8's shape).
+        // The same cure as Renut's vblank thread (src/renut_engine/futari_renut_vblank.cpp, Loop): above the
+        // game's threads, sleep to 1.5 ms before the next vblank, then yield to it (vsync_sleep_exact). A gap of
+        // 250 ms or more (a debugger, a suspended machine) is a stall, not vblanks owed. Every 10 s one line counts
+        // the vblanks, the bursts (a wake that delivered more than one) and the guest's Swaps, the game's own
+        // frame rate, which a player's log otherwise lacks on this renderer (Renut logs its own).
+#if REX_PLATFORM_WIN32
+        // The priority goes with the switch (read once, here), so vsync_sleep_exact=false is the old worker whole.
+        if (REXCVAR_GET(vsync_sleep_exact)) {
+          if (auto* host = rex::thread::Thread::GetCurrentThread()) {
+            host->set_priority(rex::thread::ThreadPriority::kHighest);
+          }
+        }
+#endif
+        using WallClock = std::chrono::steady_clock;
+        const uint64_t stall_ticks = std::max(uint64_t(1), guest_tick_frequency / 4);
         uint64_t last_frame_time = chrono::Clock::QueryGuestTickCount();
+        uint64_t stat_vblanks = 0, stat_bursts = 0, stat_burst_max = 0, stat_stalls = 0;
+        uint64_t stat_swaps = rex::latency::SwapCount();
+        auto stat_start = WallClock::now();
         while (vsync_worker_running_) {
           uint64_t current_time = chrono::Clock::QueryGuestTickCount();
-          uint64_t interval_ticks =
-              REXCVAR_GET(vsync) ? vsync_interval_ticks : no_vsync_interval_ticks;
+          const bool vsync = REXCVAR_GET(vsync);
+          uint64_t interval_ticks = vsync ? vsync_interval_ticks : no_vsync_interval_ticks;
+          if (current_time - last_frame_time >= stall_ticks) {
+            ++stat_stalls;
+            last_frame_time = current_time - interval_ticks;
+          }
+          uint64_t delivered = 0;
           while (current_time - last_frame_time >= interval_ticks) {
             MarkVblank();
             last_frame_time += interval_ticks;
+            ++delivered;
           }
-          rex::thread::Sleep(std::chrono::milliseconds(1));
+          if (delivered) {
+            stat_vblanks += delivered;
+            if (delivered > 1) {
+              ++stat_bursts;
+              stat_burst_max = std::max(stat_burst_max, delivered);
+            }
+          }
+          const auto elapsed = WallClock::now() - stat_start;
+          if (elapsed >= std::chrono::seconds(10)) {
+            const double s = std::chrono::duration<double>(elapsed).count();
+            const uint64_t swaps = rex::latency::SwapCount();
+            REXLOG_INFO("[vblank] {:.1f} s: {} vblanks ({:.1f} Hz), {} bursts{}{}; {} guest Swaps ({:.2f} fps)", s,
+                        stat_vblanks, double(stat_vblanks) / s, stat_bursts,
+                        stat_bursts ? fmt::format(" (up to {} in one wake)", stat_burst_max) : std::string(),
+                        stat_stalls ? fmt::format(", {} stalls of 250 ms or more", stat_stalls) : std::string(),
+                        swaps - stat_swaps, double(swaps - stat_swaps) / s);
+            stat_vblanks = stat_bursts = stat_burst_max = stat_stalls = 0;
+            stat_swaps = swaps;
+            stat_start = WallClock::now();
+          }
+          if (vsync && REXCVAR_GET(vsync_sleep_exact)) {
+            const uint64_t now = chrono::Clock::QueryGuestTickCount();
+            const uint64_t next = last_frame_time + interval_ticks;
+            if (next <= now) {
+              continue;  // already due
+            }
+            const auto wait = std::chrono::microseconds(int64_t((next - now) * 1000000 / guest_tick_frequency));
+#if REX_PLATFORM_WIN32
+            // Windows sleeps in whole milliseconds and wakes late: sleep short of the vblank, then yield up to it.
+            if (wait > std::chrono::microseconds(2500)) {
+              rex::thread::Sleep(std::min(wait - std::chrono::microseconds(1500), std::chrono::microseconds(50000)));
+            } else {
+              std::this_thread::yield();
+            }
+#else
+            rex::thread::Sleep(std::clamp(wait, std::chrono::microseconds(200), std::chrono::microseconds(50000)));
+#endif
+          } else {
+            rex::thread::Sleep(std::chrono::milliseconds(1));
+          }
         }
         return 0;
       }));

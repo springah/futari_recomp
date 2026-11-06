@@ -24,6 +24,20 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   settings screens. It now draws with the same Roboto font at the size F2 picks
   for the window height, and its layout scales with it. `overlay_scale` no
   longer applies to it (it still does where no app font is set).
+- **The default renderer logs the game's own frame rate.** Every 10 seconds a
+  `[vblank]` line counts the guest vblanks delivered, any bursts (a wake of the
+  timer that delivered more than one), stalls of 250 ms or more, and the game's
+  Swaps as a frame rate. A log can now show whether the game itself runs at 60,
+  which the window's own 60 Hz never proved (#8). Renut had its own such line.
+- **The guest vblank timer runs above the game's threads and sleeps to the exact
+  vblank** (`vsync_sleep_exact`, on by default; `false` restores the old worker:
+  normal priority, 1 ms steps). On a busy or laptop machine the old worker could
+  wake late and deliver several vblanks in one burst, which the game can take as
+  one tick. The cure is the one Renut's vblank thread already used. On the
+  development PC the old worker showed no bursts even under a full above-normal
+  CPU load, so this is a precaution whose effect the new log line will show on
+  the machines that report slow play; a gap of 250 ms or more is now treated as a
+  stall and not caught up in a burst.
 
 ## v1.5.5 — 2026-11-04 (Windows, macOS)
 
