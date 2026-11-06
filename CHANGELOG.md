@@ -6,16 +6,17 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
-- **Renut: the VSync box works.** On Renut the F2 VSync box always showed off and
-  its save changed nothing, on Windows and macOS alike: the `vsync` setting it
-  read belongs to the default renderer's plugin, which a Renut session never
-  loads, and Renut's own switch (`renut_vsync`) was not wired to the `vsync`
-  line in futari.ini at all, so Renut ran with vsync off whatever was saved.
-  The ini line now drives Renut too, the box shows and saves it, and it takes
-  effect at once. The F4 overlay leaves its VSync row out on Renut (Renut's
-  `renut_vsync` is in its list). Note: with vsync on, Renut shows each frame at
-  the display's refresh (no tearing, up to a frame more latency); turn the box
-  off for the lowest latency, as before.
+- **Renut: the VSync box works, and Renut has its own vsync line.** On Renut the F2
+  VSync box always showed off and its save changed nothing, on Windows and macOS
+  alike: the `vsync` setting it read belongs to the default renderer's plugin,
+  which a Renut session never loads, and Renut's own switch was wired to nothing.
+  futari.ini now has a `renut_vsync` line under `[Display]`, off by default
+  (frames shown at once, the lowest latency, as Renut always ran): on waits for
+  the display's refresh, which can hitch on a panel that is not exactly 60 Hz.
+  While Renut runs, the F2 VSync box is that switch, saves it, and it takes
+  effect at once; on the default renderer the box is the `vsync` line as before.
+  The F4 overlay leaves its VSync row out on Renut (`renut_vsync` is in its
+  list). An old ini without the line keeps Renut off, and the next save adds it.
 - **macOS: the bundle is named and versioned.** It is now `Futari-<version>.app`,
   and Finder's Get Info shows the version plus the exact build it was made from
   (`1.5.5` on a release, `1.5.5-11-gc28d0ee` for a build between releases). The

@@ -302,6 +302,11 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# display you can keep the game at 60 but let the window present\n"
        << "# immediately again with \"present_vsync = false\" in the F4 cvar list.\n"
        << "vsync = true\n"
+       << "# Renut (the Vulkan renderer, futari_renderer = renut) has its own switch:\n"
+       << "# off shows each frame at once (lowest latency, tearing possible); on\n"
+       << "# waits for the display's refresh, which can hitch on a panel that is\n"
+       << "# not exactly 60 Hz. The F2 VSync box sets this one while Renut runs.\n"
+       << "renut_vsync = false\n"
        << "refresh_rate = 60\n"
        << "letterbox = true\n"
        << "\n"
@@ -386,14 +391,16 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
       // Guest vblank pacing and host presentation together: "vsync = true" is
       // what players mean by no tearing. The SDK's managed overlay block is
       // loaded after this, so a saved "present_vsync = false" (VRR) still wins.
-      // Renut (2026-11-07): its swapchain has its own switch, renut_vsync; the
-      // SDK's `vsync` lives in the xenos plugin, which a Renut session never
-      // loads, so this line used to reach nothing there and Renut always ran
-      // with vsync off whatever the player saved.
+      // The SDK's `vsync` lives in the xenos plugin, which a Renut session
+      // never loads: there this line reaches nothing, and Renut's own switch
+      // is the renut_vsync line below (its own default: off).
       SetCvarBool("vsync", *b);
       SetCvarBool("present_vsync", *b);
-      SetCvarBool("renut_vsync", *b);
     }
+  }
+  if (auto* v = find("display.renut_vsync")) {
+    if (auto b = ParseBool(*v))
+      SetCvarBool("renut_vsync", *b);
   }
   if (auto* v = find("display.refresh_rate")) {
     if (auto d = ParseDouble(*v)) {
@@ -441,17 +448,6 @@ std::string GetCvarByName(std::string_view name) {
     }
   }
   return {};
-}
-
-// The vsync the [Display] line stands for in this session: the SDK's `vsync`
-// when the xenos plugin registered it, otherwise Renut's `renut_vsync` (a Renut
-// session loads no plugin, so `vsync` does not exist there at all).
-std::string EffectiveVsync() {
-  std::string v = GetCvarByName("vsync");
-  if (v.empty()) {
-    v = GetCvarByName("renut_vsync");
-  }
-  return v;
 }
 
 // "60.000000" -> "60", "0.500000" -> "0.5"; integers pass through unchanged.
@@ -506,9 +502,10 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
   }
   add("Display", "fullscreen", GetCvarByName("fullscreen"));
   // In a Renut session the SDK's `vsync` is not registered (it lives in the
-  // xenos plugin), so the line is written from Renut's own switch instead.
-  const std::string vsync_value = EffectiveVsync();
-  add("Display", "vsync", vsync_value);
+  // xenos plugin): its line is left alone there, and Renut's own goes out.
+  const std::string sdk_vsync = GetCvarByName("vsync");
+  add("Display", "vsync", sdk_vsync);
+  add("Display", "renut_vsync", GetCvarByName("renut_vsync"));
   add("Display", "refresh_rate", TidyNumber(GetCvarByName("video_mode_refresh_rate")));
   add("Display", "letterbox", GetCvarByName("present_letterbox"));
   add("Graphics", "upscaler", GetCvarByName("present_effect"));
@@ -548,8 +545,9 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
       // edit of "vsync = ..." cannot change: save with VSync off, edit vsync =
       // true back in, and the window would still tear. Keep it only when it
       // deliberately differs (the VRR case: vsync = true, present_vsync = false).
+      // In a Renut session (no `vsync` registered) it means nothing: drop it.
       if (!excluded && key == "present_vsync") {
-        excluded = GetCvarByName("present_vsync") == vsync_value;
+        excluded = sdk_vsync.empty() || GetCvarByName("present_vsync") == sdk_vsync;
       }
       if (!excluded) {
         raw_block += line;

@@ -137,6 +137,7 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   bool renderer_renut_ = false;
   bool fullscreen_ = false;
   bool vsync_ = true;
+  bool vsync_renut_ = false;  // the box is Renut's renut_vsync (no SDK `vsync` registered in this session)
   int resolution_index_ = 0;
   std::vector<std::string> dlc_names_;
   std::string package_status_;
