@@ -4,6 +4,22 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- **Renut falls back to the default renderer when its shaders are not there.**
+  With `futari_renderer = renut` but no `vulkan_spirv.bin` beside the exe, or one
+  made by another build of the port, the game used to start on Renut and draw a
+  black screen with only shader misses in the log. It now starts on the default
+  renderer for that session, the log says why in one `[warning]` line, and the
+  F2 settings screen says so above the shader button. Prepare or redo the
+  shaders there and start the game again to get Renut. A package without its
+  stamp (one made by `make_shaders.py`) still runs on Renut as before.
+- **Renut's boot names its steps in the log.** One `Host device:` line before
+  each step of the host device setup after the swapchain, then `Renderer: host
+  device ready` and `Renderer: presenting`, so a crash in a GPU driver during
+  start-up (#8, an AMD Renoir laptop: the log ended at the swapchain) names the
+  step it died in.
+
 ## v1.5.5 — 2026-11-04 (Windows, macOS)
 
 A second renderer, opt-in, and a setup screen inside the exe that replaces the

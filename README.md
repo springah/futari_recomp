@@ -96,8 +96,9 @@ and futari-linux's measurements on a Steam Deck
   them: the setup screen (or `extract_assets.bat`) translates them from your own
   executables into `vulkan_spirv.bin` beside the exe, in a few seconds, with
   the translator built into `futari.exe`. Redo it after every update (F2,
-  "Redo the shaders"); without the file Renut shows a black game and the log
-  says why. The default renderer does not need it.
+  "Redo the shaders"); without the file, or with one from another version, the
+  game starts on the default renderer for that session and the log and the F2
+  screen say why. The default renderer does not need it.
 - On macOS, Renut draws through MoltenVK (Vulkan over Metal), turned on the same
   way; the setup screen there has the shader step as well (the DirectX Shader
   Compiler ships inside the app, built from source). It renders at the window's

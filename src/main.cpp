@@ -57,7 +57,8 @@ REXCVAR_DEFINE_STRING(futari_input_script, "", "Futari",
 #if FUTARI_RENUT_RENDERER
 // Renut's Direct3D-level renderer (src/renut_engine, GPL-3.0; docs/NOTES_renut_port_scoping.md). Chosen by the
 // init-only cvar futari_renderer = "renut"; every call below is gated on that, and with any other value the SDK's
-// xenos plugin renders exactly as before.
+// xenos plugin renders exactly as before. A distribution build vetoes the choice at boot (OnPreSetup) when its
+// vulkan_spirv.bin is missing or from another build, and runs the default renderer for the session instead.
 #include "renut_engine/futari_renut_vblank.h"
 #include "renut_engine/gpu/banjo_renut_capture.h"
 #include "renut_engine/gpu/banjo_renut_select.h"
@@ -773,6 +774,9 @@ class FutariApp : public rex::ReXApp {
 #else
     env.renut_available = false;
 #endif
+#if FUTARI_RENUT_RENDERER
+    env.renderer_fallback = banjo::renut_gpu::FallbackReason();
+#endif
     env.on_quit = [this] { RequestExit("launcher"); };
     env.save_display_settings = [] { SaveFutariIni(rex::filesystem::GetExecutableFolder()); };
     return env;
@@ -968,6 +972,22 @@ class FutariApp : public rex::ReXApp {
     SetCvarBool("mnk_mode", true);
     SetCvarBool("mnk_mouse_capture", false);
 #if FUTARI_RENUT_RENDERER
+    // The first reading of the renderer choice. A distribution build draws the game on Renut only from
+    // vulkan_spirv.bin beside the exe (shader_pipeline.h): without it, or with one from another build, Renut shows
+    // a black game and only shader misses in the log, so the default renderer runs this session instead and the
+    // settings screen (F2) says so. An unstamped package (a developer's make_shaders.py run) is left to Renut, with
+    // FinalizePathsThroughLauncher's STALE warning.
+    if (rex::cvar::Query<std::string>("futari_renderer") == "renut" && !renut::gpu::GameShadersBuiltIn()) {
+      std::string detail;
+      const auto stamp = futari::launcher::CheckPackageStamp(rex::filesystem::GetExecutableFolder(), detail);
+      if (stamp == futari::launcher::StampState::kNoPackage || stamp == futari::launcher::StampState::kStale) {
+        banjo::renut_gpu::FallBackToDefault(detail);
+        REXLOG_WARN("Renderer: default (the xenos plugin) this session, not Renut (futari_renderer = renut): {}. "
+                    "Renut would draw a black game without this build's shaders. F2 -> Settings -> {} the shaders, "
+                    "then start the game again",
+                    detail, stamp == futari::launcher::StampState::kNoPackage ? "Prepare" : "Redo");
+      }
+    }
     // Renut: no SDK graphics system and no GPU plugin (the SDK's "detached"
     // mode); the renderer owns the device, present timing and the overlay.
     if (banjo::renut_gpu::Active()) {

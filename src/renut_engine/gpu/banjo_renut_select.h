@@ -11,6 +11,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include <rex/hook.h>
 #include <rex/ppc.h>
@@ -27,6 +28,23 @@ inline bool Active() {
   const int8_t a = detail::g_active;
   return a ? a > 0 : detail::LatchActive();
 }
+
+// futari_recomp (2026-11-07): the boot's veto, before the first Active(): the default renderer runs this session
+// although futari_renderer = renut (vulkan_spirv.bin missing or from another build, where Renut would draw a black
+// game). `why` is kept for the settings screen. Ignored, with an error logged, once the choice is latched.
+void FallBackToDefault(const std::string& why);
+// The veto's reason; empty when Renut's choice stands (or was never asked for).
+const std::string& FallbackReason();
+
+}  // namespace banjo::renut_gpu
+
+namespace renut::gpu {
+// render/shader_library.h's, declared here too for the app (which has no plume include path): true on a build
+// with the translated game shaders built in, false on a distribution build that reads vulkan_spirv.bin.
+bool GameShadersBuiltIn();
+}  // namespace renut::gpu
+
+namespace banjo::renut_gpu {
 
 }  // namespace banjo::renut_gpu
 

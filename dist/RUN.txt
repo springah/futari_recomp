@@ -58,8 +58,10 @@ RENDERER (Renut)
   writes this line at the top of futari.ini (above the first [section]); or
   add it by hand, or start the exe with --futari_renderer=renut:
     futari_renderer = renut
-  Without vulkan_spirv.bin Renut shows a black game; the default renderer does
-  not need it. Renut needs a Vulkan 1.2 GPU driver.
+  Without vulkan_spirv.bin, or with one made by another version of the port,
+  the game starts on the default renderer for that session instead (the log and
+  the F2 screen say so; prepare the shaders there and start again). The default
+  renderer does not need the file. Renut needs a Vulkan 1.2 GPU driver.
 
 DLC (optional)
   Own any add-on content? Drop the Xbox 360 STFS packages into the dlc\ folder

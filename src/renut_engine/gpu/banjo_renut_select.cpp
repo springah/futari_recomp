@@ -43,7 +43,19 @@ bool LatchActive() {
   g_active = active ? 1 : -1;
   return active;
 }
+std::string g_fallback_reason;
 }  // namespace detail
+
+void FallBackToDefault(const std::string& why) {
+  if (detail::g_active != 0) {
+    REXLOG_ERROR("Renderer: the fallback to the default renderer came after the choice was made ({}); ignored", why);
+    return;
+  }
+  detail::g_fallback_reason = why;
+  detail::g_active = -1;
+}
+
+const std::string& FallbackReason() { return detail::g_fallback_reason; }
 
 }  // namespace banjo::renut_gpu
 

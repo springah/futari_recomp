@@ -36,6 +36,10 @@ void CaptureMissingShader(const uint8_t *container, bool pixel_shader, uint64_t 
 // empty without one.
 std::string SpirvPackageKey();
 
+// futari_recomp (2026-11-07): true on a build with the translated game shaders built in (a developer's), false on
+// a distribution build (FUTARI_RENUT_RELEASE_SHADERS), which draws the game only from vulkan_spirv.bin beside the exe.
+bool GameShadersBuiltIn();
+
 // For the memory report: the decompressed shader cache kept in memory.
 uint64_t ShaderCacheHostBytes();
 
