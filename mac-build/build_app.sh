@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Assemble a self-contained Futari.app from the mac-arm64 build + extracted assets.
+# Assemble a self-contained Futari-<version>.app from the mac-arm64 build + extracted assets.
 #
 # This is the maintainer's packaging script, and its defaults describe one
 # machine's layout: it expects the repo, the SDK, and a directory of extracted
@@ -13,7 +13,7 @@
 #   SDK=...         SDK source tree (default: $REPO/thirdparty/rexglue-sdk;
 #                   its dylibs come from $SDK/out/mac-arm64/)
 #   ASSETS_SRC=...  directory containing assets/ and (optionally) dlc/
-#   APP=...         output bundle path
+#   APP=...         output bundle path (default: $PROJ/Futari-<version>.app)
 #   VER=...         CFBundleShortVersionString (default: the project version in
 #                   CMakeLists.txt; CFBundleVersion adds the git build id)
 #   SKIP_ASSETS=1   build the bundle without game data (ASSETS_SRC not needed)
@@ -67,7 +67,9 @@ if [ -z "${ASSETS_SRC:-}" ] && [ "${SKIP_ASSETS:-0}" != "1" ]; then
     exit 1
   fi
 fi
-APP="${APP:-$PROJ/Futari.app}"
+# The bundle name carries the version so two builds can sit side by side and
+# Finder tells them apart without Get Info.
+APP="${APP:-$PROJ/Futari-${VER}.app}"
 C="$APP/Contents"
 
 # Copy a file from the first place it exists: the SDK's own out/mac-arm64/ dir,
