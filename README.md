@@ -264,7 +264,7 @@ out/build/mac-arm64-release/futari --game_data_root assets
 ```
 
 On macOS, `mac-build/build_app.sh` turns that build directory into a
-self-contained `Futari.app` (bundled MoltenVK, ad-hoc signed); its header lists
+self-contained `Futari-<version>.app` (bundled MoltenVK, ad-hoc signed); its header lists
 the paths it takes. [PORTS.md](PORTS.md) has the per-platform notes.
 
 ## Layout

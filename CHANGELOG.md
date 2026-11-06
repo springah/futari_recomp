@@ -6,6 +6,10 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+- **macOS: the bundle is named and versioned.** It is now `Futari-<version>.app`,
+  and Finder's Get Info shows the version plus the exact build it was made from
+  (`1.5.5` on a release, `1.5.5-11-gc28d0ee` for a build between releases). The
+  staging script takes both from the checkout instead of a number typed into it.
 - **Renut falls back to the default renderer when its shaders are not there.**
   With `futari_renderer = renut` but no `vulkan_spirv.bin` beside the exe, or one
   made by another build of the port, the game used to start on Renut and draw a

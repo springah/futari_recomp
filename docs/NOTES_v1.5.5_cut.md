@@ -167,14 +167,14 @@ grep FUTARI_RENUT out/build/mac-arm64-release/CMakeCache.txt
 cmake --build --preset mac-arm64-release
 set S ~/Desktop/projects/_stage/futari-v1.5.5-pub
 rm -rf $S; mkdir -p $S/Mushihimesama-Futari-macOS/dlc
-env VER=1.5.5 SKIP_ASSETS=1 APP=$S/Mushihimesama-Futari-macOS/Futari.app bash mac-build/build_app.sh
+env SKIP_ASSETS=1 APP=$S/Mushihimesama-Futari-macOS/Futari-1.5.5.app bash mac-build/build_app.sh   # VER comes from CMakeLists.txt; HEAD must be the tag or CFBundleVersion says -N-g<hash>
 cp dist/RUN.txt scripts/extract_iso.py THIRD-PARTY-NOTICES.txt $S/Mushihimesama-Futari-macOS/
 cp dist/dlc-README.txt $S/Mushihimesama-Futari-macOS/dlc/README.txt
-find $S/Mushihimesama-Futari-macOS/Futari.app/Contents/MacOS -type f -exec file {} + | grep -v Mach-O   # must print nothing
+find $S/Mushihimesama-Futari-macOS/Futari-1.5.5.app/Contents/MacOS -type f -exec file {} + | grep -v Mach-O   # must print nothing
 cd $S; and ditto -c -k --keepParent --norsrc Mushihimesama-Futari-macOS Mushihimesama-Futari-macOS-v1.5.5.zip
 rm -rf /tmp/futari-v155-check; mkdir /tmp/futari-v155-check
 ditto -x -k Mushihimesama-Futari-macOS-v1.5.5.zip /tmp/futari-v155-check
-codesign --verify --deep --strict /tmp/futari-v155-check/Mushihimesama-Futari-macOS/Futari.app; and echo seal OK
+codesign --verify --deep --strict /tmp/futari-v155-check/Mushihimesama-Futari-macOS/Futari-1.5.5.app; and echo seal OK
 shasum -a 256 Mushihimesama-Futari-macOS-v1.5.5.zip > Mushihimesama-Futari-macOS-v1.5.5.zip.sha256
 ```
 

@@ -86,8 +86,8 @@ macOS
     There is no extract_assets.bat; the terminal route is
       python3 extract_iso.py "<your .iso or 435A07D7 folder>" --out assets --dlc-out dlc
     (python3 comes with Apple's Command Line Tools).
-  - macOS: the bundle is Futari.app. The game looks for assets/ (and dlc/)
-    next to its executable INSIDE the app: right-click Futari.app -> Show
+  - macOS: the bundle is Futari-<version>.app. The game looks for assets/ (and
+    dlc/) next to its executable INSIDE the app: right-click the app -> Show
     Package Contents, and put them in Contents/MacOS/. Logs land there too.
     The app is ad-hoc signed; if macOS refuses to open it, right-click ->
     Open once, or allow it under System Settings -> Privacy & Security.
