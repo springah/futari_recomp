@@ -32,7 +32,9 @@ constexpr float kFontSizes[] = {15.0f, 18.0f, 22.0f, 27.0f, 33.0f, 40.0f, 50.0f}
 ImFont* g_fonts[std::size(kFontSizes)] = {};
 
 ImFont* PickLauncherFont(float display_height) {
-  const float want = display_height / 36.0f;  // 30 px at 1080 lines -> the 27 px font; 20 at 720 -> 18
+  // 25.7 px at 1080 lines -> the 22 px font; 34 at 1440 -> 33; 17 at 720 -> 15. Was / 36 (27 px at 1080) until
+  // 2026-11-07, one ladder step larger, which the user found a touch big once F4 shared it.
+  const float want = display_height / 42.0f;
   ImFont* best = nullptr;
   for (size_t i = 0; i < std::size(kFontSizes); ++i) {
     if (g_fonts[i] && (!best || kFontSizes[i] <= want)) {
