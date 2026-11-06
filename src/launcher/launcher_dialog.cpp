@@ -31,7 +31,7 @@ std::string Utf8(const std::filesystem::path& p) { return rex::path_to_utf8(p); 
 constexpr float kFontSizes[] = {15.0f, 18.0f, 22.0f, 27.0f, 33.0f, 40.0f, 50.0f};
 ImFont* g_fonts[std::size(kFontSizes)] = {};
 
-ImFont* PickFont(float display_height) {
+ImFont* PickLauncherFont(float display_height) {
   const float want = display_height / 36.0f;  // 30 px at 1080 lines -> the 27 px font; 20 at 720 -> 18
   ImFont* best = nullptr;
   for (size_t i = 0; i < std::size(kFontSizes); ++i) {
@@ -95,6 +95,8 @@ void LauncherDialog::AddFonts(ImFontAtlas* atlas) {
                                                        &config, kRanges);
   }
 }
+
+ImFont* LauncherDialog::PickFont(float display_height) { return PickLauncherFont(display_height); }
 
 bool WriteRendererLine(const std::filesystem::path& ini_path, bool renut, std::string& error) {
   std::string original;
@@ -240,7 +242,7 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
     }
   }
 
-  ImFont* font = PickFont(io.DisplaySize.y);
+  ImFont* font = PickLauncherFont(io.DisplaySize.y);
   const float font_px = font ? font->LegacySize : 20.0f;
   if (font) {
     ImGui::PushFont(font, font->LegacySize);

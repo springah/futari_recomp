@@ -539,7 +539,13 @@ void SettingsDialog::DrawKeybindRow(const rex::cvar::FlagEntry& entry) {
   ImGui::PopID();
 }
 
-void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
+namespace {
+OverlayFontPicker g_font_picker;
+}  // namespace
+
+void SetSettingsOverlayFontPicker(OverlayFontPicker picker) { g_font_picker = std::move(picker); }
+
+void SettingsDialog::OnDraw(ImGuiIO& io) {
   auto& registry = rex::cvar::GetRegistry();
   const bool show_advanced = REXCVAR_QUERY(bool, settings_show_advanced);
 
@@ -584,7 +590,12 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
 
   const std::string search(search_buf_);
   const bool searching = !search.empty();
-  const float scale = static_cast<float>(REXCVAR_GET(overlay_scale));
+  // futari_recomp (2026-11-07): with an app font (SetSettingsOverlayFontPicker) the layout unit follows the font's
+  // size (what overlay_scale is for the 10 px base font), so the window, panel and indents keep their proportions.
+  ImFont* font = g_font_picker ? g_font_picker(io.DisplaySize.y) : nullptr;
+  const float scale = font ? font->LegacySize / 10.0f : static_cast<float>(REXCVAR_GET(overlay_scale));
+  if (font)
+    ImGui::PushFont(font, font->LegacySize);
 
   // Open at the scaled size, but never larger than the host viewport, and clamp
   // every frame so the window + resize grips stay on-screen at any overlay_scale.
@@ -599,9 +610,12 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
   ImGui::SetNextWindowBgAlpha(0.85f);
   if (!ImGui::Begin("Settings##rex", nullptr, ImGuiWindowFlags_NoCollapse)) {
     ImGui::End();
+    if (font)
+      ImGui::PopFont();
     return;
   }
-  ImGui::SetWindowFontScale(scale);
+  if (!font)
+    ImGui::SetWindowFontScale(scale);
 
   // Header: search box (full width) + the simple/advanced toggle.
   ImGui::SetNextItemWidth(-1.0f);
@@ -743,6 +757,8 @@ void SettingsDialog::OnDraw(ImGuiIO& /*io*/) {
   }
 
   ImGui::End();
+  if (font)
+    ImGui::PopFont();
 }
 
 }  // namespace rex::ui

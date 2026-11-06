@@ -15,11 +15,20 @@
 #include <string>
 #include <rex/ui/imgui_dialog.h>
 
+struct ImFont;
+
 namespace rex::cvar {
 struct FlagEntry;
 }
 
 namespace rex::ui {
+
+// futari_recomp (2026-11-07): the app's own font for the settings overlay, picked for the display height every
+// frame (an ImFont it baked into the drawer's atlas in OnConfigureFonts, at the size it wants). The overlay then
+// draws with that font and scales its layout with it, instead of the 10 px base font stretched by overlay_scale.
+// A null picker, or nullptr from it, keeps the stretched base font.
+using OverlayFontPicker = std::function<ImFont*(float display_height)>;
+void SetSettingsOverlayFontPicker(OverlayFontPicker picker);
 
 class SettingsDialog : public ImGuiDialog {
  public:
