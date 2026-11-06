@@ -22,6 +22,7 @@
 #include <rex/ui/imgui_dialog.h>
 
 struct ImFontAtlas;
+struct ImFont;
 
 #include "launcher/file_picker.h"
 #include "launcher/game_source.h"
@@ -60,9 +61,11 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   static LauncherDialog* instance() { return instance_; }
 
   // The launcher's own font (Roboto Medium, Latin, launcher_font.h) baked at a few pixel sizes into the drawer's
-  // atlas, after the SDK's default ProggyTiny, which the F4 overlay and every other dialog keep using. Called from
-  // ReXApp::OnConfigureFonts; the dialog picks the largest size not above (window height / 36) every frame.
+  // atlas, after the SDK's default ProggyTiny, which the F3 debug window and the toasts keep using. Called from
+  // ReXApp::OnConfigureFonts; the dialog picks the largest size not above (window height / 36) every frame, and so
+  // does the SDK's F4 settings overlay (rex::ui::SetSettingsOverlayFontPicker, main.cpp) since 2026-11-07.
   static void AddFonts(ImFontAtlas* atlas);
+  static ImFont* PickFont(float display_height);  // nullptr before the atlas is built
 
   // Keyboard and gamepad navigation, and the dialog owns the input while it is up (the game sees an untouched pad
   // over F2): the SDK's ImGuiDrawer feeds SDL3's gamepads to ImGui for dialogs that ask.

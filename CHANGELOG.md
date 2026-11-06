@@ -19,6 +19,11 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   device ready` and `Renderer: presenting`, so a crash in a GPU driver during
   start-up (#8, an AMD Renoir laptop: the log ended at the swapchain) names the
   step it died in.
+- **The F4 settings overlay uses the F2 screen's font.** It drew with the SDK's
+  10 px bitmap font stretched by `overlay_scale`, tiny beside the setup and
+  settings screens. It now draws with the same Roboto font at the size F2 picks
+  for the window height, and its layout scales with it. `overlay_scale` no
+  longer applies to it (it still does where no app font is set).
 
 ## v1.5.5 — 2026-11-04 (Windows, macOS)
 

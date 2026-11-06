@@ -19,6 +19,7 @@
 #include <rex/input/input_system.h>
 #include <rex/logging.h>
 #include <rex/rex_app.h>
+#include <rex/ui/overlay/settings_overlay.h>
 #include <rex/version.h>
 #include <rex/system/kernel_state.h>
 #include <rex/system/xam/content_manager.h>
@@ -725,8 +726,13 @@ class FutariApp : public rex::ReXApp {
   }
 
  protected:
-  // The launcher's font, beside (after) the SDK's ProggyTiny, which stays the default for the F4 overlay.
-  void OnConfigureFonts(ImFontAtlas* atlas) override { futari::launcher::LauncherDialog::AddFonts(atlas); }
+  // The launcher's font, beside (after) the SDK's ProggyTiny, which stays the default for the F3 debug window and
+  // the toasts. The F4 settings overlay draws with the launcher's font at the size the launcher picks for the
+  // window (2026-11-07; it was the 10 px ProggyTiny stretched by overlay_scale, tiny beside F2).
+  void OnConfigureFonts(ImFontAtlas* atlas) override {
+    futari::launcher::LauncherDialog::AddFonts(atlas);
+    rex::ui::SetSettingsOverlayFontPicker(&futari::launcher::LauncherDialog::PickFont);
+  }
 
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     (void)drawer;
