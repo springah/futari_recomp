@@ -68,11 +68,15 @@ UDW="$(cygpath -m "$UD" 2>/dev/null || echo "$UD")"
 ( cd "$STAGE" && timeout 12 ./futari.exe --user_data_root="$UDW" --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renderer=renut >/dev/null 2>&1 || true )
 taskkill //F //IM futari.exe >/dev/null 2>&1 || true
 LOG=$(ls -t "$STAGE"/logs/*.log 2>/dev/null | head -1)
-grep -q "no game shaders built in" "${LOG:-/dev/null}" ||
+# v1.5.6: with no vulkan_spirv.bin a release build falls back to the default renderer and says so in one warning
+# (main.cpp OnPreSetup takes that path only when no game shaders are built in); a dev build runs Renut on its own
+# table and never prints it. Older builds printed "no game shaders built in" and brought Renut up instead; either
+# line proves the release table. Renut itself coming up on this build is proven on a test install with a package
+# made by it (F2 -> Prepare the shaders), not here, since a clean stage has no package to give it.
+grep -q -e "no game shaders built in" -e "not Renut (futari_renderer = renut): no vulkan_spirv.bin" "${LOG:-/dev/null}" ||
   { echo "REFUSED: the staged exe did not report an empty shader table (dev build with the shaders built in, or it did not boot); see $LOG"; exit 1; }
-grep -q "Renderer: Vulkan" "$LOG" || { echo "REFUSED: the staged exe did not bring Renut up; see $LOG"; exit 1; }
 rm -rf "$STAGE/logs" "$STAGE/shader_capture"
-echo "  boot check: release shader table, Renut up"
+echo "  boot check: release shader table (Renut fell back to the default renderer with no package, as it should)"
 # The exe must carry the translator (the tool mode make_shaders.py drives): asked to translate a folder that does not
 # exist it must refuse with exit 2 within seconds. An exe without the mode ignores the unknown cvar, boots the game
 # and times out, and make_shaders.py would do the same on the player's PC.
