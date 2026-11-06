@@ -41,6 +41,19 @@ jobs:
           # without failing on pre-existing style nits.
           shellcheck --severity=error "${scripts[@]}"
 
+  ini-merge-test:
+    # The one unit the save path leans on that needs no SDK, no game data and
+    # no codegen: the futari.ini merge (src/ini_merge.h). tests/ini_merge_test.cpp
+    # names the rules; a failure here is a player's settings file being damaged.
+    name: ini merge test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/ini_merge_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/ini_merge_test.cpp -o ini_merge_test
+          ./ini_merge_test
+
   identity:
     name: Commit identity (springah/noreply)
     # Maintainer pushes only. Outside contributors have their own identities and

@@ -4,6 +4,15 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- The log line that says Renut fell back to the default renderer now starts with
+  `[renut-fallback]`, so a log can be searched for it; the Windows stage script
+  keys on that token, and with `RENUT_PKG=<folder>` lends the staged exe a shader
+  package made by the build to prove Renut comes up (nothing of it is zipped).
+- A first automated test: the futari.ini merge (what F2 and F4 saves write back)
+  is checked on every push in `tests/ini_merge_test.cpp`.
+
 ## v1.5.6 — 2026-11-07 (Windows, macOS)
 
 - **Renut: the VSync box works, and Renut has its own vsync line.** On Renut the F2
