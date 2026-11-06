@@ -272,12 +272,16 @@ void SettingsDialog::DrawDisplaySection() {
   // for the display's vertical blank instead of presenting immediately with
   // tearing. Both apply immediately. Players on variable refresh rate displays
   // can turn only `present_vsync` back off in the cvar list below.
-  ImGui::TableNextRow();
-  ImGui::TableNextColumn();
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("VSync");
-  ImGui::TableNextColumn();
-  {
+  // futari_recomp (2026-11-07): `vsync` is registered by the GPU plugin; an app
+  // running its own renderer (no plugin) has no such flag, and a box over a
+  // missing flag read as off and set nothing. Then the row is left out: that
+  // renderer's own vsync cvar is in the list below.
+  if (!rex::cvar::GetFlagByName("vsync").empty()) {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("VSync");
+    ImGui::TableNextColumn();
     bool vsync = rex::cvar::Query<bool>("vsync");
     if (ImGui::Checkbox("##vsync", &vsync)) {
       rex::cvar::SetFlagByName("vsync", vsync ? "true" : "false");

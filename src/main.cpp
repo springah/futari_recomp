@@ -386,8 +386,13 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
       // Guest vblank pacing and host presentation together: "vsync = true" is
       // what players mean by no tearing. The SDK's managed overlay block is
       // loaded after this, so a saved "present_vsync = false" (VRR) still wins.
+      // Renut (2026-11-07): its swapchain has its own switch, renut_vsync; the
+      // SDK's `vsync` lives in the xenos plugin, which a Renut session never
+      // loads, so this line used to reach nothing there and Renut always ran
+      // with vsync off whatever the player saved.
       SetCvarBool("vsync", *b);
       SetCvarBool("present_vsync", *b);
+      SetCvarBool("renut_vsync", *b);
     }
   }
   if (auto* v = find("display.refresh_rate")) {
@@ -436,6 +441,17 @@ std::string GetCvarByName(std::string_view name) {
     }
   }
   return {};
+}
+
+// The vsync the [Display] line stands for in this session: the SDK's `vsync`
+// when the xenos plugin registered it, otherwise Renut's `renut_vsync` (a Renut
+// session loads no plugin, so `vsync` does not exist there at all).
+std::string EffectiveVsync() {
+  std::string v = GetCvarByName("vsync");
+  if (v.empty()) {
+    v = GetCvarByName("renut_vsync");
+  }
+  return v;
 }
 
 // "60.000000" -> "60", "0.500000" -> "0.5"; integers pass through unchanged.
@@ -489,7 +505,10 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
     }
   }
   add("Display", "fullscreen", GetCvarByName("fullscreen"));
-  add("Display", "vsync", GetCvarByName("vsync"));
+  // In a Renut session the SDK's `vsync` is not registered (it lives in the
+  // xenos plugin), so the line is written from Renut's own switch instead.
+  const std::string vsync_value = EffectiveVsync();
+  add("Display", "vsync", vsync_value);
   add("Display", "refresh_rate", TidyNumber(GetCvarByName("video_mode_refresh_rate")));
   add("Display", "letterbox", GetCvarByName("present_letterbox"));
   add("Graphics", "upscaler", GetCvarByName("present_effect"));
@@ -503,7 +522,7 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
   // persisting those is dead weight at best and breaks portability at worst.
   static constexpr std::string_view kExcluded[] = {
       // carried by the friendly section lines
-      "window_width", "window_height", "fullscreen", "vsync",
+      "window_width", "window_height", "fullscreen", "vsync", "renut_vsync",
       "video_mode_refresh_rate", "present_letterbox", "present_effect",
       "present_cas_additional_sharpness", "present_dither", "log_level",
       // pinned in OnPreSetup or derived from PathConfig at startup
@@ -530,7 +549,7 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
       // true back in, and the window would still tear. Keep it only when it
       // deliberately differs (the VRR case: vsync = true, present_vsync = false).
       if (!excluded && key == "present_vsync") {
-        excluded = GetCvarByName("present_vsync") == GetCvarByName("vsync");
+        excluded = GetCvarByName("present_vsync") == vsync_value;
       }
       if (!excluded) {
         raw_block += line;
