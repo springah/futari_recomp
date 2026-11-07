@@ -260,11 +260,13 @@ endif()
 # Third-party dependencies (vendored sources only)
 add_subdirectory(thirdparty)
 
-# Enable warnings after thirdparty
-add_compile_options(
-    -Wall
-    -Wextra
-)
+# Enable warnings after thirdparty. clang-cl reads a GNU-style -Wall as MSVC's /Wall, which is -Weverything
+# (170k -Wc++98-compat lines per build, 2026-11-07); the /clang: prefix hands the flags to clang's own driver.
+if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    add_compile_options(/clang:-Wall /clang:-Wextra)
+else()
+    add_compile_options(-Wall -Wextra)
+endif()
 
 include_directories(${REXGLUE_ROOT}/include)
 

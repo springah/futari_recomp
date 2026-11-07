@@ -176,6 +176,16 @@ if (-not (Test-Path (Join-Path $Root '.git'))) {
           'git -c core.symlinks=true -c core.longpaths=true clone --recurse-submodules https://github.com/springah/futari_recomp')
 }
 
+# The build tree (SDK CLI, generated C++, objects, exe + DLLs) takes about 4 GB, and the parallel compile and link
+# need room for the paging file to grow on the same drive: with the drive full, clang-cl dies with "The paging
+# file is too small for this operation to complete" (0x5AF) long after the first steps succeeded (seen 2026-11-07).
+$freeGB = [math]::Round((Get-PSDrive -Name $Root.Substring(0, 1)).Free / 1GB, 1)
+if ($freeGB -lt 8) {
+    Fail ("Only $freeGB GB free on drive $($Root.Substring(0, 2)). Free at least 8 GB (the build tree alone is about " +
+          "4 GB, and the compilers need paging-file room) and re-run.")
+}
+Note "Free space on $($Root.Substring(0, 2)): $freeGB GB"
+
 $git = Find-Exe 'git'
 if (-not $git) { Install-Tool 'Git' 'Git.Git'; $git = Find-Exe 'git' }
 if (-not $git) { Fail 'git is still not on PATH after installing. Open a new terminal and re-run.' }
@@ -318,6 +328,9 @@ Step 'Entering the Visual Studio x64 developer environment'
 $devShell = Join-Path $vsPath 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll'
 if (-not (Test-Path $devShell)) { Fail "Developer shell module not found at $devShell." }
 Import-Module $devShell
+# VsDevCmd.bat looks up its own version with a bare `vswhere.exe` from the Installer folder; on some machines that
+# prints "'vswhere.exe' is not recognized ..." here. Visual Studio's script says so itself: it does not affect operation.
+Note '(a "''vswhere.exe'' is not recognized" line below is Visual Studio''s version lookup and harmless)'
 Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64 -no_logo' | Out-Null
 if (-not (Find-Exe 'rc')) {
     Fail ('rc.exe is not on PATH inside the developer environment, so the Windows SDK component is missing. ' +

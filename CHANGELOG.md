@@ -6,6 +6,21 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+- First end-to-end run of `build.ps1` on a fresh clone (Windows, 2026-11-07):
+  clone, dxc-bin fetch, SDK CLI, ISO extraction, codegen, shader dump,
+  configure, build, boot all passed. The script now refuses to start with under
+  8 GB free on the repository's drive (the first run died mid-build with the
+  drive full: "The paging file is too small for this operation to complete")
+  and names the harmless `'vswhere.exe' is not recognized` line Visual Studio's
+  developer shell prints on some machines.
+- The vendored SDK no longer passes a GNU-style `-Wall -Wextra` to clang-cl,
+  which reads `-Wall` as MSVC's `/Wall` (every warning clang has): a build log
+  carried about 170,000 `-Wc++98-compat` lines. The flags go through
+  `/clang:` now; nothing compiled differently.
+- README: the top states what the exe does today instead of what v1.5.5 added,
+  "Just want to play?" is four steps, and the two fixed recompiler issues are a
+  paragraph. The GitHub page's description, topics and homepage link (releases)
+  were refreshed and the unused Projects tab turned off.
 - The log line that says Renut fell back to the default renderer now starts with
   `[renut-fallback]`, so a log can be searched for it; the Windows stage script
   keys on that token, and with `RENUT_PKG=<folder>` lends the staged exe a shader

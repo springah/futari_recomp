@@ -15,17 +15,15 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.6 (Windows, macOS), with the bundles attached to the
-[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.6).
-Upgrading from v1.5.5: copy your `assets\`, `dlc\` and `futari.ini` over, and
-redo the shaders once on F2 if you use Renut (the shader file names its build).
-See [CHANGELOG.md](CHANGELOG.md). Per-OS build and packaging details:
+**Latest release:** v1.5.6 (Windows, macOS): bundles on the
+[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.6);
+history in [CHANGELOG.md](CHANGELOG.md), per-OS build and packaging details in
 [PORTS.md](PORTS.md).
 
-v1.5.5 adds a setup screen inside `futari.exe` (unzip, double-click, point it
-at your own dump; no Python), a settings screen on F2, and an opt-in second
-renderer, Renut, beside the unchanged default one: see [Renderers](#renderers).
-With Renut linked, the release binaries are distributed under the GPL-3.0; this
+The exe has its own setup screen (unzip, double-click, point it at your own
+dump; no Python), a settings screen on F2, and an opt-in second renderer,
+Renut, beside the unchanged default one: see [Renderers](#renderers). With
+Renut linked, the release binaries are distributed under the GPL-3.0; this
 repository's own files stay BSD 3-Clause (see [Licence](#licence)).
 
 **Linux and Steam Deck players: use [futari-linux](https://github.com/cerroverb/futari-linux)** instead.
@@ -43,23 +41,23 @@ up new ones.
 ## Just want to play?
 
 Prebuilt bundles for Windows and macOS are attached to the
-[GitHub Releases](https://github.com/springah/futari_recomp/releases) (from
-v1.5.3 on; the v1.5.2 bundles were only ever shared privately, and v1.5.3 was
-the last release with a Steam Deck zip; Linux and Steam Deck players should use
-[futari-linux](https://github.com/cerroverb/futari-linux)). The bundles contain the game's own program code,
-recompiled, and are **for people who own the game only** — see [Legal](#legal).
-They contain no game data. On Windows, unzip one and double-click `futari.exe`:
-with no game data in place its setup screen asks for your own dump (your disc
-ISO, the install folder copied off your console, or an already-extracted game
-folder, picked with the normal file dialog or typed in), puts it in place,
-prepares the shaders for the optional Renut renderer and starts the game.
-Nothing else is needed: no Python, no batch file. F2 in the game opens the
-settings screen (renderer, fullscreen, vsync, window size, DLC, shaders), which
-saves into `futari.ini`. The command-line route is still in the zip: drag the
-same sources onto `extract_assets.bat` (needs Python 3). `RUN.txt` inside has
-the details, the macOS differences included. Upgrading: copy your `assets/` and
-`dlc/` folders (and `futari.ini`) into the new version's folder, start it, press
-F2 and "Redo the shaders" (the shader file must match the build).
+[GitHub Releases](https://github.com/springah/futari_recomp/releases). They
+contain the game's own program code, recompiled, and are **for people who own
+the game only** (see [Legal](#legal)); they contain no game data. Linux and
+Steam Deck: [futari-linux](https://github.com/cerroverb/futari-linux).
+
+- **Install:** unzip anywhere and double-click `futari.exe` (macOS:
+  `Futari-<version>.app`). With no game data in place the setup screen asks for
+  your own dump (disc ISO, the install folder copied off your console, or an
+  already-extracted game folder), puts it in place, prepares the shaders for
+  the optional Renut renderer and starts the game. No Python, no batch file.
+- **Settings:** F2 in the game (renderer, fullscreen, vsync, window size, DLC,
+  shaders), saved into `futari.ini`.
+- **Upgrading:** copy `assets/`, `dlc/` and `futari.ini` into the new version's
+  folder, start it, and if you use Renut press F2 and "Redo the shaders" once
+  (the shader file names the build that made it).
+- **Command line:** drag the same sources onto `extract_assets.bat` (needs
+  Python 3). `RUN.txt` inside the zip has the details, the macOS steps included.
 
 ## How it works
 
@@ -306,23 +304,12 @@ Known limits of v1.5.6:
   package; the picture is the same. Run the batch file with nothing dragged on
   to get the optimised package.
 
-Two earlier recompiler issues, both fixed, for the record:
-
-- **The shell's one inexpressible branch (fixed).** Codegen used to split the
-  block at `0x82081778` into its own function, though it is really an interior
-  continuation of `sub_82081658` — register restores that rejoin the parent's
-  loop at `0x820816EC`, a branch that cannot be expressed from a separate
-  function, so it compiled to the shell's only `REX_FATAL`. The split turned
-  out to be a pointer-scan false positive: the only "pointer" to that address
-  in the whole image is a `lwz r16,0x1778(r8)` instruction, whose encoding
-  happens to equal `0x82081778`. The address is now declared a chunk of its
-  parent in `futari_functions.toml` (the SDK's function config `parent` field,
-  whose semantics were completed for this), no standalone function or dispatch
-  entry is emitted, and the fatal is gone.
-- Historically, entering a game mode host-crashed via under-sized jump tables.
-  Fixed in the SDK: index-register copy tracing, manual `[[switch_tables]]`
-  support, and out-of-range cases now fall back to faithful indirect dispatch
-  rather than `__builtin_trap()`.
+Two recompiler issues from earlier versions, both fixed: the shell's one
+inexpressible branch (a pointer-scan false positive split `sub_82081658` at
+`0x82081778`; the address is now declared a chunk of its parent in
+`futari_functions.toml`), and host crashes on entering a game mode from
+under-sized jump tables (fixed in the SDK's switch-table analysis).
+[CHANGELOG.md](CHANGELOG.md) has the details.
 
 ## Credits
 
