@@ -496,6 +496,21 @@ u32 D3DDevice_Release_hook(u32 device_va) {
   return 0;
 }
 
+// futari_recomp (2026-11-07): HRESULT D3DDevice_Reset(D3DDevice*, D3DPRESENT_PARAMETERS*) [Futari sub_820A4710].
+// The original sets the ring parameters, waits for the GPU, then releases and recreates the automatic
+// buffers (sub_820AB420, sub_820AB1D0) with the video mode calls of a hardware device. Renut presents
+// natively at the window's size, so the buffers Direct3D_CreateDevice made stay. The only caller
+// (sub_8216B148, the game's present) ignores the result, and calls it only when D3DResource_Release
+// returns a negative value, which Renut's Release cannot produce, so the branch stays unused.
+u32 D3DDevice_Reset_hook(u32 device_va, u32 /*present_parameters*/) {
+  static bool logged = false;
+  if (!logged) {
+    logged = true;
+    RGPU_INFO("D3DDevice_Reset on {:#010x}: presentation buffers kept", device_va);
+  }
+  return 0;  // S_OK
+}
+
 // The GPU starts on the kicked draws: the guest buffers they read are read
 // then (FlushVertexFillsLocked), before the fence tells the game it may reuse
 // them. Memexport results reach guest memory later, once the GPU has finished
@@ -1279,6 +1294,7 @@ FUTARI_RENUT_HOOK(D3DDevice_SetGammaRamp, D3DDevice_SetGammaRamp_hook);  // N&B 
 FUTARI_RENUT_HOOK(D3DDevice_SetPWLGamma, D3DDevice_SetPWLGamma_hook);  // N&B sub_8264DA18
 FUTARI_RENUT_HOOK(Direct3D_CreateDevice, Direct3D_CreateDevice_hook);  // N&B sub_8264DF28
 FUTARI_RENUT_HOOK(D3DDevice_Release, D3DDevice_Release_hook);  // N&B sub_8264E080
+FUTARI_RENUT_HOOK(D3DDevice_Reset, D3DDevice_Reset_hook);  // futari_recomp (2026-11-07)
 FUTARI_RENUT_HOOK(D3D_XenonGpu_Initialize, D3D_XenonGpu_Initialize_hook);  // N&B sub_82663208
 FUTARI_RENUT_HOOK(D3D_InitializeApiState, D3D_InitializeApiState_hook);  // N&B sub_826597C8
 FUTARI_RENUT_HOOK(D3D_InitializePresentationParameters, D3D_InitializePresentationParameters_hook);  // N&B sub_82659AA8
