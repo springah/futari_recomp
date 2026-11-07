@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.7 — 2026-11-07 (Windows, macOS)
 
 - **Windows: the window no longer waits for the display's refresh by default**
   (`present_vsync = false`, now its own `[Display]` line). With the wait on, a

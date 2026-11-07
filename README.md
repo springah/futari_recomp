@@ -15,8 +15,8 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.6 (Windows, macOS): bundles on the
-[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.6);
+**Latest release:** v1.5.7 (Windows, macOS): bundles on the
+[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.7);
 history in [CHANGELOG.md](CHANGELOG.md), per-OS build and packaging details in
 [PORTS.md](PORTS.md).
 
@@ -291,7 +291,7 @@ thirdparty/plume/, thirdparty/reblue-XenosRecomp/   # Renut's render interface a
 
 ## Known issues
 
-Known limits of v1.5.6:
+Known limits of v1.5.7:
 
 - **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path).
   On macOS it is experimental: the picture is right, but heavy scenes can run
