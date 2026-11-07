@@ -4,6 +4,13 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- `make_shaders.py`: closing its own log file raised `OSError: [Errno 5]` once on
+  a macOS Desktop folder, after the package and stamp were written; the
+  traceback hid the success and left `shader_work/` (game-derived data) behind.
+  The close is now guarded, so the work folder is removed as before.
+
 ## v1.5.8 — 2026-11-07 (Windows, macOS)
 
 - README build steps corrected by a fresh clone on a Mac (2026-11-07): the

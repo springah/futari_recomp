@@ -200,7 +200,10 @@ def main():
         print(f"[DONE] {package} ({package.stat().st_size // 1024} KB, {time.time() - started:.0f} s)")
         return 0
     finally:
-        log.close()
+        try:
+            log.close()
+        except OSError:
+            pass  # seen once on a macOS Desktop folder (EIO at close); the package and stamp were already written
         if ok and not args.keep:
             shutil.rmtree(work, ignore_errors=True)
         elif not ok:
