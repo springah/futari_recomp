@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.8 — 2026-11-07 (Windows, macOS)
 
 - README build steps corrected by a fresh clone on a Mac (2026-11-07): the
   SDK's `mac-arm64` preset names a bare `clang++` (Apple's, which the SDK
@@ -27,7 +27,7 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   macOS and the bundle script ships the plugin under that name (bundles up to
   v1.5.7 carried it renamed to `.so`).
 - **macOS: `make_shaders.py` works on the Mac** and ships in the macOS zip from
-  the next release. Run next to `Futari-<version>.app` it finds the newest app,
+  v1.5.8. Run next to `Futari-<version>.app` it finds the newest app,
   the executable inside it, the compiler in `Contents/lib` and the tool files
   in `Contents/Resources/renut_tools` (the bundle now carries the early-alpha
   pass's two scripts there too), and writes the two-pass `vulkan_spirv.bin`
