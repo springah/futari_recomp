@@ -112,13 +112,14 @@ SETTINGS
   the next start. Or edit futari.ini (next to the exe) for resolution,
   fullscreen, vsync, upscaler, and log level, then restart. The F4 overlay's
   "Save to config" writes into the same futari.ini, updating those lines in
-  place (your comments survive). vsync
-  (on by default) locks the game to refresh_rate and presents in step with your
-  monitor, so there is no tearing; on a variable refresh rate display you can
-  set present_vsync = false in the F4 cvar list to present immediately again
-  while the game stays at 60. Renut has its own switch, renut_vsync (off by
-  default: frames shown at once; on waits for the display's refresh and can
-  hitch on a panel that is not exactly 60 Hz); while Renut runs, the F2
+  place (your comments survive). vsync (on by default) paces the game at
+  refresh_rate; leave it on. present_vsync is whether the window waits for
+  your display's refresh before showing a frame: off (the default) shows each
+  frame at once and the game holds 60 on every display (windowed, the desktop
+  composes the picture, so nothing tears); on waits for the refresh (no tearing
+  in fullscreen) but a panel that is not exactly 60 Hz costs the game about 1.5
+  frames a second. The F2 VSync box is that switch. Renut has its own,
+  renut_vsync (off by default, the same trade-off); while Renut runs, the F2
   VSync box is that one. Saves
   and shader cache default to Documents\futari; set user_data_path / cache_path
   in futari.ini to relocate them (a relative path like "saves" keeps everything

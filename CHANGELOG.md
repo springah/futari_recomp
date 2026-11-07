@@ -6,6 +6,20 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+- **Windows: the window no longer waits for the display's refresh by default**
+  (`present_vsync = false`, now its own `[Display]` line). With the wait on, a
+  36 s to 100 s census of the default renderer read 58 to 59 of the game's 60
+  frames a second on a 59.94 Hz panel, title and attract demo alike, with
+  either vblank worker; with it off the game holds 60.00 (the game paces
+  itself with its own 60 Hz vblank clock, `vsync`, which stays on). Windowed,
+  the desktop composes the picture, so nothing tears; fullscreen on a
+  fixed-refresh panel may, which is what turning the box back on is for. The
+  F2 VSync box is this switch on the default renderer (it used to set the
+  guest pacing `vsync` as well, which off runs the game as fast as the
+  machine goes); `present_vsync` leaves the managed block for the `[Display]`
+  section. An older ini without the line gets the new default; a
+  `present_vsync = false` saved in its managed block still wins. macOS keeps
+  following the `vsync` line (not measured there).
 - First end-to-end run of `build.ps1` on a fresh clone (Windows, 2026-11-07):
   clone, dxc-bin fetch, SDK CLI, ISO extraction, codegen, shader dump,
   configure, build, boot all passed. The script now refuses to start with under

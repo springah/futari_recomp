@@ -516,11 +516,11 @@ void LauncherDialog::DrawSettings() {
   FocusHere();  // no-op when the renderer row took the focus
   ImGui::Checkbox("Fullscreen (F11 toggles it in the game)", &fullscreen_);
   ImGui::Checkbox("VSync", &vsync_);
-  if (vsync_renut_) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-    WrappedText("Renut: off shows frames at once; on waits for the display's refresh");
-    ImGui::PopStyleColor();
-  }
+  ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+  WrappedText(vsync_renut_ ? "Renut: off shows frames at once; on waits for the display's refresh"
+                           : "Off shows frames at once and the game holds 60; on waits for the display's refresh "
+                             "(no tearing in fullscreen) and costs frames on a panel that is not exactly 60 Hz");
+  ImGui::PopStyleColor();
   ImGui::TextUnformatted("Window size");
   ImGui::SameLine();
   std::vector<std::string> labels;
@@ -752,11 +752,14 @@ void LauncherDialog::FinishPlay() {
 void LauncherDialog::LoadSettings() {
   renderer_renut_ = env_.renut_available && rex::cvar::Query<std::string>("futari_renderer") == "renut";
   fullscreen_ = rex::cvar::Query<bool>("fullscreen");
-  // The SDK's `vsync` is registered by the xenos plugin; a Renut session loads
-  // none, so there the box is Renut's own switch (the renut_vsync line, off by
-  // default: on can hitch on a panel that is not exactly 60 Hz).
+  // The box is the host present's wait for the display: present_vsync on the
+  // default renderer (its own [Display] line since 2026-11-07, off by default
+  // on Windows: the wait cost the game 1.5 frames a second on a 59.94 Hz
+  // panel), renut_vsync while Renut runs (the SDK's presenter is not in use
+  // there). The guest pacing switch `vsync` stays out of reach here: off, the
+  // game runs as fast as the machine goes.
   vsync_renut_ = env_.renut_running;
-  vsync_ = rex::cvar::Query<bool>(vsync_renut_ ? "renut_vsync" : "vsync");
+  vsync_ = rex::cvar::Query<bool>(vsync_renut_ ? "renut_vsync" : "present_vsync");
   resolution_index_ = 0;
   settings_note_.clear();
 }
@@ -789,12 +792,8 @@ void LauncherDialog::RefreshStatus() {
 
 void LauncherDialog::SaveSettings() {
   rex::cvar::SetFlagByName("fullscreen", fullscreen_ ? "true" : "false");
-  if (vsync_renut_) {
-    rex::cvar::SetFlagByName("renut_vsync", vsync_ ? "true" : "false");  // applies at once
-  } else {
-    rex::cvar::SetFlagByName("vsync", vsync_ ? "true" : "false");
-    rex::cvar::SetFlagByName("present_vsync", vsync_ ? "true" : "false");
-  }
+  // Both apply at once: Renut's at its next present, the SDK presenter's at its next Present call.
+  rex::cvar::SetFlagByName(vsync_renut_ ? "renut_vsync" : "present_vsync", vsync_ ? "true" : "false");
   if (resolution_index_ > 0 && resolution_index_ <= int(std::size(kResolutions))) {
     const auto& r = kResolutions[resolution_index_ - 1];
     rex::cvar::SetFlagByName("window_width", std::to_string(r.w));

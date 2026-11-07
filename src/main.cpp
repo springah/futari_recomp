@@ -297,11 +297,19 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# still renders at its native resolution and is scaled to fit.\n"
        << "resolution = 1920x1080\n"
        << "fullscreen = false\n"
-       << "# vsync locks the game to refresh_rate and makes the window present\n"
-       << "# in step with your monitor (no tearing). On a variable refresh rate\n"
-       << "# display you can keep the game at 60 but let the window present\n"
-       << "# immediately again with \"present_vsync = false\" in the F4 cvar list.\n"
+       << "# vsync paces the game at refresh_rate (its own 60 Hz clock). Leave it on:\n"
+       << "# off, the game runs as fast as the machine goes.\n"
        << "vsync = true\n"
+#ifdef _WIN32
+       << "# present_vsync: whether the window waits for your display's refresh\n"
+       << "# before showing a frame. Off (the default) shows each frame at once and\n"
+       << "# the game holds 60 on every display; windowed, the desktop still composes\n"
+       << "# the picture, so nothing tears. On waits for the refresh (no tearing in\n"
+       << "# fullscreen) but on a panel that is not exactly 60 Hz the game loses\n"
+       << "# about 1.5 frames a second to the wait (measured 2026-11-07). The F2\n"
+       << "# VSync box is this switch while the default renderer runs.\n"
+       << "present_vsync = false\n"
+#endif
 #if FUTARI_RENUT_RENDERER
        << "# Renut (the Vulkan renderer, futari_renderer = renut) has its own switch:\n"
        << "# off shows each frame at once (lowest latency, tearing possible); on\n"
@@ -388,18 +396,33 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
     if (auto b = ParseBool(*v))
       SetCvarBool("fullscreen", *b);
   }
+  // vsync = guest vblank pacing (the SDK's `vsync`, which lives in the xenos
+  // plugin: a Renut session never loads it, and there this line reaches
+  // nothing; Renut's own switch is the renut_vsync line below). The host
+  // present's wait for the display is present_vsync, its own line since
+  // 2026-11-07: on a 59.94 Hz panel the wait cost the game about 1.5 of its 60
+  // frames a second (Present(1) back-pressure on the one D3D12 queue), so on
+  // Windows it defaults to off; windowed, the desktop composes the picture and
+  // nothing tears. Elsewhere it still follows the vsync line (not measured).
+  // A `present_vsync = false` left in an older ini's managed block still wins
+  // (the block loads after this).
+  bool vsync_on = true;
   if (auto* v = find("display.vsync")) {
     if (auto b = ParseBool(*v)) {
-      // Guest vblank pacing and host presentation together: "vsync = true" is
-      // what players mean by no tearing. The SDK's managed overlay block is
-      // loaded after this, so a saved "present_vsync = false" (VRR) still wins.
-      // The SDK's `vsync` lives in the xenos plugin, which a Renut session
-      // never loads: there this line reaches nothing, and Renut's own switch
-      // is the renut_vsync line below (its own default: off).
+      vsync_on = *b;
       SetCvarBool("vsync", *b);
-      SetCvarBool("present_vsync", *b);
     }
   }
+#ifdef _WIN32
+  bool present_vsync = false;
+#else
+  bool present_vsync = vsync_on;
+#endif
+  if (auto* v = find("display.present_vsync")) {
+    if (auto b = ParseBool(*v))
+      present_vsync = *b;
+  }
+  SetCvarBool("present_vsync", present_vsync);
   if (auto* v = find("display.renut_vsync")) {
     if (auto b = ParseBool(*v))
       SetCvarBool("renut_vsync", *b);
@@ -507,6 +530,7 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
   // xenos plugin): its line is left alone there, and Renut's own goes out.
   const std::string sdk_vsync = GetCvarByName("vsync");
   add("Display", "vsync", sdk_vsync);
+  add("Display", "present_vsync", GetCvarByName("present_vsync"));
   add("Display", "renut_vsync", GetCvarByName("renut_vsync"));
   add("Display", "refresh_rate", TidyNumber(GetCvarByName("video_mode_refresh_rate")));
   add("Display", "letterbox", GetCvarByName("present_letterbox"));
@@ -521,7 +545,7 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
   // persisting those is dead weight at best and breaks portability at worst.
   static constexpr std::string_view kExcluded[] = {
       // carried by the friendly section lines
-      "window_width", "window_height", "fullscreen", "vsync", "renut_vsync",
+      "window_width", "window_height", "fullscreen", "vsync", "present_vsync", "renut_vsync",
       "video_mode_refresh_rate", "present_letterbox", "present_effect",
       "present_cas_additional_sharpness", "present_dither", "log_level",
       // pinned in OnPreSetup or derived from PathConfig at startup
@@ -539,18 +563,8 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
         continue;
       }
       const std::string key = Trim(std::string_view(line).substr(0, eq));
-      bool excluded = std::any_of(std::begin(kExcluded), std::end(kExcluded),
-                                  [&](std::string_view e) { return e == key; });
-      // present_vsync normally mirrors the [Display] vsync line (the F4 VSync
-      // checkbox sets both), and the managed block loads after that line, so
-      // persisting it here would pin the host present to a value a later hand
-      // edit of "vsync = ..." cannot change: save with VSync off, edit vsync =
-      // true back in, and the window would still tear. Keep it only when it
-      // deliberately differs (the VRR case: vsync = true, present_vsync = false).
-      // In a Renut session (no `vsync` registered) it means nothing: drop it.
-      if (!excluded && key == "present_vsync") {
-        excluded = sdk_vsync.empty() || GetCvarByName("present_vsync") == sdk_vsync;
-      }
+      const bool excluded = std::any_of(std::begin(kExcluded), std::end(kExcluded),
+                                        [&](std::string_view e) { return e == key; });
       if (!excluded) {
         raw_block += line;
         raw_block += '\n';
