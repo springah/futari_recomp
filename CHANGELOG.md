@@ -6,6 +6,19 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+- **macOS: `make_shaders.py` works on the Mac** and ships in the macOS zip from
+  the next release. Run next to `Futari-<version>.app` it finds the newest app,
+  the executable inside it, the compiler in `Contents/lib` and the tool files
+  in `Contents/Resources/renut_tools` (the bundle now carries the early-alpha
+  pass's two scripts there too), and writes the two-pass `vulkan_spirv.bin`
+  into `Contents/MacOS/`. Until now the Mac had only the F2 button's one-pass
+  translation. The script's messages name the executable it ran instead of
+  always saying `futari.exe`.
+- macOS present_vsync census (2026-11-07, M-series MacBook Pro, built-in
+  display): four 100 s runs of the default renderer at the title, presenter
+  vsync on and off alternately, all read 60.00 fps after the first window
+  (58.8 in every first 10 s = start-up). Unlike Windows, the Mac loses nothing
+  to the presenter wait, so macOS keeps following the `vsync` line.
 - `scripts/stage_win_zip.sh`: Renut writes `pipeline_list.bin` (its pipeline
   list) next to the exe at shutdown, so the Renut-up boot check left one in the
   stage and the first v1.5.7 Windows zip carried it; the script now removes

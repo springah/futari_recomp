@@ -158,7 +158,7 @@ Packaging rules — each one is here because it broke once:
    `Mushihimesama-Futari-PC/` folder. .NET `Compress-Archive` writes non-spec
    backslash entries and no wrapper folder. macOS: stage
    `Mushihimesama-Futari-macOS/` (`Futari-<version>.app`, `RUN.txt`, `extract_iso.py`,
-   `THIRD-PARTY-NOTICES.txt`, `dlc/README.txt`) and zip it with
+   `make_shaders.py`, `THIRD-PARTY-NOTICES.txt`, `dlc/README.txt`) and zip it with
    `ditto -c -k --keepParent --norsrc`. Nothing but Mach-O files may sit in
    `Futari-<version>.app/Contents/MacOS/`: `--norsrc` strips the extended attributes a
    non-Mach-O file's signature lives in, and the extracted app then fails

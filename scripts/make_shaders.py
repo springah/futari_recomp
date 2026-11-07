@@ -10,6 +10,7 @@ extract_assets.bat with nothing dragged on, which runs only this script, or run 
 
     python make_shaders.py                      # next to futari.exe (the release layout)
     py make_shaders.py                          # the same, where python is not on the PATH
+    python3 make_shaders.py                     # macOS: next to Futari-<version>.app (the newest one is used)
     python scripts/make_shaders.py --exe out/build/win-amd64-release/futari.exe --assets assets \\
            --tools out/build/win-amd64-release-shaders/renut_tools      # a developer tree
 
@@ -21,7 +22,9 @@ header and the early-alpha pass, no executable):
      does: XenosRecomp (hedge-dev's Xbox 360 shader translator, Renut's build of it) is built into the exe, and writes
      the shaders as the SPIR-V package the renderer reads.
   3. The work folder (game data) is deleted.
-Needs nothing but Python 3.
+Needs nothing but Python 3. On macOS the executable is Contents/MacOS/futari inside the app, the compiler is
+Contents/lib/libdxcompiler.dylib and the other tool files are in Contents/Resources/renut_tools (the exe's own F2
+"Prepare the shaders" uses the same files, in one pass without the early-alpha rewrite; this script runs both passes).
 """
 import argparse
 import os
@@ -99,16 +102,38 @@ def main():
     ap.add_argument("--keep", action="store_true", help="keep the work folder (game data; for diagnosis)")
     args = ap.parse_args()
 
-    exe = Path(args.exe) if args.exe else here / "futari.exe"
+    if args.exe:
+        exe = Path(args.exe)
+    elif sys.platform == "win32":
+        exe = here / "futari.exe"
+    else:
+        # macOS: the executable sits inside the app beside this script; with several apps, the newest version.
+        exe = here / "futari"
+        if not exe.is_file():
+            def version_key(p):
+                name = p.parents[2].name[len("Futari-"):-len(".app")]
+                return [int(x) if x.isdigit() else x for x in name.replace("-", ".").split(".")]
+            apps = sorted(here.glob("Futari-*.app/Contents/MacOS/futari"), key=version_key)
+            if apps:
+                exe = apps[-1]
     if not exe.is_file():
-        return fail(f"no {exe}: run this next to futari.exe, or pass --exe")
+        return fail(f"no {exe}: run this next to futari.exe (macOS: next to Futari-<version>.app), or pass --exe")
     exe = exe.resolve()
     exe_dir = exe.parent
+    in_bundle = sys.platform != "win32" and exe_dir.name == "MacOS" and exe_dir.parent.name == "Contents"
     assets = Path(args.assets).resolve() if args.assets else exe_dir / "assets"
     if not (assets / "default.xex").is_file():
         return fail(f"no {assets / 'default.xex'}: extract the game data first (extract_assets.bat)")
-    tools = Path(args.tools).resolve() if args.tools else exe_dir / "renut_tools"
-    dxcompiler = tools / "dxcompiler.dll"
+    if args.tools:
+        tools = Path(args.tools).resolve()
+    elif in_bundle and not (exe_dir / "renut_tools").is_dir():
+        tools = exe_dir.parent / "Resources" / "renut_tools"  # mac-build/build_app.sh puts the tool files here
+    else:
+        tools = exe_dir / "renut_tools"
+    dxc_name = "dxcompiler.dll" if sys.platform == "win32" else "libdxcompiler.dylib"
+    dxcompiler = tools / dxc_name
+    if not dxcompiler.is_file() and in_bundle and (exe_dir.parent / "lib" / dxc_name).is_file():
+        dxcompiler = exe_dir.parent / "lib" / dxc_name  # the bundle keeps the dylib beside MoltenVK
     common = tools / "shader_common.h"
     early_alpha = tools / "renut_early_alpha.py"
     for needed in (dxcompiler, common, early_alpha, tools / "early_alpha.py"):
@@ -138,14 +163,14 @@ def main():
     try:
         print("1/3  Reading the shaders out of your game's executables (the game opens and closes by itself)...")
         if not run([exe, f"--game_data_root={assets}", f"--futari_renut_dump_shaders={dump}"], timeout=180, log=log):
-            return fail("futari.exe could not dump the shaders (see shader_work/make_shaders.log and the newest logs/*.log)")
+            return fail(f"{exe.name} could not dump the shaders (see shader_work/make_shaders.log and the newest logs/*.log)")
         bins = sorted(dump.glob("*.bin"))
         if not (dump / "manifest.csv").is_file() or not bins:
             return fail("the dump is empty: is assets/ a complete Ver 1.5 extraction?")
         print(f"     {len(bins)} shaders" + ("" if len(bins) == EXPECTED_SHADERS else
                                            f" (expected {EXPECTED_SHADERS}: a different game version?)"))
 
-        print("2/3  Translating them (XenosRecomp built into futari.exe, DirectX Shader Compiler)...")
+        print(f"2/3  Translating them (XenosRecomp built into {exe.name}, DirectX Shader Compiler)...")
         # As the build (src/renut_engine/gpu/gpu.cmake): a dump-only pass, the early-alpha rewrite, the real pass.
         if not run(translate(dump, work / "pass1.cpp", hlsl), env={"BANJO_HLSL_DUMP_ONLY": "1"}, timeout=300, log=log):
             return fail("the translator's first pass failed (see shader_work/make_shaders.log and the newest logs/*.log)")
@@ -157,7 +182,7 @@ def main():
                    timeout=300, log=log):
             return fail("the translator's second pass failed (see shader_work/make_shaders.log and the newest logs/*.log)")
         if not tmp_package.is_file():
-            return fail("the translator wrote no package (is futari.exe this version's build?)")
+            return fail(f"the translator wrote no package (is {exe.name} this version's build?)")
         count, why = check_package(tmp_package)
         if count is None:
             return fail(f"the package is unusable: {why}")
@@ -170,7 +195,7 @@ def main():
         # The stamp beside the package names the build that made it; without it the launcher's setup flow would
         # treat this two-pass package as stale and redo it with its own one-pass translation.
         if not run([exe, f"--futari_renut_stamp={out_dir}"], timeout=60, log=log):
-            print("     note: could not write vulkan_spirv.stamp (an older futari.exe?); the game will warn that the shaders are unstamped")
+            print(f"     note: could not write vulkan_spirv.stamp (an older {exe.name}?); the game will warn that the shaders are unstamped")
         ok = True
         print(f"[DONE] {package} ({package.stat().st_size // 1024} KB, {time.time() - started:.0f} s)")
         return 0

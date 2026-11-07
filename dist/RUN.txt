@@ -85,7 +85,10 @@ macOS
   - The setup screen is the same (it opens when the app finds no game data).
     There is no extract_assets.bat; the terminal route is
       python3 extract_iso.py "<your .iso or 435A07D7 folder>" --out assets --dlc-out dlc
-    (python3 comes with Apple's Command Line Tools).
+      python3 make_shaders.py        # the two-pass shaders, next to Futari-<version>.app
+    (python3 comes with Apple's Command Line Tools). make_shaders.py finds the
+    newest Futari-*.app beside it and writes vulkan_spirv.bin into its
+    Contents/MacOS/; F2 "Prepare the shaders" does the same in one pass.
   - macOS: the bundle is Futari-<version>.app. The game looks for assets/ (and
     dlc/) next to its executable INSIDE the app: right-click the app -> Show
     Package Contents, and put them in Contents/MacOS/. Logs land there too.
@@ -132,8 +135,8 @@ STATUS
   Known limits of this version:
     - Renut is Vulkan-only (no Direct3D 12 path).
     - The setup screen translates the shaders in one pass; extract_assets.bat
-      runs two, with an optimisation for a few pixel shaders. The picture is
-      the same either way.
+      and make_shaders.py run two, with an optimisation for a few pixel
+      shaders. The picture is the same either way.
 
 LICENCES
   This build links third-party open-source components (including FFmpeg and

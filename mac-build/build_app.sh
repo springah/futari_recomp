@@ -172,10 +172,13 @@ if grep -q '^FUTARI_RENUT_RENDERER:BOOL=ON' "$BUILD/CMakeCache.txt" 2>/dev/null;
   cp "$BUILD/renut_tools/libdxcompiler.dylib" "$C/lib/libdxcompiler.dylib"
   mkdir -p "$C/Resources/renut_tools"
   cp "$BUILD/renut_tools/shader_common.h" "$C/Resources/renut_tools/"
+  # The early-alpha pass make_shaders.py runs between its two translator passes (the exe's own F2 step is one pass
+  # and does not need them); tracked in the repo, the macOS cmake target does not copy them.
+  cp "$REPO/tools/renut/renut_early_alpha.py" "$REPO/tools/renut/early_alpha.py" "$C/Resources/renut_tools/"
   DXC_LIC="$REPO/thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/lib/arm64/LICENSE-DirectXShaderCompiler.txt"
   [ -f "$DXC_LIC" ] || { echo "  ERROR: $DXC_LIC missing (scripts/build_dxc_mac.sh copies it)" >&2; exit 1; }
   cp "$DXC_LIC" "$C/Resources/LICENSE-DirectXShaderCompiler.txt"
-  echo "  Renut: libdxcompiler.dylib -> Contents/lib, shader_common.h -> Contents/Resources/renut_tools"
+  echo "  Renut: libdxcompiler.dylib -> Contents/lib; shader_common.h + the early-alpha pass -> Contents/Resources/renut_tools"
 fi
 
 if [ "${SKIP_ASSETS:-0}" = "1" ]; then
