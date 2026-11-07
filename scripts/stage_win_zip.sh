@@ -16,7 +16,8 @@
 #     extract_assets.bat extract_iso.py make_shaders.py renut_tools/{dxcompiler.dll,shader_common.h,
 #     renut_early_alpha.py,early_alpha.py}
 #     RUN.txt gamecontrollerdb.txt THIRD-PARTY-NOTICES.txt dlc/README.txt
-# Not shipped: assets/, dlc/<ids>/, vulkan_spirv.bin + vulkan_spirv.stamp, shader_work/, logs/, TracyClient.dll (not imported).
+# Not shipped: assets/, dlc/<ids>/, vulkan_spirv.bin + vulkan_spirv.stamp, shader_work/, logs/, pipeline_list.bin (Renut's
+# pipeline list, written next to the exe at shutdown: the boot checks below leave one), TracyClient.dll (not imported).
 set -euo pipefail
 VER="${1:?usage: stage_win_zip.sh <version, e.g. 1.5.5>}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -86,7 +87,7 @@ if [ -n "${RENUT_PKG:-}" ]; then
   cp "$RENUT_PKG/vulkan_spirv.bin" "$RENUT_PKG/vulkan_spirv.stamp" "$STAGE/"
   ( cd "$STAGE" && timeout 12 ./futari.exe --user_data_root="$UDW" --game_data_root="$(cygpath -m "$ASSETS" 2>/dev/null || echo "$ASSETS")" --futari_renderer=renut >/dev/null 2>&1 || true )
   taskkill //F //IM futari.exe >/dev/null 2>&1 || true
-  rm -f "$STAGE/vulkan_spirv.bin" "$STAGE/vulkan_spirv.stamp"
+  rm -f "$STAGE/vulkan_spirv.bin" "$STAGE/vulkan_spirv.stamp" "$STAGE/pipeline_list.bin"
   LOG=$(ls -t "$STAGE"/logs/*.log 2>/dev/null | head -1)
   grep -q "Renderer: Vulkan" "${LOG:-/dev/null}" ||
     { echo "REFUSED: the staged exe did not bring Renut up on the lent package (stale package for this build, or a device regression); see $LOG"; exit 1; }
@@ -113,6 +114,11 @@ taskkill //F //IM futari.exe >/dev/null 2>&1 || true
 rm -rf "$STAGE/logs"
 echo "  boot check: default renderer alive at 20 s"
 rm -rf "$UD"
+# The boot checks ran the exe inside the stage: whatever it wrote next to itself is run output and goes (Renut leaves
+# pipeline_list.bin at shutdown, the v1.5.7 cut found it in the zip). Then the shipping rules once more, on what is zipped.
+rm -f "$STAGE/pipeline_list.bin"; rm -rf "$STAGE/logs" "$STAGE/shader_capture" "$STAGE/shader_work"
+bad=$(cd "$STAGE" && find . \( -name '*.xex' -o -name '*.bin' -o -name '*.stamp' -o -name '*.log' -o -path './assets*' -o -path './logs*'       -o -path './shader_work*' -o -path './shader_capture*' \) | head)
+if [ -n "$bad" ]; then echo "REFUSED: run output in the stage after the boot checks:"; echo "$bad"; exit 1; fi
 
 rm -f "$ZIP"
 python3 - "$ROOT/out/_stage" "$NAME" "$ZIP" <<'EOF'
