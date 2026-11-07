@@ -41,6 +41,13 @@ list below describes only the vendoring commit itself.
   now `/clang:-Wall /clang:-Wextra`, `/fp:strict` (clang-cl's alias of
   `-ffp-model=strict`) and `/clang:-O3`; the clang++ branch is unchanged.
 
+- `cmake/rexglue_helpers.cmake`: on macOS the host's post-build step staged
+  `$<TARGET_RUNTIME_DLLS>`, which CMake defines for DLL platforms only, so it
+  was a no-op and a dev-tree `futari` died at launch with "Library not loaded:
+  @rpath/librexruntime.dylib" (the bundle script copies the dylibs itself, so
+  the .app never showed it). It now copies `librexruntime.dylib` and
+  `libTracyClient.dylib` by target, as the FidelityFX branch does on Windows.
+
 ## Auditing against the source tag
 
 ```sh

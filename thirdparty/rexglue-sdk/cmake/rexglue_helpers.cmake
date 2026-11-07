@@ -250,13 +250,23 @@ function(rexglue_configure_target target_name)
     endif()
 
     if(APPLE)
-        # Stage runtime dylibs (librexruntime.dylib, etc.) next to the host
-        # binary on every link so @executable_path resolves correctly.
-        add_custom_command(TARGET ${target_name} POST_BUILD
-            COMMAND "$<$<BOOL:$<TARGET_RUNTIME_DLLS:${target_name}>>:${CMAKE_COMMAND};-E;copy_if_different;$<TARGET_RUNTIME_DLLS:${target_name}>;$<TARGET_FILE_DIR:${target_name}>>"
-            COMMAND_EXPAND_LISTS
-            VERBATIM
-        )
+        # Stage runtime dylibs (librexruntime.dylib, libTracyClient.dylib) next
+        # to the host binary on every link so @executable_path resolves.
+        # $<TARGET_RUNTIME_DLLS> is empty on Apple (CMake defines it for DLL
+        # platforms only), so the libraries the host links are named here, as
+        # the FidelityFX DLLs are above; the GPU plugins follow below. (futari
+        # 2026-11-07: a fresh macOS clone's dev build died at launch with
+        # "Library not loaded: @rpath/librexruntime.dylib" because of this.)
+        foreach(_lib rexruntime TracyClient)
+            if(TARGET ${_lib})
+                add_custom_command(TARGET ${target_name} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        $<TARGET_FILE:${_lib}>
+                        $<TARGET_FILE_DIR:${target_name}>
+                    VERBATIM
+                )
+            endif()
+        endforeach()
         if(REXGLUE_USE_VULKAN)
             rexglue_find_macos_vulkan_runtime(_rexglue_macos_vulkan_runtime_root)
             _rexglue_copy_macos_vulkan_runtime(${target_name} "${_rexglue_macos_vulkan_runtime_root}")

@@ -147,7 +147,8 @@ console, and lists checksums to verify the result.
 Needs CMake 3.25+, Ninja, **LLVM/clang-cl** 20+ (at `C:\Program Files\LLVM`),
 **Visual Studio 2022 Build Tools** with the Desktop C++ workload (clang-cl targets
 the MSVC ABI, so it needs those headers and libs — plus `rc.exe` from the bundled
-Windows SDK), Python 3.8+, and git + bash.
+Windows SDK), Python 3.8+ with the `xxhash` module (`pip install xxhash`; the
+shader dump below needs it), and git + bash.
 
 **Quick start (Windows):** [`build.ps1`](build.ps1) does all of the below in one
 go. It installs whatever is missing from that list via winget, enters the Visual
@@ -193,8 +194,12 @@ cmake --build thirdparty/rexglue-sdk/build --target rexglue
 # 3. Provide the game data — see "Game data" above (assets/, and dlc/ if you have it)
 python scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 
-# 4. Generate the recompiled C++ into generated/
+# 4. Generate the recompiled C++ into generated/, then dump the game's shaders
+#    for the Renut renderer (out/renut_shader_dump; the configure step refuses
+#    to run without it, or pass -DFUTARI_RENUT_STUB_SHADER_CACHE=ON for a
+#    build whose Renut draws nothing)
 bash scripts/regen.sh
+bash scripts/renut_shader_dump.sh
 
 # 5. Configure. Run from a "Developer PowerShell for VS 2022" so rc.exe is on
 #    PATH; otherwise add -DCMAKE_RC_COMPILER="C:/Program Files (x86)/Windows Kits/10/bin/<sdk-ver>/x64/rc.exe".
@@ -247,15 +252,25 @@ Ninja, Python 3 and a recent clang: on macOS that is **Homebrew LLVM**
 distribution's clang 20+ plus the Vulkan headers and loader.
 
 ```sh
-# 2. Build the ReXGlue CLI with the SDK's own preset for your platform
-#    (linux-amd64 or mac-arm64). The binary lands in thirdparty/rexglue-sdk/out/<platform>/,
-#    which is where regen.sh looks for it.
-cmake --preset mac-arm64 -S thirdparty/rexglue-sdk      # or: linux-amd64
-cmake --build --preset mac-arm64 --target rexglue       # or: linux-amd64
+# 2. Build the ReXGlue CLI with the SDK's own configure preset for your platform
+#    (mac-arm64 or linux-amd64). Name the compiler: the preset says a bare
+#    `clang++`, which on macOS is Apple's, and the SDK refuses that. The CLI
+#    lands in thirdparty/rexglue-sdk/out/<platform>/Release/, where regen.sh
+#    looks for it. (Configured once with the wrong compiler? Delete
+#    thirdparty/rexglue-sdk/out/build/<platform> before trying again.)
+cmake --preset mac-arm64 -S thirdparty/rexglue-sdk   -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang   -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++   # Linux: your clang/clang++
+cmake --build thirdparty/rexglue-sdk/out/build/mac-arm64 --config Release --target rexglue
 
-# 3.–4. as above
+# 3.–4. as above (pip3 install xxhash first)
 python3 scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 bash scripts/regen.sh
+bash scripts/renut_shader_dump.sh
+
+# 4b. macOS only, once: the Renut renderer's build needs Microsoft's shader
+#     compiler, which has no macOS download; this builds it from source into
+#     thirdparty/reblue-XenosRecomp/thirdparty/dxc-bin/ (a few minutes).
+#     Or configure with -DFUTARI_RENUT_RENDERER=OFF for the default renderer only.
+bash scripts/build_dxc_mac.sh
 
 # 5.–7. configure, build, run
 cmake --preset mac-arm64-release                        # or: linux-amd64-release

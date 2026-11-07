@@ -6,6 +6,21 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+- README build steps corrected by a fresh clone on a Mac (2026-11-07): the
+  SDK's `mac-arm64` preset names a bare `clang++` (Apple's, which the SDK
+  refuses), so step 2 now spells out the Homebrew compiler; the CLI build
+  command named a build preset that does not exist (`mac-arm64`; the SDK's
+  are `mac-arm64-release` and friends) and now builds the SDK's binary
+  directory; the shader dump (`scripts/renut_shader_dump.sh`, which needs
+  `pip install xxhash`) and, on macOS, `scripts/build_dxc_mac.sh` were
+  missing from the manual steps although the configure step refuses to run
+  without them. `build.ps1` already did all of this on Windows.
+- The same fresh clone's dev-tree `futari` (not the .app) died at launch on
+  macOS: "Library not loaded: @rpath/librexruntime.dylib". The vendored SDK's
+  post-build staging of the runtime dylibs used a CMake expression that is
+  empty on Apple; it now copies `librexruntime.dylib` and `libTracyClient.dylib`
+  next to the executable (`thirdparty/rexglue-sdk/VENDORED.md`). The bundle
+  was never affected: `mac-build/build_app.sh` copies them itself.
 - **macOS: `make_shaders.py` works on the Mac** and ships in the macOS zip from
   the next release. Run next to `Futari-<version>.app` it finds the newest app,
   the executable inside it, the compiler in `Contents/lib` and the tool files
