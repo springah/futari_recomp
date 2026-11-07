@@ -48,6 +48,11 @@ list below describes only the vendoring commit itself.
   the .app never showed it). It now copies `librexruntime.dylib` and
   `libTracyClient.dylib` by target, as the FidelityFX branch does on Windows.
 
+- `src/system/gpu_plugin_loader.cpp`: `PluginFileName()` asked for
+  `librexgpu-<name>.so` on every non-Windows platform; on macOS it now asks
+  for `.dylib`, the name CMake builds and the helper stages (the bundle script
+  used to rename the file to `.so` to satisfy it).
+
 ## Auditing against the source tag
 
 ```sh

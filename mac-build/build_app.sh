@@ -98,16 +98,14 @@ copy_first librexruntime.dylib "$C/MacOS/"
 copy_first libTracyClient.dylib "$C/MacOS/"
 
 # GPU plugin (SDK v0.9 split the renderer out of the runtime; without this the
-# app starts and then dies with "Failed to load GPU plugin 'xenos'").
-# NOTE THE RENAME: CMake builds it as librexgpu-xenos.dylib, but the SDK's
-# PluginFileName() asks for ".so" on every non-Windows platform, macOS included
-# (src/system/gpu_plugin_loader.cpp) -- even though dynlib_posix.cpp does know
-# about .dylib. dlopen ignores the extension, so staging it under the name the
-# loader wants works. Remove the rename once the SDK learns .dylib on Apple.
+# app starts and then dies with "Failed to load GPU plugin 'xenos'"). Staged
+# under its own name: since 2026-11-07 the vendored SDK's PluginFileName() asks
+# for ".dylib" on macOS (src/system/gpu_plugin_loader.cpp); bundles up to
+# v1.5.7 carried it renamed to librexgpu-xenos.so for the old ".so" lookup.
 for c in "$SDK/out/mac-arm64/librexgpu-xenos.dylib" "$BUILD/librexgpu-xenos.dylib"; do
-  if [ -f "$c" ]; then cp "$c" "$C/MacOS/librexgpu-xenos.so"; break; fi
+  if [ -f "$c" ]; then cp "$c" "$C/MacOS/librexgpu-xenos.dylib"; break; fi
 done
-[ -f "$C/MacOS/librexgpu-xenos.so" ] || { echo "  ERROR: librexgpu-xenos.dylib not found" >&2; exit 1; }
+[ -f "$C/MacOS/librexgpu-xenos.dylib" ] || { echo "  ERROR: librexgpu-xenos.dylib not found" >&2; exit 1; }
 
 echo "[3/8] bundled MoltenVK (self-contained, no Homebrew dependency)"
 # Resolve the real dylib (Homebrew symlink) so the copy is standalone.

@@ -21,6 +21,11 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   empty on Apple; it now copies `librexruntime.dylib` and `libTracyClient.dylib`
   next to the executable (`thirdparty/rexglue-sdk/VENDORED.md`). The bundle
   was never affected: `mac-build/build_app.sh` copies them itself.
+- Second macOS dev-tree launch defect from the same clone: the SDK's GPU plugin
+  loader asked for `librexgpu-xenos.so` while CMake builds `.dylib`, so the
+  staged plugin was "not found". The vendored loader now asks for `.dylib` on
+  macOS and the bundle script ships the plugin under that name (bundles up to
+  v1.5.7 carried it renamed to `.so`).
 - **macOS: `make_shaders.py` works on the Mac** and ships in the macOS zip from
   the next release. Run next to `Futari-<version>.app` it finds the newest app,
   the executable inside it, the compiler in `Contents/lib` and the tool files

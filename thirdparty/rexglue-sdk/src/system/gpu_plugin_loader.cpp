@@ -38,6 +38,10 @@ std::string PluginFileName(std::string_view name) {
   }
 #if REX_PLATFORM_WIN32
   return fmt::format("rexgpu-{}{}.dll", name, postfix);
+#elif REX_PLATFORM_MAC
+  // What CMake builds and rexglue_configure_target stages (librexgpu-xenos.dylib); until 2026-11-07 this asked for
+  // ".so" here too, and a dev-tree host on macOS died with "GPU plugin 'xenos' not found".
+  return fmt::format("librexgpu-{}{}.dylib", name, postfix);
 #else
   return fmt::format("librexgpu-{}{}.so", name, postfix);
 #endif
