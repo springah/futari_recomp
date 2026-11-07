@@ -4,6 +4,14 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- `scripts/stage_win_zip.sh`: Renut writes `pipeline_list.bin` (its pipeline
+  list) next to the exe at shutdown, so the Renut-up boot check left one in the
+  stage and the first v1.5.7 Windows zip carried it; the script now removes
+  what the boot checks wrote and runs the shipping rules once more on what it
+  zips. The published v1.5.7 zip was staged with this fix.
+
 ## v1.5.7 — 2026-11-07 (Windows, macOS)
 
 - **Windows: the window no longer waits for the display's refresh by default**
