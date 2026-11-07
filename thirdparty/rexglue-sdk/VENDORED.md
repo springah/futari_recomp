@@ -32,6 +32,14 @@ list below describes only the vendoring commit itself.
   host repository's root `.gitmodules` at `thirdparty/rexglue-sdk/thirdparty/*`,
   pointing at their public upstreams. The SDK's own `.gitmodules` file is kept
   in place for reference but git does not read it (only the root one counts).
+- **Compiler flags reach clang-cl in its own spellings** (root `CMakeLists.txt`,
+  2026-11-07). clang-cl read the GNU `-Wall` as MSVC's `/Wall` (every warning
+  clang has: ~170,000 `-Wc++98-compat` lines per build log), dropped
+  `-ffp-model=strict` as an unknown argument and never applied `-O3`, so the
+  Windows builds compiled at CMake's `/O2` with the default `/fp:precise` while
+  the clang++ builds had strict FP and `-O3`. On the MSVC frontend the flags are
+  now `/clang:-Wall /clang:-Wextra`, `/fp:strict` (clang-cl's alias of
+  `-ffp-model=strict`) and `/clang:-O3`; the clang++ branch is unchanged.
 
 ## Auditing against the source tag
 

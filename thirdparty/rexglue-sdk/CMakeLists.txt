@@ -114,15 +114,30 @@ if(NOT WIN32)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
-# Global compile options
-add_compile_options(
-    -fno-strict-aliasing
-    -ffp-model=strict
-    $<$<CONFIG:DEBUG>:-g>
-    $<$<CONFIG:DEBUG>:-O0>
-    $<$<CONFIG:RELEASE>:-O3>
-    $<$<CONFIG:RELEASE>:-DNDEBUG>
-)
+# Global compile options. clang-cl takes the GNU spellings of most of these, but not two of them: it drops
+# -ffp-model=strict ("unknown argument ignored") and never applies -O3 ("argument unused"), so every Windows build
+# compiled at CMake's /O2 with the default /fp:precise model while the clang++ builds (macOS, Linux) had strict FP and
+# -O3 (found 2026-11-07 in a fresh-clone build log). /fp:strict is clang-cl's own alias of -ffp-model=strict, and
+# /clang: forwards -O3 past the MSVC-style driver.
+if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    add_compile_options(
+        -fno-strict-aliasing
+        /fp:strict
+        $<$<CONFIG:DEBUG>:-g>
+        $<$<CONFIG:DEBUG>:-O0>
+        $<$<CONFIG:RELEASE>:/clang:-O3>
+        $<$<CONFIG:RELEASE>:-DNDEBUG>
+    )
+else()
+    add_compile_options(
+        -fno-strict-aliasing
+        -ffp-model=strict
+        $<$<CONFIG:DEBUG>:-g>
+        $<$<CONFIG:DEBUG>:-O0>
+        $<$<CONFIG:RELEASE>:-O3>
+        $<$<CONFIG:RELEASE>:-DNDEBUG>
+    )
+endif()
 
 # Disable C++20 char8_t so u8"" literals stay char[] (the codebase relies on
 # them converting to std::string/std::string_view). clang-cl silently ignores

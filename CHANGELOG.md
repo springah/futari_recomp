@@ -17,6 +17,20 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   which reads `-Wall` as MSVC's `/Wall` (every warning clang has): a build log
   carried about 170,000 `-Wc++98-compat` lines. The flags go through
   `/clang:` now; nothing compiled differently.
+- The same build log showed clang-cl dropping two more of the SDK's flags:
+  `-ffp-model=strict` ("unknown argument ignored") and `-O3` ("argument
+  unused"). Every Windows build so far compiled at CMake's `/O2` with the
+  default `/fp:precise` floating-point model, while the macOS build (clang++)
+  had strict FP and `-O3` as the SDK intends. On the MSVC frontend the SDK now
+  passes `/fp:strict` (clang-cl's alias of the same model) and `/clang:-O3`.
+  Verified on full rebuilds of the release tree: the stage checks pass (release
+  shader table, Renut up on a lent package, translator, default renderer alive),
+  both renderers boot and run clean, and the default renderer's `[vblank]`
+  frame-rate lines over 36 s are the same within noise for strict + `-O3`,
+  `-O3` alone, the flags as shipped, and the shipped v1.5.6 exe itself (57 to
+  59 fps at the title with the default ini). A note from that census: the
+  shipped exe reads 60.0 only with the test install's own `present_vsync =
+  false`; with the default ini's presenter vsync it reads the same 58 to 59.
 - README: the top states what the exe does today instead of what v1.5.5 added,
   "Just want to play?" is four steps, and the two fixed recompiler issues are a
   paragraph. The GitHub page's description, topics and homepage link (releases)
