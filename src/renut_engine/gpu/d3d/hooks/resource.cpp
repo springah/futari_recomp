@@ -33,6 +33,7 @@
 #include "renut_engine/gpu/guest/command_buffers.h"
 #include "renut_engine/gpu/d3d/d3d.h"
 #include "renut_engine/gpu/d3d/d3d_native.h"
+#include "renut_engine/gpu/d3d/edram_tiles.h"  // futari_recomp (2026-11-07)
 #include "renut_engine/gpu/guest/guest_memory.h"
 #include "renut_engine/gpu/guest/guest_records.h"
 #include "renut_engine/gpu/log.h"
@@ -293,16 +294,26 @@ struct SurfaceRecord {
   u32 self_va = 0;
 };
 
-// The EDRAM tiles a surface takes (sub_8231A808).
-u32 EdramTileCount(u32 width, u32 height, u32 format, u32 multisample) {
-  const u32 f = format & 0x3F;
-  u32 w = width, h = height;
-  if (i32(multisample) >= 1)
-    h = 2 * height;
-  if (multisample == 2)
-    w = 2 * width;
-  const u32 units = (f == 21 || f == 32 || f == 37) ? 8 : 4;
-  return ((h + 15) & ~15u) * 80 * ((w + 79) / 80) * units / 0x1400;
+// futari_recomp (2026-11-07): EdramTileCount (sub_8231A808) is in d3d/edram_tiles.h, tested on its own.
+
+// futari_recomp (2026-11-07): a surface without parameters larger than the EDRAM, or (2026-11-08) one that fits but
+// finds no free run left, logged once per size, kind and reason (the first 64 of them: resizes make new sizes).
+void LogEdramOverflow(u32 width, u32 height, bool depth, u32 tiles, bool no_room) {
+  static std::mutex mutex;
+  static std::unordered_set<u64> logged;
+  {
+    std::lock_guard lock(mutex);
+    if (logged.size() >= 64 ||
+        !logged.insert(u64(width) << 32 | u64(height) << 2 | u32(no_room) << 1 | u32(depth)).second)
+      return;
+  }
+  if (no_room) {
+    RGPU_INFO("Surface {}x{} ({}): {} EDRAM tiles, no free run left in the console's {}: base 0, no EDRAM reserved",
+              width, height, depth ? "depth" : "color", tiles, kEdramUsableTiles);
+  } else {
+    RGPU_INFO("Surface {}x{} ({}): {} EDRAM tiles, more than the console's {}: base 0, no EDRAM reserved", width,
+              height, depth ? "depth" : "color", tiles, kEdramUsableTiles);
+  }
 }
 
 // D3D::SetSurfaceHeader(Width, Height, D3DFORMAT, D3DMULTISAMPLE_TYPE,
@@ -392,18 +403,21 @@ u32 CreateSurface(u32 width, u32 height, u32 format, u32 multisample, u32 parame
   if (!parameters_va) {
     const u32 f = u32(s[10]) & 0x3F;
     const bool depth = f == 22 || f == 23;
-    const i32 base = AllocateEdram(tiles);
-    if (base < 0) {
-      DestroyRecord(record);
-      return 0;
+    // futari_recomp (2026-11-07): a surface no console could hold (an automatic back buffer at a large output size)
+    // keeps base 0 and reserves nothing, instead of failing: host targets are sized from the surface, never from
+    // EDRAM. Surfaces that fit are allocated as before. Its header's EDRAM size is 0: it owns none (and a saturated
+    // tile count would wrap the byte size). A surface that fits but finds no EDRAM run left (a frame that fits takes
+    // most of it) takes the same path instead of failing.
+    const i32 base = EdramOverflows(tiles) ? -1 : AllocateEdram(tiles);
+    if (EdramReserves(tiles, base)) {
+      s[0] = u32(s[0]) | 0x80000000u;  // owns its EDRAM
+      s[7] = Insert(s[7], u32(base), 0, 12);
+    } else {
+      if (base >= 0)
+        FreeEdram(u32(base), tiles);
+      LogEdramOverflow(width, height, depth, tiles, !EdramOverflows(tiles));
+      s[11] = 0u;  // +0x2C EDRAM size
     }
-    if (u32(base) + tiles > 0x800) {
-      FreeEdram(u32(base), tiles);
-      DestroyRecord(record);
-      return 0;
-    }
-    s[0] = u32(s[0]) | 0x80000000u;  // owns its EDRAM
-    s[7] = Insert(s[7], u32(base), 0, 12);
     if (depth && !LoadU32(kHiZOwnerVa)) {
       StoreU32(kHiZOwnerVa, 1);
       s[8] = u32(s[8]) & 0x1FFFF;

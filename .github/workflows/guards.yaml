@@ -54,6 +54,54 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I src tests/ini_merge_test.cpp -o ini_merge_test
           ./ini_merge_test
 
+  screen-layout-test:
+    # The size rules of the game's output-sized frame (src/screen_layout_math.h):
+    # the clamp and the game's widescreen rule. Pure std, like the ini merge test.
+    name: screen layout test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/screen_layout_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/screen_layout_test.cpp -o screen_layout_test
+          ./screen_layout_test
+
+  ini-resolution-test:
+    # The [Display] resolution a save writes (src/ini_resolution.h): the size as
+    # typed when nothing changed it, a picked size as picked. Pure std.
+    name: ini resolution test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/ini_resolution_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/ini_resolution_test.cpp -o ini_resolution_test
+          ./ini_resolution_test
+
+  edram-tiles-test:
+    # Renut's EDRAM tile count and the rule for surfaces larger than the
+    # console's 2048 tiles (src/renut_engine/gpu/d3d/edram_tiles.h). Pure std.
+    name: edram tiles test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/edram_tiles_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/edram_tiles_test.cpp -o edram_tiles_test
+          ./edram_tiles_test
+
+  capture-series-test:
+    # The names of the F9 frame captures (src/dev/capture_series.h): the
+    # numbering that never overwrites a capture. Pure std.
+    name: capture series test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/capture_series_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/capture_series_test.cpp -o capture_series_test
+          ./capture_series_test
+
   identity:
     name: Commit identity (springah/noreply)
     # Maintainer pushes only. Outside contributors have their own identities and

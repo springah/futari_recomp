@@ -42,6 +42,8 @@ namespace renut::gpu {
 // render/shader_library.h's, declared here too for the app (which has no plume include path): true on a build
 // with the translated game shaders built in, false on a distribution build that reads vulkan_spirv.bin.
 bool GameShadersBuiltIn();
+// futari_recomp (2026-11-07): render/surfaces.h's, declared here too for the app: renut_resolution = output.
+bool ResolutionIsOutput();
 }  // namespace renut::gpu
 
 namespace banjo::renut_gpu {

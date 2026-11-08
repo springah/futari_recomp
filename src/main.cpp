@@ -11,6 +11,10 @@
 #include "generated/default/futari_init.h"
 
 #include "ini_merge.h"
+#include "ini_resolution.h"
+#include "screen_layout.h"
+
+#include <SDL3/SDL_video.h>
 
 #include <rex/chrono/clock.h>
 #include <rex/cvar.h>
@@ -33,6 +37,7 @@
 // translated, then the game starts), and the settings screen (F2 in the game). No Python, no batch file.
 #include "launcher/launcher_dialog.h"
 #include "launcher/shader_pipeline.h"
+#include "dev/capture_series.h"
 #include "dev/input_script.h"
 
 REXCVAR_DEFINE_BOOL(futari_setup, false, "Futari",
@@ -135,6 +140,7 @@ REXCVAR_DEFINE_STRING(futari_renut_dxcompiler, "", "Futari",
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -143,6 +149,10 @@ REXCVAR_DEFINE_STRING(futari_renut_dxcompiler, "", "Futari",
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -241,6 +251,36 @@ std::optional<std::pair<int32_t, int32_t>> ParseResolution(std::string_view valu
 
 int32_t ClampInt(int32_t value, int32_t min, int32_t max) {
   return std::clamp(value, min, max);
+}
+
+// [Display] resolution is in physical pixels, but the SDK sizes its window from window_width/height as logical ones
+// (SizeToPhysical, at the primary display's scale, since the window does not exist yet). The value as typed, the
+// logical size it became and the DPI it was converted at, so that a save with no change since writes back what was
+// typed. Where the two sizes differ, the guest's video mode (which follows window_width/height, xboxkrnl_video.cpp) is
+// pinned to the size as typed.
+struct IniResolution {
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t logical_width = 0;
+  int32_t logical_height = 0;
+  uint32_t dpi = 0;
+  bool video_mode_pinned = false;
+};
+IniResolution g_ini_resolution;
+// The launcher (F2) wrote window_width/height since boot: a save writes them as they are (ini_resolution.h).
+std::atomic<bool> g_window_size_picked{false};
+
+constexpr uint32_t kMediumDpi = 96;
+
+// The DPI the SDK's window is sized at before it exists (WindowSDL::GetLatestDpiImpl). The macOS window sizes itself
+// in points: the medium DPI there, so nothing changes.
+uint32_t PrimaryDisplayDpi() {
+#ifdef __APPLE__
+  return kMediumDpi;
+#else
+  const float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+  return scale > 0.0f ? uint32_t(scale * float(kMediumDpi) + 0.5f) : kMediumDpi;
+#endif
 }
 
 std::filesystem::path ResolveIniPath(const std::filesystem::path& exe_dir, std::string_view value) {
@@ -387,10 +427,23 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
 
   if (auto* v = find("display.resolution")) {
     if (auto res = ParseResolution(*v)) {
-      // Window only: size the host window, leave the guest video mode at its
-      // native resolution (the output is scaled to fit the window).
-      SetCvarInt("window_width", ClampInt(res->first, 640, 8192));
-      SetCvarInt("window_height", ClampInt(res->second, 480, 8192));
+      // The typed size is the frame in physical pixels: the window gets it as logical pixels at the primary display's
+      // scale, Renut's output resolution takes it as the frame (screen_layout), and the guest's video mode stays it.
+      const int32_t width = ClampInt(res->first, 640, 8192);
+      const int32_t height = ClampInt(res->second, 480, 8192);
+      const uint32_t dpi = PrimaryDisplayDpi();
+      const futari::ini_resolution::BootResolution at = futari::ini_resolution::BootAtDpi(width, height, dpi);
+      g_ini_resolution = {width, height, at.logical_width, at.logical_height, dpi};
+      SetCvarInt("window_width", g_ini_resolution.logical_width);
+      SetCvarInt("window_height", g_ini_resolution.logical_height);
+      // A typed 1280x720 is the cvars' default, which the SDK ignores, so the mode follows the logical window size
+      // there; the game's video mode table gives 1280x720 either way.
+      if (g_ini_resolution.logical_width != width || g_ini_resolution.logical_height != height) {
+        SetCvarInt("video_mode_width", width);
+        SetCvarInt("video_mode_height", height);
+        g_ini_resolution.video_mode_pinned = true;
+      }
+      futari::screen_layout::SetConfiguredSize(uint32_t(width), uint32_t(height));
     }
   }
   if (auto* v = find("display.fullscreen")) {
@@ -479,6 +532,17 @@ std::string GetCvarByName(std::string_view name) {
   return {};
 }
 
+// [Display] resolution as a save writes it, in physical pixels (width, height; empty when the cvars are absent): the
+// size as typed while nothing changed window_width/height since boot. A size set since (an F2 pick, an F4 edit) is a
+// typed frame size too and goes out as it is: the next boot converts it like any typed value, so the frame is exactly
+// the size picked (multiplying it by the Windows scale would turn a 1920x1080 pick at 150% into a 2880x1620 frame).
+std::pair<std::string, std::string> TypedResolution() {
+  return futari::ini_resolution::SavedResolution(
+      GetCvarByName("window_width"), GetCvarByName("window_height"), g_window_size_picked.load(),
+      {g_ini_resolution.width, g_ini_resolution.height, g_ini_resolution.logical_width,
+       g_ini_resolution.logical_height});
+}
+
 // "60.000000" -> "60", "0.500000" -> "0.5"; integers pass through unchanged.
 std::string TidyNumber(std::string text) {
   if (text.find('.') == std::string::npos) {
@@ -522,12 +586,8 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
       updates.push_back({section, key, std::move(value)});
     }
   };
-  {
-    const std::string w = GetCvarByName("window_width");
-    const std::string h = GetCvarByName("window_height");
-    if (!w.empty() && !h.empty()) {
-      add("Display", "resolution", w + "x" + h);
-    }
+  if (const auto [w, h] = TypedResolution(); !w.empty()) {
+    add("Display", "resolution", w + "x" + h);
   }
   add("Display", "fullscreen", GetCvarByName("fullscreen"));
   // In a Renut session the SDK's `vsync` is not registered (it lives in the
@@ -567,8 +627,13 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
         continue;
       }
       const std::string key = Trim(std::string_view(line).substr(0, eq));
-      const bool excluded = std::any_of(std::begin(kExcluded), std::end(kExcluded),
-                                        [&](std::string_view e) { return e == key; });
+      const std::string value = Trim(std::string_view(line).substr(eq + 1));
+      // The video mode LoadFutariIni pinned to [Display] resolution comes from that line again at the next boot.
+      const bool pinned = g_ini_resolution.video_mode_pinned &&
+                          ((key == "video_mode_width" && value == std::to_string(g_ini_resolution.width)) ||
+                           (key == "video_mode_height" && value == std::to_string(g_ini_resolution.height)));
+      const bool excluded = pinned || std::any_of(std::begin(kExcluded), std::end(kExcluded),
+                                                  [&](std::string_view e) { return e == key; });
       if (!excluded) {
         raw_block += line;
         raw_block += '\n';
@@ -823,6 +888,8 @@ class FutariApp : public rex::ReXApp {
 #endif
     env.on_quit = [this] { RequestExit("launcher"); };
     env.save_display_settings = [] { SaveFutariIni(rex::filesystem::GetExecutableFolder()); };
+    env.typed_resolution = [] { return TypedResolution(); };
+    env.window_size_picked = [] { g_window_size_picked.store(true); };
     return env;
   }
 
@@ -1074,6 +1141,7 @@ class FutariApp : public rex::ReXApp {
     if (banjo::renut_gpu::Active()) {
       futari::renut_vblank::Start();
       StartRenutCapture();
+      RegisterCaptureSeriesBind();
     }
 #endif
     if (const std::string script = REXCVAR_GET(futari_input_script); !script.empty()) {
@@ -1082,6 +1150,24 @@ class FutariApp : public rex::ReXApp {
   }
 
 #if FUTARI_RENUT_RENDERER
+
+  // A captured frame as a binary PPM (P6); false when the file could not be written.
+  static bool WritePpm(const std::filesystem::path& path, const rex::ui::RawImage& image) {
+    std::ofstream out(path, std::ios::binary);
+    out << "P6\n" << image.width << ' ' << image.height << "\n255\n";
+    std::vector<char> row(size_t(image.width) * 3);
+    for (uint32_t y = 0; y < image.height; ++y) {
+      const uint8_t* src = image.data.data() + size_t(y) * image.stride;
+      for (uint32_t x = 0; x < image.width; ++x) {
+        row[size_t(x) * 3 + 0] = char(src[size_t(x) * 4 + 0]);
+        row[size_t(x) * 3 + 1] = char(src[size_t(x) * 4 + 1]);
+        row[size_t(x) * 3 + 2] = char(src[size_t(x) * 4 + 2]);
+      }
+      out.write(row.data(), std::streamsize(row.size()));
+    }
+    out.close();  // a failed flush at close (disk full) is a failed write too
+    return bool(out);
+  }
 
   // The dev capture (futari_renut_capture_path): one frame, written on its own thread.
   void StartRenutCapture() {
@@ -1102,27 +1188,121 @@ class FutariApp : public rex::ReXApp {
         REXLOG_ERROR("Renut capture: no frame within 2 s");
         return;
       }
-      std::ofstream out(path, std::ios::binary);
-      out << "P6\n" << image.width << ' ' << image.height << "\n255\n";
-      std::vector<char> row(size_t(image.width) * 3);
-      for (uint32_t y = 0; y < image.height; ++y) {
-        const uint8_t* src = image.data.data() + size_t(y) * image.stride;
-        for (uint32_t x = 0; x < image.width; ++x) {
-          row[size_t(x) * 3 + 0] = char(src[size_t(x) * 4 + 0]);
-          row[size_t(x) * 3 + 1] = char(src[size_t(x) * 4 + 1]);
-          row[size_t(x) * 3 + 2] = char(src[size_t(x) * 4 + 2]);
-        }
-        out.write(row.data(), std::streamsize(row.size()));
+      if (!WritePpm(path, image)) {
+        REXLOG_ERROR("Renut capture: could not write {}", path);
+        return;
       }
       REXLOG_INFO("Renut capture: {}x{} frame at {} s written to {}", image.width, image.height, after_s, path);
     });
   }
 
+  // Dev aid: each F9 writes the next frame of a numbered series next to futari_renut_capture_path, as
+  // <stem>_NNN_<W>x<H>.ppm at the frame's own size, continuing past the series' files already there and never
+  // opening a file that exists.
+  void RegisterCaptureSeriesBind() {
+    rex::ui::RegisterBind("futari_renut_capture_key", "F9", "Dev: capture the frame next to futari_renut_capture_path",
+                          [this] { CaptureSeriesFrame(); });
+  }
+
+  // UI thread (the bind).
+  void CaptureSeriesFrame() {
+    const std::string path_text = REXCVAR_GET(futari_renut_capture_path);
+    if (path_text.empty()) {
+      if (!std::exchange(capture_series_warned_, true)) {
+        REXLOG_WARN("Renut capture series: F9 needs futari_renut_capture_path (the folder and the name's stem)");
+      }
+      return;
+    }
+    const std::filesystem::path path(std::u8string(path_text.begin(), path_text.end()));
+    const std::u8string stem_u8 = path.stem().u8string();
+    const std::string stem(stem_u8.begin(), stem_u8.end());
+    const std::filesystem::path dir = path.has_parent_path() ? path.parent_path() : std::filesystem::path(".");
+    if (!std::exchange(capture_series_scanned_, true)) {
+      std::vector<std::string> names;
+      std::error_code ec;
+      for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        const std::u8string name = it->path().filename().u8string();
+        names.emplace_back(name.begin(), name.end());
+      }
+      std::lock_guard number_lock(capture_series_number_mutex_);
+      if (ec) {
+        // A partial list could restart the series at a number already there.
+        const std::u8string dir_u8 = dir.u8string();
+        REXLOG_ERROR("Renut capture series: could not read {} ({}), F9 is off for this run",
+                     std::string(dir_u8.begin(), dir_u8.end()), ec.message());
+      } else if (!(capture_series_next_ = futari::dev::NextCaptureNumber(stem, names))) {
+        REXLOG_WARN("Renut capture series: no number left after {}", stem);
+      }
+    }
+    {
+      std::lock_guard number_lock(capture_series_number_mutex_);
+      if (!capture_series_next_) {
+        return;  // warned once above or by the capture that took the last number
+      }
+    }
+    std::lock_guard lock(capture_series_mutex_);
+    capture_series_threads_.emplace_back([this, dir, stem] {
+      rex::ui::RawImage image;
+      if (!renut::gpu::CaptureFrame(image, 2000)) {
+        REXLOG_ERROR("Renut capture series: no frame within 2 s");
+        return;
+      }
+      // The number is taken once the size is known: the first one from the next whose file is not there yet.
+      std::filesystem::path file;
+      {
+        std::lock_guard number_lock(capture_series_number_mutex_);
+        if (!capture_series_next_) {
+          return;
+        }
+        const auto file_of = [&](uint32_t n) {
+          const std::string name = futari::dev::CaptureFileName(stem, n, image.width, image.height);
+          return dir / std::u8string(name.begin(), name.end());
+        };
+        std::error_code ec;
+        const std::optional<uint32_t> number = futari::dev::FreeCaptureNumber(
+            *capture_series_next_, [&](uint32_t n) { return std::filesystem::exists(file_of(n), ec); });
+        if (ec) {
+          const std::u8string dir_u8 = dir.u8string();
+          REXLOG_ERROR("Renut capture series: could not check the files in {} ({}), frame not written",
+                       std::string(dir_u8.begin(), dir_u8.end()), ec.message());
+          return;
+        }
+        capture_series_next_.reset();
+        if (number && *number < UINT32_MAX) {
+          capture_series_next_ = *number + 1;
+        } else {
+          REXLOG_WARN("Renut capture series: no number left after {}", stem);
+        }
+        if (!number) {
+          return;
+        }
+        file = file_of(*number);
+      }
+      const std::u8string shown_u8 = file.u8string();
+      const std::string shown(shown_u8.begin(), shown_u8.end());
+      if (WritePpm(file, image)) {
+        REXLOG_INFO("Renut capture series: {}x{} frame written to {}", image.width, image.height, shown);
+      } else {
+        REXLOG_ERROR("Renut capture series: could not write {}", shown);
+      }
+    });
+  }
+
   std::thread renut_capture_thread_;
   std::atomic<bool> renut_capture_stop_{false};
+  // The F9 series: the folder scanned on the first press and the empty-path once-warning (UI thread only); the next
+  // number, taken by the capture threads under its mutex (nothing: the scan failed or no number is left, warned once);
+  // the threads, joined at exit.
+  bool capture_series_scanned_ = false;
+  bool capture_series_warned_ = false;
+  std::mutex capture_series_number_mutex_;
+  std::optional<uint32_t> capture_series_next_;
+  std::mutex capture_series_mutex_;
+  std::vector<std::thread> capture_series_threads_;
 
   void OnWindowPixelSizeChanged(uint32_t pixel_width, uint32_t pixel_height) override {
     rex::ReXApp::OnWindowPixelSizeChanged(pixel_width, pixel_height);
+    futari::screen_layout::SetWindowPixelSize(pixel_width, pixel_height);
     if (banjo::renut_gpu::Active()) {
       renut::gpu::OnWindowResized();
     }
@@ -1138,6 +1318,13 @@ class FutariApp : public rex::ReXApp {
       if (renut_capture_thread_.joinable()) {
         renut_capture_thread_.join();
       }
+      {
+        std::lock_guard lock(capture_series_mutex_);
+        for (std::thread& thread : capture_series_threads_) {
+          thread.join();
+        }
+        capture_series_threads_.clear();
+      }
       futari::renut_vblank::Stop();
       renut::gpu::ShutdownRenderer();
     }
@@ -1152,8 +1339,94 @@ class FutariApp : public rex::ReXApp {
   void OnPreLaunchModule() override {
     if (auto* wnd = window()) {
       wnd->SetTitle("Mushihimesama Futari v" FUTARI_VERSION_STRING " " REXGLUE_BUILD_TITLE);
+      FitWindowToTypedSize(*wnd);
+      LogDpiAwareness(*wnd);
     }
     InstallBundledDlc();
+  }
+
+  // Once, UI thread: whether the process sees physical pixels (SDL3 makes it per-monitor aware unless told
+  // otherwise), the window's DPI and its client area as Windows and the SDK report it.
+  static void LogDpiAwareness(const rex::ui::Window& wnd) {
+#ifdef _WIN32
+    const DPI_AWARENESS_CONTEXT context = GetThreadDpiAwarenessContext();
+    const char* awareness = "unknown";
+    if (AreDpiAwarenessContextsEqual(context, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+      awareness = "per-monitor v2";
+    } else {
+      switch (GetAwarenessFromDpiAwarenessContext(context)) {
+        case DPI_AWARENESS_PER_MONITOR_AWARE: awareness = "per-monitor"; break;
+        case DPI_AWARENESS_SYSTEM_AWARE: awareness = "system"; break;
+        case DPI_AWARENESS_UNAWARE: awareness = "unaware"; break;
+        default: break;
+      }
+    }
+    const HWND hwnd = static_cast<HWND>(wnd.GetNativeWindowHandle());
+    const UINT dpi = hwnd ? GetDpiForWindow(hwnd) : 0;
+    RECT client{};
+    if (hwnd) {
+      GetClientRect(hwnd, &client);
+    }
+    REXLOG_INFO("DPI awareness: {}; window DPI {} ({}%), client {}x{} (SDK: {}x{} physical at DPI {}); [Display] "
+                "resolution {}x{}, window cvars {}x{} at DPI {}",
+                awareness, dpi, dpi * 100 / kMediumDpi, client.right - client.left, client.bottom - client.top,
+                wnd.GetActualPhysicalWidth(), wnd.GetActualPhysicalHeight(), wnd.GetDpi(), g_ini_resolution.width,
+                g_ini_resolution.height, g_ini_resolution.logical_width, g_ini_resolution.logical_height,
+                g_ini_resolution.dpi);
+#else
+    (void)wnd;
+#endif
+  }
+
+  // Once, UI thread, before the guest reads the frame size or the video mode: the window was sized from [Display]
+  // resolution at the primary display's DPI before it existed, so on a monitor at another DPI (or when that guess was
+  // wrong) its client is off by the ratio. The client is set to the size as typed at the window's own DPI, the window
+  // cvars are re-derived there (a save with no change still writes the size as typed), and the frame takes the new
+  // client at once rather than when the UI loop reports the resize.
+  static void FitWindowToTypedSize(rex::ui::Window& wnd) {
+#ifdef _WIN32
+    const HWND hwnd = static_cast<HWND>(wnd.GetNativeWindowHandle());
+    if (!g_ini_resolution.width || wnd.IsFullscreen() || !hwnd) {
+      return;
+    }
+    RECT client{};
+    GetClientRect(hwnd, &client);
+    const int32_t old_width = client.right - client.left;
+    const int32_t old_height = client.bottom - client.top;
+    const UINT dpi = GetDpiForWindow(hwnd);
+    const futari::ini_resolution::BootResolution at =
+        futari::ini_resolution::BootAtDpi(g_ini_resolution.width, g_ini_resolution.height, dpi);
+    if (old_width == at.width && old_height == at.height) {
+      return;
+    }
+    RECT frame{0, 0, at.width, at.height};
+    if (!AdjustWindowRectExForDpi(&frame, DWORD(GetWindowLongW(hwnd, GWL_STYLE)), FALSE,
+                                  DWORD(GetWindowLongW(hwnd, GWL_EXSTYLE)), dpi) ||
+        !SetWindowPos(hwnd, nullptr, 0, 0, frame.right - frame.left, frame.bottom - frame.top,
+                      SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)) {
+      REXLOG_WARN("Window: client {}x{} is not [Display] resolution {}x{}, and resizing it failed ({})", old_width,
+                  old_height, at.width, at.height, GetLastError());
+      return;
+    }
+    GetClientRect(hwnd, &client);
+    futari::screen_layout::SetWindowPixelSize(uint32_t(client.right - client.left),
+                                              uint32_t(client.bottom - client.top));
+    g_ini_resolution.logical_width = at.logical_width;
+    g_ini_resolution.logical_height = at.logical_height;
+    g_ini_resolution.dpi = dpi;
+    SetCvarInt("window_width", at.logical_width);
+    SetCvarInt("window_height", at.logical_height);
+    if (at.logical_width != at.width || at.logical_height != at.height) {
+      SetCvarInt("video_mode_width", at.width);
+      SetCvarInt("video_mode_height", at.height);
+      g_ini_resolution.video_mode_pinned = true;
+    }
+    REXLOG_INFO("Window: client {}x{} resized to {}x{} for [Display] resolution {}x{} at the window's DPI {}",
+                old_width, old_height, client.right - client.left, client.bottom - client.top, at.width, at.height,
+                dpi);
+#else
+    (void)wnd;
+#endif
   }
 
  private:

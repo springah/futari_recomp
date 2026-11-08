@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <rex/ui/imgui_dialog.h>
@@ -53,6 +54,10 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
     std::function<void(bool fresh_process)> on_play;
     std::function<void()> on_quit;     // UI thread
     std::function<void()> save_display_settings;  // writes the [Display] lines from the cvars (SaveFutariIni)
+    // [Display] resolution as save_display_settings would write it, in physical pixels (width, height; empty: none).
+    std::function<std::pair<std::string, std::string>()> typed_resolution;
+    // The settings page wrote window_width/height (a size picked): saved as it is, even at the boot logical size.
+    std::function<void()> window_size_picked;
   };
 
   // Owned by the drawer, as every ImGuiDialog: it deletes itself on Close().

@@ -4,6 +4,8 @@
 #include "renut_engine/gpu/render/surfaces.h"
 
 #include <algorithm>
+#include <atomic>  // futari_recomp (2026-11-07)
+#include <set>     // futari_recomp (2026-11-07)
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -13,18 +15,20 @@
 #include "renut_engine/gpu/backend/backend.h"
 #include "renut_engine/gpu/banjo_renut_tuning.h"
 #include "renut_engine/gpu/d3d/d3d.h"
+#include "renut_engine/gpu/d3d/d3d_native.h"  // futari_recomp (2026-11-07)
 #include "renut_engine/gpu/render/format.h"
 #include "renut_engine/gpu/render/graphics_options.h"
 #include "renut_engine/gpu/render/textures.h"
 #include "renut_engine/gpu/guest/guest_memory.h"
-#include "renut_engine/gpu/guest/widescreen.h"
 #include "renut_engine/gpu/log.h"
 #include "renut_engine/gpu/backend/video.h"
 
-REXCVAR_DEFINE_STRING(renut_resolution, "720p", "Nuts&Bolts/Graphics",
-                      "Internal render resolution, by its height: 480p, 720p (the game's own), "
-                      "1080p, 1440p or 4K (2160 lines). Applies from the next frame.")
-    .allowed({"480p", "720p", "1080p", "1440p", "4K"});
+// futari_recomp (2026-11-07): "output" (the default) renders the game's frame at the output's size, scale 1.
+REXCVAR_DEFINE_STRING(renut_resolution, "output", "Nuts&Bolts/Graphics",
+                      "Internal render resolution: output (the window's or screen's size), or by its "
+                      "height: 480p, 720p (the game's own), 1080p, 1440p or 4K (2160 lines). "
+                      "Applies from the next frame.")
+    .allowed({"output", "480p", "720p", "1080p", "1440p", "4K"});
 
 namespace renut::gpu {
 
@@ -33,6 +37,11 @@ namespace {
 // ResolutionScale, once latched.
 RenderScale g_resolution_scale;
 bool g_resolution_latched = false;
+// futari_recomp (2026-11-07): ResolutionIsOutput, read from the guest thread too; the back buffer size last logged.
+std::atomic<bool> g_resolution_is_output{false};
+std::atomic<bool> g_resolution_is_output_latched{false};
+uint32_t g_logged_width = 0;
+uint32_t g_logged_height = 0;
 
 struct FramebufferKey {
   const HostSurface *colors[d3d::kMaxRenderTargets] = {};
@@ -93,6 +102,12 @@ uint64_t g_next_generation = 1;
 // 2 D24FS8). The host format is part of a target's key, so a view used as both would get two targets where the console
 // has one memory: once a view has been bound as D24FS8, every surface over it takes the 32-bit float format.
 std::unordered_map<uint64_t, uint8_t> g_depth_view_formats;
+// futari_recomp (2026-11-07): each target (key and guest size) logged once, at most kMaxLoggedTargets; the guest size
+// of each surface over a target, until one target serves two sizes (a warning, once per process).
+constexpr size_t kMaxLoggedTargets = 256;
+std::set<std::pair<uint64_t, u32>> g_logged_targets;
+std::unordered_map<u32, u32> g_surface_sizes;
+bool g_shared_view_warned = false;
 // SetTilingExtentLocked; 0 x 0 when not tiling.
 uint32_t g_tiling_width = 0;
 uint32_t g_tiling_height = 0;
@@ -225,6 +240,45 @@ bool BuildTarget(HostSurface &surface, const d3d::SurfaceDesc &desc, uint32_t mi
   return true;
 }
 
+// futari_recomp (2026-11-07): the session's target table (guest size and format, EDRAM view, scale), each target once.
+void LogTarget(u32 surface_va, const d3d::SurfaceDesc &desc, uint64_t key, const HostSurface &target) {
+  if (g_logged_targets.size() > kMaxLoggedTargets || !g_logged_targets.emplace(key, u32(desc.Size)).second)
+    return;
+  if (g_logged_targets.size() > kMaxLoggedTargets) {
+    RGPU_INFO("Targets: {} logged, no more this session", kMaxLoggedTargets);
+    return;
+  }
+  const u32 info = desc.SurfaceInfo;
+  // The surface whose bind built the target; the pitch is SurfaceInfo's, in 80-pixel tiles.
+  RGPU_INFO("Surface {:08X}: {}x{} {} format {:08X} (host {}), EDRAM base {} pitch tiles {} x{} samples, "
+            "scale code {} (host {}x{})",
+            surface_va, d3d::SurfaceWidth(desc.Size), d3d::SurfaceHeight(desc.Size), target.depth ? "depth" : "color",
+            u32(desc.Format), u32(target.format), u32(desc.ColorInfo) & 0xFFF, info & 0x3FFF,
+            1u << ((info >> 16) & 3), target.scale.code, target.scale.Size(target.width),
+            target.scale.Size(target.height));
+}
+
+// futari_recomp (2026-11-07): one target serving live surfaces of two sizes (two surfaces over one EDRAM view, as a
+// surface larger than the EDRAM at base 0 can be) draws both into one host texture. Warned once per process.
+void CheckSharedView(u32 surface_va, const d3d::SurfaceDesc &desc, uint64_t key) {
+  const u32 size = desc.Size;
+  for (const auto &[va, other_key] : g_surface_keys) {
+    if (va == surface_va || other_key != key)
+      continue;
+    const auto other = g_surface_sizes.find(va);
+    if (other == g_surface_sizes.end() || other->second == size)
+      continue;
+    RGPU_WARN("Surfaces {:08X} ({}x{}) and {:08X} ({}x{}) share one target: EDRAM base {}, pitch tiles {}, "
+              "format {:08X}",
+              surface_va, d3d::SurfaceWidth(size), d3d::SurfaceHeight(size), va, d3d::SurfaceWidth(other->second),
+              d3d::SurfaceHeight(other->second), u32(desc.ColorInfo) & 0xFFF, u32(desc.SurfaceInfo) & 0x3FFF,
+              u32(desc.Format));
+    g_shared_view_warned = true;
+    g_surface_sizes.clear();
+    return;
+  }
+}
+
 } // namespace
 
 uint64_t SurfaceEpochLocked() { return g_surface_epoch; }  // banjo-nx (2026-10-20, from sa2-nx, banjo_renut_chain_reuse)
@@ -245,21 +299,56 @@ void LatchResolutionScaleLocked() {
                                             : 0u};
   // banjo-nx (2026-10-18): the deko3d renderer draws at the console's resolution only; its shaders are made for it
   // (tools/deko3d_glsl_opt.py, pass scale1: no per-texture scale divisor, resolution_scale 1).
-  if (IsDeko3D() && scale.code != 0) {
+  // futari_recomp (2026-11-07): "output" is code 0 too; deko3d does not take it either.
+  bool output = resolution == "output";
+  if (IsDeko3D() && (scale.code != 0 || output)) {
     static bool logged = false;
     if (!logged) {
       logged = true;
       RGPU_WARN("renut_resolution = \"{}\" is not taken on deko3d: it draws at the console's 1280x720", resolution);
     }
     scale = {};
+    output = false;
   }
-  if (!g_resolution_latched || scale != g_resolution_scale) {
-    RGPU_INFO("Render resolution {}x{} ({:.3g}x)", scale.Size(GuestScreenWidth()), scale.Size(720),
-              scale.Factor());
+  // futari_recomp (2026-11-07): the log prints the automatic back buffer's size, once the title device has made it.
+  uint32_t width = 0, height = 0;
+  if (const u32 device_va = Video::GuestDevice()) {
+    if (const u32 back_buffer = native::DeviceAt(device_va).W(native::off::AutoBackBuffer)) {
+      if (const auto *desc = GuestPtr<const d3d::SurfaceDesc>(back_buffer + sizeof(d3d::Resource))) {
+        width = d3d::SurfaceWidth(desc->Size);
+        height = d3d::SurfaceHeight(desc->Size);
+      }
+    }
+  }
+  const bool changed = !g_resolution_latched || scale != g_resolution_scale ||
+                       output != g_resolution_is_output.load(std::memory_order_relaxed);
+  if (changed || width != g_logged_width || height != g_logged_height) {
+    const std::string name = output ? "output" : IsDeko3D() ? "720p" : resolution;
+    if (width)
+      RGPU_INFO("Render resolution {}x{} ({:.3g}x, {})", scale.Size(width), scale.Size(height), scale.Factor(), name);
+    else
+      RGPU_INFO("Render resolution ({:.3g}x, {}), back buffer not made yet", scale.Factor(), name);
+    g_logged_width = width;
+    g_logged_height = height;
+  }
+  if (changed) {
     g_resolution_scale = scale;
+    g_resolution_is_output.store(output, std::memory_order_release);
+    g_resolution_is_output_latched.store(true, std::memory_order_release);
     ++g_surface_epoch;
     g_resolution_latched = true;
   }
+}
+
+bool ResolutionIsOutput() {
+  // futari_recomp (2026-11-07): a game layer asks during the guest's boot, before the first latch (the first surface
+  // bind or Swap): the answer the latch will give, from the same cvar, read once on the first call (a thread-safe
+  // static, so it can't land after the latch's own answer); the latch's atomics only after that.
+  if (!g_resolution_is_output_latched.load(std::memory_order_acquire)) {
+    static const bool before_latch = !IsDeko3D() && REXCVAR_GET(renut_resolution) == "output";
+    return before_latch;
+  }
+  return g_resolution_is_output.load(std::memory_order_acquire);
 }
 
 void SetTilingExtentLocked(uint32_t width, uint32_t height) {
@@ -370,6 +459,15 @@ HostSurface *GetHostSurfaceSlow(u32 surface_va, const d3d::SurfaceDesc *desc) {
   }
   const uint64_t key = TargetKey(*desc, depth, format, scale);
   auto [bound, first_use] = g_surface_keys.try_emplace(surface_va, key);
+  // futari_recomp (2026-11-07): a surface new over this target, or at a new size: does the target serve two sizes?
+  if (!g_shared_view_warned) {
+    const bool moved = first_use || bound->second != key;
+    auto [seen, added] = g_surface_sizes.try_emplace(surface_va, u32(desc->Size));
+    if (added || moved || seen->second != u32(desc->Size)) {
+      seen->second = desc->Size;
+      CheckSharedView(surface_va, *desc, key);
+    }
+  }
   if (first_use) {
     ++g_target_users[key];
     ++g_surface_epoch;
@@ -408,6 +506,7 @@ HostSurface *GetHostSurfaceSlow(u32 surface_va, const d3d::SurfaceDesc *desc) {
   ++g_surface_epoch;
   if (!BuildTarget(*slot, *desc, min_width, min_height, scale))
     return nullptr;
+  LogTarget(surface_va, *desc, key, *slot);  // futari_recomp (2026-11-07)
   // No defined content yet; D3D12 wants a new target discarded (or cleared)
   // before anything else uses it, and a resolve may read it before any draw.
   if (plume::RenderCommandList *cmd = Video::CommandListLocked()) {
@@ -444,6 +543,7 @@ void ReleaseHostSurfaceLocked(u32 surface_va) {
     return;
   const uint64_t key = it->second;
   g_surface_keys.erase(it);
+  g_surface_sizes.erase(surface_va);  // futari_recomp (2026-11-07)
   ++g_surface_epoch;
   UnuseTarget(key);
 }

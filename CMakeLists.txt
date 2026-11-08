@@ -56,6 +56,8 @@ set(FUTARI_SOURCES
     src/launcher/update_check.cpp
     # Dev aid (2026-11-04): futari_input_script, a scripted virtual gamepad for renderer gates.
     src/dev/input_script.cpp
+    # The game's frame at the output size (renut_resolution = output): guest post-patches.
+    src/screen_layout.cpp
 )
 if(APPLE)
     # The NSOpenPanel picker is Objective-C++ and the project() line names CXX only. OBJC too: with OBJCXX alone

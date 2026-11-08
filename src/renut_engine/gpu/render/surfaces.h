@@ -104,6 +104,11 @@ struct HostSurface {
 // and resolve destinations of another scale are rebuilt on their next use.
 RenderScale ResolutionScale();
 void LatchResolutionScaleLocked();
+// futari_recomp (2026-11-07): renut_resolution = output, as latched with
+// ResolutionScale (scale 1, the game's frame at the output's size). Always false
+// on deko3d. Callable from any thread, without State().mutex; before the first
+// latch it answers from the cvar as the latch will.
+bool ResolutionIsOutput();
 
 // The host target for the D3DSurface at 'surface_va', created or rebuilt as
 // needed. nullptr for 0 or when the target cannot be created.

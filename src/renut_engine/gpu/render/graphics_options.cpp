@@ -15,7 +15,6 @@
 #include <rex/cvar.h>
 #include <rex/types.h>
 
-#include "renut_engine/gpu/guest/widescreen.h"
 #include "renut_engine/gpu/render/format.h"
 
 REXCVAR_DEFINE_STRING(renut_anisotropic_filtering, "Game", "Futari/Renut",
@@ -28,10 +27,6 @@ namespace renut::gpu {
 namespace {
 uint32_t g_min_anisotropy = 1;
 }  // namespace
-
-uint32_t GuestScreenWidth() {
-  return 1280;
-}
 
 void LatchGraphicsOptionsLocked() {
   const int anisotropy = std::atoi(REXCVAR_GET(renut_anisotropic_filtering).c_str());
