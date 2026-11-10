@@ -3,7 +3,9 @@
 // sub_82181C60; both originals run unchanged, then these post-patches write the output's size into exactly the fields
 // that carry it. Everything after them (the device constructor, the present parameters, Renut's CreateDevice) follows
 // the presentation block. Under a preset, on the xenos plugin (also after the stale-package fallback) and on deko3d
-// they write nothing.
+// they write nothing. Under the same gate the menu wallpaper covers the frame at every aspect, every frame without
+// it is cleared, the title's background covers the frame too, and the frame around any other full-screen picture
+// is filled: the boot logos' own edge, black around the rest (the overrides at the end).
 
 #include "generated/default/futari_init.h"
 
@@ -31,19 +33,71 @@ REXCVAR_DEFINE_STRING(futari_dev_frame_size, "", "Futari",
 
 namespace {
 
+using futari::screen_layout::ArmTitle;
+using futari::screen_layout::CanvasBands;
+using futari::screen_layout::CanvasFill;
+using futari::screen_layout::CanvasSprite;
 using futari::screen_layout::ClampFrame;
+using futari::screen_layout::ClassifyPicture;
+using futari::screen_layout::CoverPicture;
 using futari::screen_layout::FrameSize;
+using futari::screen_layout::IsFullCanvasPicture;
 using futari::screen_layout::IsWidescreen;
+using futari::screen_layout::kCanvasBandReach;
+using futari::screen_layout::kLogoArmed;
+using futari::screen_layout::kNarrowUiCentring;
 using futari::screen_layout::ParseFrameSize;
+using futari::screen_layout::PictureDraw;
+using futari::screen_layout::UiDesignHeight;
+using futari::screen_layout::WallpaperCover;
+using futari::screen_layout::WallpaperQuad;
+using futari::screen_layout::WallpaperSlide;
 
 // The presentation block sub_8216EBE8 fills: +56/+60 the reported mode (left alone), +64/+68 the frame size, +73 the
-// widescreen byte.
+// widescreen byte, +80 the UI's design height (the device constructor's scale is +68 / +80).
 constexpr uint32_t kPresentationBlock = 0x821ECEF0;
 // sub_82181C60's screen-size floats (W, H), the game's widescreen flag (u32) and the guard that runs its body once.
 constexpr uint32_t kScreenWidth = 0x821EC940;
 constexpr uint32_t kScreenHeight = 0x821EC944;
 constexpr uint32_t kWidescreenFlag = 0x821F8238;
 constexpr uint32_t kScreenSizeOnce = 0x821F8590;
+// The byte sub_82173200 passes as "clear the frame"; only the wallpaper function writes it: 0 while a layer exists
+// (its opaque quad is already in the frame when the clear runs, so the clear would wipe it), 1 when it draws nothing.
+constexpr uint32_t kClearFrame = 0x821EC65B;
+// The wallpaper function sub_82184CC8 builds its quad on its stack at entry r1 - 304 and draws it with
+// sub_8206BF48(6, decl, 4, vertices): 4 vertices of 16 bytes (x, y, u, v), v0 (x0, y0), v1 (x1, y0), v2 (x0, y1),
+// v3 (x1, y1); u is u0 on v0 and v2 (0, or 0.25 on its 4:3 branch), 1 on v1 and v3.
+constexpr uint32_t kWallpaperVerticesBelowEntry = 304;
+constexpr uint32_t kWallpaperVertexCount = 4;
+constexpr uint32_t kWallpaperVertexStride = 16;
+
+// The wallpaper's vertex address while sub_82184CC8 runs on this thread under output; 0 otherwise.
+thread_local uint32_t g_wallpaper_vertices = 0;
+
+// Set when the wallpaper's quad is drawn, taken by the next frame clear.
+std::atomic<bool> g_wallpaper_drawn{false};
+
+// The game's textured sprite (sub_8216DAA0's second argument): +0 its texture, +4 a mode (0 plain), +8/+12 the
+// texel width and height, +16/+20 the texel x and y, then 4 corners of 12 bytes from +24 (x, y in design units, an
+// ARGB colour): top-left, top-right, bottom-right, bottom-left.
+constexpr uint32_t kSpriteTexture = 0;
+constexpr uint32_t kSpriteMode = 4;
+// The game branches on the mode's low 3 bits (sub_8216DAA0: clrlwi r10,r11,29).
+constexpr uint32_t kSpriteModeMask = 7;
+constexpr uint32_t kSpriteModePlain = 0;
+constexpr uint32_t kSpriteTexels = 8;
+constexpr uint32_t kSpriteCorners = 24;
+constexpr uint32_t kSpriteCornerStride = 12;
+// The stack frame the extra sprites (bands, the covering title) are drawn from: the 72-byte sprite at +16, the
+// draw's own frame below it.
+constexpr uint32_t kBandFrame = 112;
+constexpr uint32_t kBandSpriteOffset = 16;
+
+// The logo's and the title background's textures for ClassifyPicture: kLogoArmed once the logo screen loads,
+// kTitleArmed (ArmTitle) once the title screen loads, 0 = none. The title atlas's unload is not hooked: its word ends
+// only at the next other full-screen picture.
+std::atomic<uint32_t> g_logo_texture{0};
+std::atomic<uint32_t> g_title_texture{0};
 
 // Width in the high half, height in the low; 0 = not known.
 std::atomic<uint64_t> g_configured_size{0};
@@ -128,6 +182,20 @@ extern "C" REX_FUNC(sub_8216EBE8) {
   REX_STORE_U32(kPresentationBlock + 64, frame.width);
   REX_STORE_U32(kPresentationBlock + 68, frame.height);
   REX_STORE_U8(kPresentationBlock + 73, IsWidescreen(frame.width, frame.height) ? 1 : 0);
+  // Below 4:3 the UI's design height grows so the device's scale (H / +80) fits the 4:3 content to the width.
+  if (!IsWidescreen(frame.width, frame.height)) {
+    REX_STORE_U32(kPresentationBlock + 80, std::bit_cast<uint32_t>(UiDesignHeight(frame.width, frame.height)));
+  }
+}
+
+// The 4:3 layout's x offset (+80 * 16/9 - +80 * reported w/h): below 4:3 under output, the console's 4:3 value, so
+// it neither follows the grown +80 nor the reported mode.
+REX_EXTERN(__imp__sub_821CB2E0);
+extern "C" REX_FUNC(sub_821CB2E0) {
+  __imp__sub_821CB2E0(ctx, base);
+  if (OutputFrameActive() && REX_LOAD_U8(kPresentationBlock + 73) == 0) {
+    ctx.f1.f64 = double(kNarrowUiCentring);
+  }
 }
 
 // The screen-size floats and the game's widescreen flag, on the one call whose body ran.
@@ -142,4 +210,146 @@ extern "C" REX_FUNC(sub_82181C60) {
   REX_STORE_U32(kScreenWidth, std::bit_cast<uint32_t>(float(frame.width)));
   REX_STORE_U32(kScreenHeight, std::bit_cast<uint32_t>(float(frame.height)));
   REX_STORE_U32(kWidescreenFlag, IsWidescreen(frame.width, frame.height) ? 1u : 0u);
+}
+
+// The menu wallpaper: its quad only fits a 16:9 frame, so mark its draw for sub_8206BF48 below.
+REX_EXTERN(__imp__sub_82184CC8);
+extern "C" REX_FUNC(sub_82184CC8) {
+  if (!OutputFrameActive()) {
+    __imp__sub_82184CC8(ctx, base);
+    return;
+  }
+  g_wallpaper_vertices = ctx.r1.u32 - kWallpaperVerticesBelowEntry;
+  __imp__sub_82184CC8(ctx, base);
+  g_wallpaper_vertices = 0;
+}
+
+// The generic draw-from-memory: on the wallpaper's own quad only, cover the frame with the 16:9 art at the game's
+// slide-in offset, then draw. Every other draw passes through.
+REX_EXTERN(__imp__sub_8206BF48);
+extern "C" REX_FUNC(sub_8206BF48) {
+  const uint32_t vertices = ctx.r6.u32;
+  if (g_wallpaper_vertices != 0 && vertices == g_wallpaper_vertices && ctx.r5.u32 == kWallpaperVertexCount) {
+    const bool wide = REX_LOAD_U32(kWidescreenFlag) != 0;
+    const float x0 = std::bit_cast<float>(REX_LOAD_U32(vertices));
+    const WallpaperQuad quad = WallpaperCover(std::bit_cast<float>(REX_LOAD_U32(kScreenWidth)),
+                                              std::bit_cast<float>(REX_LOAD_U32(kScreenHeight)),
+                                              WallpaperSlide(x0, wide));
+    const float xs[kWallpaperVertexCount] = {quad.x0, quad.x1, quad.x0, quad.x1};
+    const float ys[kWallpaperVertexCount] = {quad.y0, quad.y0, quad.y1, quad.y1};
+    for (uint32_t i = 0; i < kWallpaperVertexCount; ++i) {
+      const uint32_t vertex = vertices + i * kWallpaperVertexStride;
+      REX_STORE_U32(vertex + 0, std::bit_cast<uint32_t>(xs[i]));
+      REX_STORE_U32(vertex + 4, std::bit_cast<uint32_t>(ys[i]));
+      if (i % 2 == 0) {
+        REX_STORE_U32(vertex + 8, std::bit_cast<uint32_t>(0.0f));  // v0, v2: u0 = 0, the whole art, not the 4:3 crop
+      }
+    }
+    g_wallpaper_drawn.store(true, std::memory_order_relaxed);
+  }
+  __imp__sub_8206BF48(ctx, base);
+}
+
+// The frame clear: the game skips it whenever a wallpaper layer exists, also when nothing drew it (layers released,
+// or the function not called), which leaves old frames in the borders a non-16:9 title or menu doesn't draw. Under
+// output the frame is cleared unless the wallpaper's quad was drawn since the last clear.
+REX_EXTERN(__imp__sub_82173200);
+extern "C" REX_FUNC(sub_82173200) {
+  if (OutputFrameActive() && !g_wallpaper_drawn.exchange(false, std::memory_order_relaxed)) {
+    REX_STORE_U8(kClearFrame, 1);
+  }
+  __imp__sub_82173200(ctx, base);
+}
+
+// The logo screen's load (it loads motion/logo.lzx): the next full-screen picture is the logo's.
+REX_EXTERN(__imp__sub_821D1B50);
+extern "C" REX_FUNC(sub_821D1B50) {
+  __imp__sub_821D1B50(ctx, base);
+  if (OutputFrameActive()) {
+    g_logo_texture.store(kLogoArmed, std::memory_order_relaxed);
+  }
+}
+
+// The title screen's load (it loads motion/title.lzx): the next full-screen picture is the title's background.
+REX_EXTERN(__imp__sub_821CC7A8);
+extern "C" REX_FUNC(sub_821CC7A8) {
+  __imp__sub_821CC7A8(ctx, base);
+  if (OutputFrameActive()) {
+    uint32_t logo = g_logo_texture.load(std::memory_order_relaxed);
+    uint32_t title = 0;
+    ArmTitle(logo, title);
+    g_logo_texture.store(logo, std::memory_order_relaxed);
+    g_title_texture.store(title, std::memory_order_relaxed);
+  }
+}
+
+// The game's textured sprite draw. A full-screen picture (the boot logos, the title's background) gets more:
+// the title's background is drawn covering the frame instead (a scaled copy, same texels, cropped centred like the
+// menu wallpaper; its logo and texts are other sprites and stay put), which also hides the menu wallpaper the game
+// still draws behind the title after the menus. Around any other picture the frame outside its 16:9 canvas gets 8
+// more sprites: the logo's edge texels in its own colours, so its white and its fades reach the frame's edges, and
+// black around the rest.
+REX_EXTERN(__imp__sub_8216DAA0);
+extern "C" REX_FUNC(sub_8216DAA0) {
+  const uint32_t device = ctx.r3.u32;
+  const uint32_t sprite = ctx.r4.u32;
+  const uint32_t mode = REX_LOAD_U32(sprite + kSpriteMode);
+  if (!OutputFrameActive() || (mode & kSpriteModeMask) != kSpriteModePlain) {
+    __imp__sub_8216DAA0(ctx, base);
+    return;
+  }
+  CanvasSprite picture;
+  for (uint32_t i = 0; i < 4; ++i) {
+    const uint32_t corner = sprite + kSpriteCorners + i * kSpriteCornerStride;
+    picture.x[i] = std::bit_cast<float>(REX_LOAD_U32(corner + 0));
+    picture.y[i] = std::bit_cast<float>(REX_LOAD_U32(corner + 4));
+    picture.colour[i] = REX_LOAD_U32(corner + 8);
+  }
+  picture.tw = std::bit_cast<float>(REX_LOAD_U32(sprite + kSpriteTexels + 0));
+  picture.th = std::bit_cast<float>(REX_LOAD_U32(sprite + kSpriteTexels + 4));
+  picture.tx = std::bit_cast<float>(REX_LOAD_U32(sprite + kSpriteTexels + 8));
+  picture.ty = std::bit_cast<float>(REX_LOAD_U32(sprite + kSpriteTexels + 12));
+  if (!IsFullCanvasPicture(picture)) {
+    __imp__sub_8216DAA0(ctx, base);
+    return;
+  }
+  const uint32_t texture = REX_LOAD_U32(sprite + kSpriteTexture);
+  uint32_t logo = g_logo_texture.load(std::memory_order_relaxed);
+  uint32_t title = g_title_texture.load(std::memory_order_relaxed);
+  const PictureDraw draw = ClassifyPicture(logo, title, texture);
+  g_logo_texture.store(logo, std::memory_order_relaxed);
+  g_title_texture.store(title, std::memory_order_relaxed);
+
+  // Each extra sprite is a copy of the picture's sprite on the guest stack, below the caller's frame.
+  const uint32_t stack = ctx.r1.u32;
+  const uint32_t copy = stack - kBandFrame + kBandSpriteOffset;
+  const auto draw_copy = [&](const CanvasSprite& s) {
+    REX_STORE_U32(copy + kSpriteTexture, texture);
+    REX_STORE_U32(copy + kSpriteMode, mode);
+    REX_STORE_U32(copy + kSpriteTexels + 0, std::bit_cast<uint32_t>(s.tw));
+    REX_STORE_U32(copy + kSpriteTexels + 4, std::bit_cast<uint32_t>(s.th));
+    REX_STORE_U32(copy + kSpriteTexels + 8, std::bit_cast<uint32_t>(s.tx));
+    REX_STORE_U32(copy + kSpriteTexels + 12, std::bit_cast<uint32_t>(s.ty));
+    for (uint32_t i = 0; i < 4; ++i) {
+      const uint32_t corner = copy + kSpriteCorners + i * kSpriteCornerStride;
+      REX_STORE_U32(corner + 0, std::bit_cast<uint32_t>(s.x[i]));
+      REX_STORE_U32(corner + 4, std::bit_cast<uint32_t>(s.y[i]));
+      REX_STORE_U32(corner + 8, s.colour[i]);
+    }
+    ctx.r1.u32 = stack - kBandFrame;
+    ctx.r3.u32 = device;
+    ctx.r4.u32 = copy;
+    __imp__sub_8216DAA0(ctx, base);
+  };
+  if (draw == PictureDraw::kCover) {
+    const FrameSize frame = BootFrame();
+    draw_copy(CoverPicture(picture, frame.width, frame.height));
+  } else {
+    __imp__sub_8216DAA0(ctx, base);
+    const CanvasFill fill = draw == PictureDraw::kEdgeBands ? CanvasFill::kEdge : CanvasFill::kBlack;
+    for (const CanvasSprite& band : CanvasBands(picture, fill, kCanvasBandReach)) {
+      draw_copy(band);
+    }
+  }
+  ctx.r1.u32 = stack;
 }

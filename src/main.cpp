@@ -13,6 +13,7 @@
 #include "ini_merge.h"
 #include "ini_resolution.h"
 #include "screen_layout.h"
+#include "screen_layout_math.h"
 
 #include <SDL3/SDL_video.h>
 
@@ -38,6 +39,7 @@
 #include "launcher/launcher_dialog.h"
 #include "launcher/shader_pipeline.h"
 #include "dev/capture_series.h"
+#include "dev/input_recording_driver.h"
 #include "dev/input_script.h"
 
 REXCVAR_DEFINE_BOOL(futari_setup, false, "Futari",
@@ -59,6 +61,17 @@ REXCVAR_DEFINE_BOOL(futari_setup_settings, false, "Futari",
 REXCVAR_DEFINE_STRING(futari_input_script, "", "Futari",
                       "Dev: press these virtual-gamepad buttons at these times, 'ms:button[:hold_ms],...' (empty: off)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Dev aid (src/dev/input_recording.h): record user 0's pad (controller and keyboard) and the F9 captures of one run,
+// timed in guest Swaps, then replay that file instead of the real input; the replay takes the captures and closes the
+// game at the end of the file. Not both at once. Captures need Renut and futari_renut_capture_path, e.g.
+//   --futari_dev_input_record=route.txt --futari_renut_capture_path=caps/f.ppm   (F9 on each screen, then close)
+//   --futari_dev_input_replay=route.txt --futari_dev_frame_size=1600x900 --futari_renut_capture_path=caps/f.ppm
+REXCVAR_DEFINE_STRING(futari_dev_input_record, "", "Futari",
+                      "Dev: record user 0's input and the F9 captures to this file (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+REXCVAR_DEFINE_STRING(futari_dev_input_replay, "", "Futari",
+                      "Dev: replay this input recording instead of the real input, then exit (empty: off)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 #if FUTARI_RENUT_RENDERER
 // Renut's Direct3D-level renderer (src/renut_engine, GPL-3.0; docs/NOTES_renut_port_scoping.md). Chosen by the
@@ -68,6 +81,7 @@ REXCVAR_DEFINE_STRING(futari_input_script, "", "Futari",
 #include "renut_engine/futari_renut_vblank.h"
 #include "renut_engine/gpu/banjo_renut_capture.h"
 #include "renut_engine/gpu/banjo_renut_select.h"
+#include "renut_engine/gpu/backend/presented_frame.h"
 #include "renut_engine/gpu/overlay/app_integration.h"
 #include "renut_shim/renut_shader_dump_tool.h"
 #include "renut_shim/renut_shader_translate_tool.h"
@@ -753,9 +767,17 @@ class TitleExitHintDialog final : public rex::ui::ImGuiDialog {
       key_ = std::move(key);
       text_ = key_.empty() ? "Press B to exit." : "Press B or " + key_ + " to exit.";
     }
-    constexpr float kMargin = 16.0f;
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - kMargin, io.DisplaySize.y - kMargin),
-                            ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+    // Inside the presented frame, not over a bar; the window's corner without one (the xenos renderer).
+    futari::screen_layout::FrameRect frame;
+    futari::screen_layout::FrameSize output;
+#if FUTARI_RENUT_RENDERER
+    const renut::gpu::PresentedFrame presented = renut::gpu::LastPresentedFrame();
+    frame = {presented.x, presented.y, presented.width, presented.height};
+    output = {presented.output_width, presented.output_height};
+#endif
+    const futari::screen_layout::HintPoint anchor =
+        futari::screen_layout::HintAnchor(frame, {io.DisplaySize.x, io.DisplaySize.y}, output);
+    ImGui::SetNextWindowPos(ImVec2(anchor.x, anchor.y), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
     ImGui::SetNextWindowBgAlpha(0.5f);
     constexpr ImGuiWindowFlags kFlags =
         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
@@ -1107,6 +1129,74 @@ class FutariApp : public rex::ReXApp {
       REXLOG_INFO("Renderer: Renut (futari_renderer = renut); the xenos plugin is not loaded");
     }
 #endif
+    SetUpInputRecording(config);
+  }
+
+  // futari_dev_input_record / futari_dev_input_replay: the game's input system becomes one driver that owns the SDK's
+  // default one. Off (and the input untouched) when neither is set, when both are, or when the file fails.
+  void SetUpInputRecording(rex::RuntimeConfig& config) {
+    const std::string record = REXCVAR_GET(futari_dev_input_record);
+    const std::string replay = REXCVAR_GET(futari_dev_input_replay);
+    if (record.empty() == replay.empty()) {
+      if (!record.empty()) {
+        REXLOG_ERROR("Input record/replay: futari_dev_input_record and futari_dev_input_replay are both set; "
+                     "neither runs");
+      }
+      return;
+    }
+    const std::string& text = record.empty() ? replay : record;
+    const std::filesystem::path path(std::u8string(text.begin(), text.end()));
+    auto out = std::make_shared<std::ofstream>();
+    std::vector<futari::dev::RecordingLine> lines;
+    if (!record.empty()) {
+      out->open(path, std::ios::binary);
+      if (!*out) {
+        REXLOG_ERROR("Input record: could not open {}", record);
+        return;
+      }
+      REXLOG_INFO("Input record: writing {}", record);
+    } else {
+      std::ifstream in(path, std::ios::binary);
+      if (!in) {
+        REXLOG_ERROR("Input replay: could not read {}", replay);
+        return;
+      }
+      std::stringstream contents;
+      contents << in.rdbuf();
+      futari::dev::ParsedRecording parsed = futari::dev::ParseRecording(contents.str());
+      if (parsed.error) {
+        REXLOG_ERROR("Input replay: {}:{}: {}", replay, parsed.error->line, parsed.error->reason);
+        return;
+      }
+      REXLOG_INFO("Input replay: {} lines, {} captures from {}", parsed.lines.size(), parsed.captures, replay);
+      lines = std::move(parsed.lines);
+    }
+    config.input_factory = [this, out, lines, recording = !record.empty()](
+                               bool tool_mode) -> std::unique_ptr<rex::system::IInputSystem> {
+      auto inner = rex::input::CreateDefaultInputSystem(tool_mode);
+      auto driver = recording ? futari::dev::InputRecordingDriver::Record(std::move(inner), std::move(*out))
+                              : futari::dev::InputRecordingDriver::Replay(std::move(inner), lines);
+      driver->Setup();
+      input_recording_ = driver.get();
+      auto outer = std::make_unique<rex::input::InputSystem>(nullptr);
+      outer->AddDriver(std::move(driver));
+      return outer;
+    };
+  }
+  // Owned by the runtime's input system; set before the guest runs and used until the process exits.
+  futari::dev::InputRecordingDriver* input_recording_ = nullptr;
+
+  // UI thread, the window is about to close. The SDK's OnClosing hard-exits and never reaches OnShutdown, so the
+  // recording gets its last line (or the replay says where it stopped) here and in RequestExit.
+  void FinishInputRecording() {
+    if (input_recording_) {
+      input_recording_->Finish();
+    }
+  }
+
+  bool OnWindowCloseRequested() override {
+    FinishInputRecording();
+    return rex::ReXApp::OnWindowCloseRequested();
   }
 
 #if FUTARI_RENUT_RENDERER
@@ -1147,7 +1237,24 @@ class FutariApp : public rex::ReXApp {
     if (const std::string script = REXCVAR_GET(futari_input_script); !script.empty()) {
       futari::dev::StartInputScript(script);
     }
+    if (input_recording_) {
+      // Guest thread: a replay's capture line takes an F9 capture on the UI thread; its end closes the game.
+      input_recording_->SetHooks(
+          [this] {
+#if FUTARI_RENUT_RENDERER
+            if (banjo::renut_gpu::Active()) {
+              app_context().CallInUIThread([this] { CaptureSeriesFrame(); });
+              return;
+            }
+#endif
+            if (!replay_capture_warned_.exchange(true)) {
+              REXLOG_WARN("Input replay: capture lines need Renut (the F9 capture series); skipped");
+            }
+          },
+          [this] { RequestExit("input replay"); });
+    }
   }
+  std::atomic<bool> replay_capture_warned_{false};
 
 #if FUTARI_RENUT_RENDERER
 
@@ -1201,7 +1308,12 @@ class FutariApp : public rex::ReXApp {
   // opening a file that exists.
   void RegisterCaptureSeriesBind() {
     rex::ui::RegisterBind("futari_renut_capture_key", "F9", "Dev: capture the frame next to futari_renut_capture_path",
-                          [this] { CaptureSeriesFrame(); });
+                          [this] {
+                            if (input_recording_) {
+                              input_recording_->NoteCapture();
+                            }
+                            CaptureSeriesFrame();
+                          });
   }
 
   // UI thread (the bind).
@@ -1312,6 +1424,7 @@ class FutariApp : public rex::ReXApp {
 
   void OnShutdown() override {
     futari::dev::StopInputScript();
+    FinishInputRecording();
 #if FUTARI_RENUT_RENDERER
     if (banjo::renut_gpu::Active()) {
       renut_capture_stop_.store(true, std::memory_order_release);
@@ -1438,6 +1551,7 @@ class FutariApp : public rex::ReXApp {
     }
     REXLOG_INFO("Title screen: exit requested ({})", source);
     app_context().CallInUIThread([this] {
+      FinishInputRecording();  // RequestClose skips OnWindowCloseRequested
       if (auto* wnd = window()) {
         wnd->RequestClose();
       }

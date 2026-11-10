@@ -102,6 +102,18 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I src tests/capture_series_test.cpp -o capture_series_test
           ./capture_series_test
 
+  input-recording-test:
+    # The text format of the dev input record/replay (src/dev/input_recording.h)
+    # and the replay cursor. Pure std.
+    name: input recording test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/input_recording_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/input_recording_test.cpp -o input_recording_test
+          ./input_recording_test
+
   identity:
     name: Commit identity (springah/noreply)
     # Maintainer pushes only. Outside contributors have their own identities and

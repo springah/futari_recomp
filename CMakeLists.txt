@@ -56,6 +56,8 @@ set(FUTARI_SOURCES
     src/launcher/update_check.cpp
     # Dev aid (2026-11-04): futari_input_script, a scripted virtual gamepad for renderer gates.
     src/dev/input_script.cpp
+    # Dev aid: futari_dev_input_record / futari_dev_input_replay, recorded input for the capture runs.
+    src/dev/input_recording_driver.cpp
     # The game's frame at the output size (renut_resolution = output): guest post-patches.
     src/screen_layout.cpp
 )

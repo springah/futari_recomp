@@ -9,8 +9,33 @@
 // is 640x480), and the game's widescreen rule is "4:3 or wider": portrait and
 // anything narrower take its 4:3 branches. The dev size futari_dev_frame_size is
 // "WxH" (x or X, spaces allowed around the parts); anything else is ignored.
+//
+// The menu wallpaper covers the frame at every aspect: a centred 16:9 quad, as
+// small as covers W x H, grown by the game's slide-in offset d the way its own
+// wide quad is (x by d on each side, y by 9d/16). At 16:9 it is the game's quad.
+//
+// The menu canvas: frames 4:3 or wider keep the game's 720-high design (scale
+// H/720); narrower frames show the 960-wide content of its 4:3 layout across the
+// frame width (design height 960*H/W, scale W/960), centred by the console's 4:3
+// offset 320. Both agree at exactly 4:3.
+//
+// The exit hint's corner sits 16 display units inside the presented frame's
+// bottom-right corner (output pixels scaled to the UI's display units), and at
+// the window's corner when there is no frame (or a zero-size one).
+//
+// A full-screen picture (an opaque 1280x720 image drawn over the whole design
+// canvas, the boot logos and the title) is surrounded by 8 bands out to beyond
+// the frame: the logo's bands repeat its edge texels in its own colours (the
+// fade and the lines run to the frame's edges), every other picture's are black.
+// The title's background (the first picture after the title loads) instead
+// covers the frame: its corners scale about the centre by the smallest factor,
+// at least 1, that covers the frame's design canvas; texels and colours stay.
+// The logo's texture is checked first, then the title's; the title's load ends
+// a logo that has drawn no picture yet.
 #include "screen_layout_math.h"
 
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <optional>
@@ -18,10 +43,34 @@
 
 namespace {
 
+using futari::screen_layout::CanvasBands;
+using futari::screen_layout::CanvasFill;
+using futari::screen_layout::CanvasSprite;
+using futari::screen_layout::ArmTitle;
 using futari::screen_layout::ClampFrame;
+using futari::screen_layout::ClassifyPicture;
+using futari::screen_layout::CoverPicture;
+using futari::screen_layout::FrameRect;
 using futari::screen_layout::FrameSize;
+using futari::screen_layout::HintAnchor;
+using futari::screen_layout::HintPoint;
+using futari::screen_layout::IsFullCanvasPicture;
+using futari::screen_layout::IsTitlePicture;
 using futari::screen_layout::IsWidescreen;
+using futari::screen_layout::kCanvasBlack;
+using futari::screen_layout::kLogoArmed;
+using futari::screen_layout::kTitleArmed;
+using futari::screen_layout::kNarrowUiCentring;
+using futari::screen_layout::kUi4x3ContentWidth;
+using futari::screen_layout::kUiDesignHeight;
 using futari::screen_layout::ParseFrameSize;
+using futari::screen_layout::PictureDraw;
+using futari::screen_layout::PictureFill;
+using futari::screen_layout::UiDesignHeight;
+using futari::screen_layout::UiScale;
+using futari::screen_layout::WallpaperCover;
+using futari::screen_layout::WallpaperQuad;
+using futari::screen_layout::WallpaperSlide;
 
 int g_failed = 0;
 int g_checks = 0;
@@ -123,6 +172,389 @@ void ParsedSizesAreClamped() {
         Text(ClampFrame(wide.width, wide.height)));
 }
 
+std::string Text(WallpaperQuad q) {
+  return "(" + std::to_string(q.x0) + ", " + std::to_string(q.y0) + ") .. (" + std::to_string(q.x1) + ", " +
+         std::to_string(q.y1) + ")";
+}
+
+void WallpaperCoverAt16By9IsTheGamesQuad() {
+  for (const float d : {0.0f, 128.0f}) {
+    const WallpaperQuad got = WallpaperCover(1920, 1080, d);
+    const WallpaperQuad want{-d, -d * 9 / 16, 1920 + d, 1080 + d * 9 / 16};
+    Check(got == want, d == 0 ? "1920x1080 at d = 0 is the frame" : "1920x1080 at d = 128 is the game's wide quad",
+          Text(got));
+  }
+}
+
+void WallpaperCoverCoversEveryAspect() {
+  const FrameSize sizes[] = {{1920, 1200}, {2560, 1080}, {2520, 1680}, {1080, 1920}, {640, 480}, {8192, 480}};
+  for (const FrameSize size : sizes) {
+    const float w = float(size.width);
+    const float h = float(size.height);
+    for (const float d : {0.0f, 128.0f}) {
+      const WallpaperQuad q = WallpaperCover(w, h, d);
+      const std::string at = Text(size) + " d=" + std::to_string(int(d)) + ": " + Text(q);
+      Check(q.x0 <= 0 && q.y0 <= 0 && q.x1 >= w && q.y1 >= h, "the quad covers the frame", at);
+      Check(std::fabs((q.x1 - q.x0) / (q.y1 - q.y0) - 16.0f / 9.0f) < 1e-4f, "the quad is 16:9", at);
+      Check(std::fabs((q.x0 + q.x1) - w) < 1e-2f && std::fabs((q.y0 + q.y1) - h) < 1e-2f, "the quad is centred", at);
+      if (d == 0)
+        Check(q.x0 == 0 || q.y0 == 0, "at d = 0 the quad is the smallest cover (one side fits)", at);
+    }
+  }
+}
+
+void WallpaperSlideFromTheGamesX0() {
+  Check(WallpaperSlide(0, true) == 0, "wide branch, x0 = 0: d = 0", std::to_string(WallpaperSlide(0, true)));
+  Check(WallpaperSlide(-128, true) == 128, "wide branch, x0 = -128: d = 128",
+        std::to_string(WallpaperSlide(-128, true)));
+  Check(WallpaperSlide(320, false) == 0, "4:3 branch, x0 = 320: d = 0", std::to_string(WallpaperSlide(320, false)));
+  Check(WallpaperSlide(192, false) == 128, "4:3 branch, x0 = 192: d = 128",
+        std::to_string(WallpaperSlide(192, false)));
+}
+
+void CheckCoverHolds(float w, float h, float slide, const char* what) {
+  const WallpaperQuad q = WallpaperCover(w, h, slide);
+  const std::string at = std::string(what) + ": " + Text(q);
+  Check(std::isfinite(q.x0) && std::isfinite(q.y0) && std::isfinite(q.x1) && std::isfinite(q.y1),
+        "the quad is finite", at);
+  Check(q.x0 <= 0 && q.y0 <= 0 && q.x1 >= w && q.y1 >= h, "the quad covers the frame", at);
+  Check(std::fabs((q.x1 - q.x0) / (q.y1 - q.y0) - 16.0f / 9.0f) < 1e-4f, "the quad is 16:9", at);
+}
+
+void WallpaperCoverWithASlideOutsideItsRange() {
+  // A guest x0 past the game's own range gives a negative slide.
+  CheckCoverHolds(1920, 1080, WallpaperSlide(320, true), "wide branch, x0 = 320");
+  CheckCoverHolds(1920, 1080, WallpaperSlide(640, false), "4:3 branch, x0 = 640");
+  CheckCoverHolds(1080, 1920, WallpaperSlide(1, true), "portrait, wide branch, x0 = 1");
+  for (const float d : {-1.0f, -320.0f})
+    CheckCoverHolds(1920, 1080, d, "negative slide");
+  Check(WallpaperCover(1920, 1080, -320) == WallpaperCover(1920, 1080, 0), "a negative slide is slide 0",
+        Text(WallpaperCover(1920, 1080, -320)));
+  // x0 read as a guest float can be NaN or infinite.
+  CheckCoverHolds(1920, 1080, std::nanf(""), "NaN slide");
+  CheckCoverHolds(1920, 1080, INFINITY, "+inf slide");
+  CheckCoverHolds(1920, 1080, -INFINITY, "-inf slide");
+  CheckCoverHolds(1920, 1080, WallpaperSlide(std::nanf(""), false), "4:3 branch, x0 = NaN");
+  Check(WallpaperCover(1920, 1080, std::nanf("")) == WallpaperCover(1920, 1080, 0), "a NaN slide is slide 0",
+        Text(WallpaperCover(1920, 1080, std::nanf(""))));
+  Check(WallpaperCover(1920, 1080, INFINITY) == WallpaperCover(1920, 1080, 128), "a slide above 128 is 128",
+        Text(WallpaperCover(1920, 1080, INFINITY)));
+}
+
+std::string Text(FrameSize size, float value) { return Text(size) + ": " + std::to_string(value); }
+
+void UiCanvasNarrowShowsThe4x3ContentAcrossTheWidth() {
+  const FrameSize sizes[] = {{1080, 1920}, {720, 1280}, {1280, 1024}};
+  for (const FrameSize size : sizes) {
+    const float shown = float(size.width) / UiScale(size.width, size.height);
+    Check(std::fabs(shown - 960) < 1e-2f, "a frame narrower than 4:3 shows 960 design units across its width",
+          Text(size, shown));
+  }
+  Check(std::fabs(UiDesignHeight(1080, 1920) - 1706.6667f) < 1e-2f, "1080x1920: design height 960*H/W",
+        Text(FrameSize{1080, 1920}, UiDesignHeight(1080, 1920)));
+  Check(std::fabs(UiScale(1080, 1920) - 1.125f) < 1e-5f, "1080x1920: scale W/960",
+        Text(FrameSize{1080, 1920}, UiScale(1080, 1920)));
+  Check(std::fabs(UiDesignHeight(1280, 1024) - 768) < 1e-3f, "1280x1024 (5:4): design height 768",
+        Text(FrameSize{1280, 1024}, UiDesignHeight(1280, 1024)));
+}
+
+void UiCanvasUnchangedAt4x3AndWider() {
+  const FrameSize sizes[] = {{640, 480}, {1920, 1080}, {1920, 1200}, {2520, 1680}, {3840, 2160}};
+  for (const FrameSize size : sizes) {
+    const float height = UiDesignHeight(size.width, size.height);
+    Check(height == 720, "4:3 or wider keeps the game's design height 720", Text(size, height));
+    const float scale = UiScale(size.width, size.height);
+    Check(std::fabs(scale - float(size.height) / 720) < 1e-6f, "4:3 or wider keeps the scale H/720",
+          Text(size, scale));
+  }
+}
+
+void UiCanvasContinuousAt4x3() {
+  CheckWidescreen(640, 481, false, "640x481 (just below 4:3) takes the narrow canvas");
+  const float below = UiDesignHeight(639, 480);
+  Check(std::fabs(below - 720) < 1.5f, "639x480 (just below 4:3): design height about 720", Text({639, 480}, below));
+  const float near = UiDesignHeight(1023, 768);
+  Check(std::fabs(near - 720) < 1.0f, "1023x768 (just below 4:3): design height about 720", Text({1023, 768}, near));
+}
+
+void UiCentringIsTheConsoles4x3Value() {
+  Check(kNarrowUiCentring == kUiDesignHeight * 16 / 9 - kUi4x3ContentWidth,
+        "the narrow centring offset is the 16:9 design width less the 4:3 content width",
+        std::to_string(kNarrowUiCentring));
+}
+
+void CheckHint(FrameRect rect, HintPoint display, FrameSize output, HintPoint want, const char* what) {
+  const HintPoint got = HintAnchor(rect, display, output);
+  Check(std::fabs(got.x - want.x) < 1e-3f && std::fabs(got.y - want.y) < 1e-3f, what,
+        std::to_string(got.x) + ", " + std::to_string(got.y));
+}
+
+void HintAtTheFramesCorner() {
+  CheckHint({0, 0, 1920, 1080}, {1920, 1080}, {1920, 1080}, {1904, 1064},
+            "frame = window: the window corner less 16");
+  CheckHint({320, 0, 1920, 1080}, {2560, 1080}, {2560, 1080}, {2224, 1064},
+            "pillarbox 1920x1080 in 2560x1080: 16 inside the right bar's edge");
+  CheckHint({0, 60, 1920, 1080}, {1920, 1200}, {1920, 1200}, {1904, 1124},
+            "letterbox 1920x1080 in 1920x1200: 16 above the bottom bar");
+}
+
+void HintInDisplayUnits() {
+  CheckHint({0, 0, 2400, 1350}, {1600, 900}, {2400, 1350}, {1584, 884},
+            "DPI 1.5, frame = window: display corner less 16");
+  CheckHint({300, 0, 1800, 1350}, {1600, 900}, {2400, 1350}, {1384, 884},
+            "DPI 1.5, pillarbox: frame edge 2100 px = 1400 display units, less 16");
+}
+
+void HintWithoutAFrameAtTheWindowCorner() {
+  CheckHint({}, {1920, 1080}, {1920, 1080}, {1904, 1064}, "no frame: the window corner less 16");
+  CheckHint({100, 100, 0, 500}, {1600, 900}, {2400, 1350}, {1584, 884}, "zero-width frame: the window corner");
+  CheckHint({100, 100, 500, 0}, {1600, 900}, {2400, 1350}, {1584, 884}, "zero-height frame: the window corner");
+  CheckHint({0, 0, 1920, 1080}, {1920, 1080}, {0, 0}, {1904, 1064}, "no output size: the window corner");
+}
+
+// The CAVE logo as the game draws it: texels (1, 1) 1280x720 of its atlas over the whole canvas, faded to 0x53.
+CanvasSprite Logo() {
+  return {{-640, 640, 640, -640}, {-360, -360, 360, 360}, 1, 1, 1280, 720,
+          {0xFF535353, 0xFF535353, 0xFF535353, 0xFF535353}};
+}
+
+std::string Text(const CanvasSprite& s) {
+  std::string out;
+  for (int i = 0; i < 4; ++i) {
+    out += "(" + std::to_string(s.x[i]) + ", " + std::to_string(s.y[i]) + ") ";
+  }
+  return out + "texels " + std::to_string(s.tx) + ", " + std::to_string(s.ty) + " " + std::to_string(s.tw) + "x" +
+         std::to_string(s.th);
+}
+
+void FullCanvasPictures() {
+  Check(IsFullCanvasPicture(Logo()), "the logo is a full-canvas picture", Text(Logo()));
+  CanvasSprite m2 = Logo();
+  m2.ty = 723;
+  Check(IsFullCanvasPicture(m2), "the M2 logo (second image of the atlas) is one", Text(m2));
+  CanvasSprite moved = Logo();
+  moved.x[1] = moved.x[2] = 639;
+  Check(!IsFullCanvasPicture(moved), "a quad 1 unit short of the right edge is not", Text(moved));
+  CanvasSprite cropped = Logo();
+  cropped.tw = 1279;
+  Check(!IsFullCanvasPicture(cropped), "an image 1279 texels wide is not", Text(cropped));
+  CanvasSprite blended = Logo();
+  blended.colour[2] = 0xFE535353;
+  Check(!IsFullCanvasPicture(blended), "a corner below full alpha is not", Text(blended));
+  const CanvasSprite frame{{-392, 392, 392, -392}, {-33, -33, 33, 33}, 32, 32, 1, 1, {~0u, ~0u, ~0u, ~0u}};
+  Check(!IsFullCanvasPicture(frame), "a menu window piece is not", Text(frame));
+}
+
+void CanvasBandsTileTheOutside() {
+  const float r = 1000;
+  const std::array<CanvasSprite, 8> b = CanvasBands(Logo(), CanvasFill::kEdge, r);
+  // left, right, top, bottom, then the corners top-left, top-right, bottom-right, bottom-left
+  const float want[8][4] = {{-1640, -360, -640, 360}, {640, -360, 1640, 360},   {-640, -1360, 640, -360},
+                            {-640, 360, 640, 1360},   {-1640, -1360, -640, -360}, {640, -1360, 1640, -360},
+                            {640, 360, 1640, 1360},   {-1640, 360, -640, 1360}};
+  double area = 0;
+  for (int i = 0; i < 8; ++i) {
+    const CanvasSprite& s = b[i];
+    const bool corners = s.x[0] == want[i][0] && s.y[0] == want[i][1] && s.x[1] == want[i][2] &&
+                         s.y[1] == want[i][1] && s.x[2] == want[i][2] && s.y[2] == want[i][3] &&
+                         s.x[3] == want[i][0] && s.y[3] == want[i][3];
+    Check(corners, ("band " + std::to_string(i) + " has its corners in the game's order").c_str(), Text(s));
+    area += double(s.x[2] - s.x[0]) * (s.y[2] - s.y[0]);
+  }
+  Check(area == (1280.0 + 2 * r) * (720.0 + 2 * r) - 1280.0 * 720, "the bands' area is the outside, no overlap",
+        std::to_string(area));
+}
+
+void CanvasBandsRepeatTheEdgeTexels() {
+  CanvasSprite m2 = Logo();
+  m2.ty = 723;
+  const std::array<CanvasSprite, 8> b = CanvasBands(m2, CanvasFill::kEdge, 1000);
+  // texel x, y, width, height per band: the edge column or row's centre, the image's span along the edge
+  const float want[8][4] = {{1.5f, 723, 0, 720},       {1280.5f, 723, 0, 720},     {1, 723.5f, 1280, 0},
+                            {1, 1442.5f, 1280, 0},     {1.5f, 723.5f, 0, 0},       {1280.5f, 723.5f, 0, 0},
+                            {1280.5f, 1442.5f, 0, 0},  {1.5f, 1442.5f, 0, 0}};
+  for (int i = 0; i < 8; ++i) {
+    const CanvasSprite& s = b[i];
+    Check(s.tx == want[i][0] && s.ty == want[i][1] && s.tw == want[i][2] && s.th == want[i][3],
+          ("band " + std::to_string(i) + " samples the edge texels").c_str(), Text(s));
+  }
+}
+
+void CanvasBandColours() {
+  CanvasSprite gradient = Logo();
+  gradient.colour[0] = 0xFF000001;  // top-left
+  gradient.colour[1] = 0xFF000002;  // top-right
+  gradient.colour[2] = 0xFF000003;  // bottom-right
+  gradient.colour[3] = 0xFF000004;  // bottom-left
+  const std::array<CanvasSprite, 8> edge = CanvasBands(gradient, CanvasFill::kEdge, 1000);
+  const uint32_t want[8][4] = {{1, 1, 4, 4}, {2, 2, 3, 3}, {1, 2, 2, 1}, {4, 3, 3, 4},
+                               {1, 1, 1, 1}, {2, 2, 2, 2}, {3, 3, 3, 3}, {4, 4, 4, 4}};
+  for (int i = 0; i < 8; ++i) {
+    bool same = true;
+    for (int k = 0; k < 4; ++k) {
+      same = same && edge[i].colour[k] == (0xFF000000 | want[i][k]);
+    }
+    Check(same, ("edge band " + std::to_string(i) + " takes the nearest corner colours").c_str(), Text(edge[i]));
+  }
+  const std::array<CanvasSprite, 8> black = CanvasBands(gradient, CanvasFill::kBlack, 1000);
+  bool all_black = true;
+  for (const CanvasSprite& s : black) {
+    for (uint32_t c : s.colour) {
+      all_black = all_black && c == kCanvasBlack;
+    }
+  }
+  Check(all_black, "black bands are opaque black", Text(black[0]));
+}
+
+void LogoThenTitleFills() {
+  uint32_t logo = 0;
+  Check(PictureFill(logo, 0x40A1FE60) == CanvasFill::kBlack, "no logo motion loaded: black", std::to_string(logo));
+  logo = kLogoArmed;
+  Check(PictureFill(logo, 0x40A1FE60) == CanvasFill::kEdge, "the first picture after the logo loads: edge",
+        std::to_string(logo));
+  Check(PictureFill(logo, 0x40A1FE60) == CanvasFill::kEdge, "the logo's texture again (M2): edge",
+        std::to_string(logo));
+  Check(PictureFill(logo, 0x400EA640) == CanvasFill::kBlack, "the title's texture: black", std::to_string(logo));
+  Check(logo == 0, "the title ends the logo", std::to_string(logo));
+  Check(PictureFill(logo, 0x40A1FE60) == CanvasFill::kBlack, "the logo's address reused later: black",
+        std::to_string(logo));
+}
+
+// The title's background as the game draws it: texels (1, 1) 1280x720 of the title atlas over the whole canvas.
+CanvasSprite TitleBackground() {
+  return {{-640, 640, 640, -640}, {-360, -360, 360, 360}, 1, 1, 1280, 720,
+          {0xFFF9F9F9, 0xFFF9F9F9, 0xFFF9F9F9, 0xFFF9F9F9}};
+}
+
+bool SameTexelsAndColours(const CanvasSprite& a, const CanvasSprite& b) {
+  bool same = a.tx == b.tx && a.ty == b.ty && a.tw == b.tw && a.th == b.th;
+  for (int i = 0; i < 4; ++i) {
+    same = same && a.colour[i] == b.colour[i];
+  }
+  return same;
+}
+
+void CoverPictureAt16By9IsTheGamesSprite() {
+  const FrameSize sizes[] = {{1280, 720}, {1920, 1080}, {3840, 2160}};
+  for (const FrameSize size : sizes) {
+    const CanvasSprite got = CoverPicture(TitleBackground(), size.width, size.height);
+    bool same = SameTexelsAndColours(got, TitleBackground());
+    for (int i = 0; i < 4; ++i) {
+      same = same && got.x[i] == TitleBackground().x[i] && got.y[i] == TitleBackground().y[i];
+    }
+    Check(same, "at 16:9 the title's background is the game's sprite", Text(size) + ": " + Text(got));
+  }
+}
+
+void CoverPictureCoversEveryAspect() {
+  const FrameSize sizes[] = {{2560, 1080}, {1920, 1200}, {2520, 1680}, {640, 480}, {1080, 1920}, {8192, 480}};
+  for (const FrameSize size : sizes) {
+    const CanvasSprite got = CoverPicture(TitleBackground(), size.width, size.height);
+    const std::string at = Text(size) + ": " + Text(got);
+    // The frame in design units: H / scale high, W / scale wide, centred on 0.
+    const float scale = UiScale(size.width, size.height);
+    const float half_w = float(size.width) / scale / 2;
+    const float half_h = float(size.height) / scale / 2;
+    const float x0 = got.x[0], y0 = got.y[0], x1 = got.x[2], y1 = got.y[2];
+    const bool corners = got.x[3] == x0 && got.x[1] == x1 && got.y[1] == y0 && got.y[3] == y1;
+    Check(corners, "the cover keeps the game's corner order", at);
+    Check(x0 <= -half_w + 1e-2f && x1 >= half_w - 1e-2f && y0 <= -half_h + 1e-2f && y1 >= half_h - 1e-2f,
+          "the cover covers the frame", at);
+    Check(std::fabs(x0 + x1) < 1e-3f && std::fabs(y0 + y1) < 1e-3f, "the cover is centred", at);
+    Check(std::fabs((x1 - x0) / (y1 - y0) - 16.0f / 9.0f) < 1e-4f, "the cover keeps 16:9", at);
+    Check(std::fabs(x1 - half_w) < 1e-2f || std::fabs(y1 - half_h) < 1e-2f || x1 == 640,
+          "the cover is the smallest (one side fits, or the game's canvas)", at);
+    Check(SameTexelsAndColours(got, TitleBackground()), "the cover keeps the texels and colours", at);
+  }
+  const CanvasSprite wide = CoverPicture(TitleBackground(), 2560, 1080);
+  Check(std::fabs(wide.x[2] - 2560.0f / 3) < 1e-2f && std::fabs(wide.y[2] - 480) < 1e-2f,
+        "2560x1080: the cover spans 853.3 x 480 units each side", Text(wide));
+  const CanvasSprite tall = CoverPicture(TitleBackground(), 1080, 1920);
+  Check(std::fabs(tall.y[2] - 2560.0f / 3) < 1e-2f, "1080x1920: the cover spans 853.3 units up and down", Text(tall));
+  const CanvasSprite square4x3 = CoverPicture(TitleBackground(), 640, 480);
+  Check(square4x3.x[2] == 640 && square4x3.y[2] == 360, "4:3: the game's canvas already covers", Text(square4x3));
+}
+
+void TitlePictureAfterTheTitleLoads() {
+  uint32_t title = 0;
+  Check(!IsTitlePicture(title, 0x400EB210), "no title loaded: not the title", std::to_string(title));
+  title = kTitleArmed;
+  Check(IsTitlePicture(title, 0x400EB210), "the first picture after the title loads is the title's",
+        std::to_string(title));
+  Check(IsTitlePicture(title, 0x400EB210), "the title's texture again", std::to_string(title));
+  Check(!IsTitlePicture(title, 0x400E7C60), "another picture is not", std::to_string(title));
+  Check(title == 0, "another picture ends the title", std::to_string(title));
+  Check(!IsTitlePicture(title, 0x400EB210), "after another picture the old address is not the title",
+        std::to_string(title));
+  title = kTitleArmed;
+  Check(IsTitlePicture(title, 0x400F29F0), "the title loaded again: its new texture", std::to_string(title));
+}
+
+const char* DrawName(PictureDraw draw) {
+  return draw == PictureDraw::kCover ? "cover" : draw == PictureDraw::kEdgeBands ? "edge bands" : "black bands";
+}
+
+// Both words together, every state each can be in (none, armed, bound to its texture) against the logo's texture, the
+// title's and a third one: the logo's texture first (edge), then the title's (cover), black for the rest.
+void PictureDrawFromBothWords() {
+  constexpr uint32_t L = 0x40A1FE60, T = 0x400EB210, X = 0x400E7C60;
+  const uint32_t states_logo[] = {0, kLogoArmed, L};
+  const uint32_t states_title[] = {0, kTitleArmed, T};
+  for (const uint32_t logo_in : states_logo) {
+    for (const uint32_t title_in : states_title) {
+      for (const uint32_t texture : {L, T, X}) {
+        uint32_t logo = logo_in, title = title_in;
+        const PictureDraw got = ClassifyPicture(logo, title, texture);
+        PictureDraw want = PictureDraw::kBlackBands;
+        uint32_t want_logo = 0, want_title = title_in;
+        if (logo_in == kLogoArmed || (logo_in == L && texture == L)) {
+          want = PictureDraw::kEdgeBands;
+          want_logo = texture;
+        } else if (title_in == kTitleArmed || (title_in == T && texture == T)) {
+          want = PictureDraw::kCover;
+          want_title = texture;
+        } else if (title_in == T) {
+          want_title = 0;
+        }
+        const std::string at = "logo " + std::to_string(logo_in) + ", title " + std::to_string(title_in) +
+                               ", texture " + std::to_string(texture) + ": " + DrawName(got) + ", logo " +
+                               std::to_string(logo) + ", title " + std::to_string(title);
+        Check(got == want && logo == want_logo && title == want_title, "the draw from both words", at);
+      }
+    }
+  }
+}
+
+// The title's load ends a logo that never drew a picture, so the title's background is never taken for the logo
+// (also when it gets the logo's freed address). A logo that did draw keeps its texture: its last frames (M2) still
+// draw after the title loads, up to the title's own first picture.
+void TitleLoadEndsTheLogosArming() {
+  constexpr uint32_t L = 0x40A1FE60, T = 0x400EB210;
+  uint32_t logo = kLogoArmed, title = 0;
+  ArmTitle(logo, title);
+  Check(logo == 0 && title == kTitleArmed, "the title loads after a logo that drew nothing: the logo ends",
+        std::to_string(logo));
+  Check(ClassifyPicture(logo, title, T) == PictureDraw::kCover, "no logo picture after the logo loaded: the title covers",
+        std::to_string(title));
+  logo = kLogoArmed;
+  title = 0;
+  ArmTitle(logo, title);
+  Check(ClassifyPicture(logo, title, L) == PictureDraw::kCover,
+        "the title's background at the never-drawn logo's address covers", std::to_string(title));
+  logo = kLogoArmed;
+  title = 0;
+  Check(ClassifyPicture(logo, title, L) == PictureDraw::kEdgeBands, "the logo's first picture", std::to_string(logo));
+  ArmTitle(logo, title);
+  Check(logo == L, "the title loads while the logo draws: the logo keeps its texture", std::to_string(logo));
+  Check(ClassifyPicture(logo, title, L) == PictureDraw::kEdgeBands, "the logo's last frames after the title loads: edge",
+        std::to_string(logo));
+  Check(ClassifyPicture(logo, title, T) == PictureDraw::kCover, "then the title's own picture covers",
+        std::to_string(title));
+  Check(logo == 0 && title == T, "and ends the logo", std::to_string(logo));
+  Check(ClassifyPicture(logo, title, L) == PictureDraw::kBlackBands, "the logo's address after that: black",
+        std::to_string(logo));
+}
+
 }  // namespace
 
 int main() {
@@ -132,6 +564,27 @@ int main() {
   Widescreen();
   ParseDevFrameSize();
   ParsedSizesAreClamped();
+  WallpaperCoverAt16By9IsTheGamesQuad();
+  WallpaperCoverCoversEveryAspect();
+  WallpaperSlideFromTheGamesX0();
+  WallpaperCoverWithASlideOutsideItsRange();
+  UiCanvasNarrowShowsThe4x3ContentAcrossTheWidth();
+  UiCanvasUnchangedAt4x3AndWider();
+  UiCanvasContinuousAt4x3();
+  UiCentringIsTheConsoles4x3Value();
+  HintAtTheFramesCorner();
+  HintInDisplayUnits();
+  HintWithoutAFrameAtTheWindowCorner();
+  FullCanvasPictures();
+  CanvasBandsTileTheOutside();
+  CanvasBandsRepeatTheEdgeTexels();
+  CanvasBandColours();
+  LogoThenTitleFills();
+  CoverPictureAt16By9IsTheGamesSprite();
+  CoverPictureCoversEveryAspect();
+  TitlePictureAfterTheTitleLoads();
+  PictureDrawFromBothWords();
+  TitleLoadEndsTheLogosArming();
   std::printf("screen_layout_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

@@ -8,6 +8,7 @@
 #include <bit>
 #include <atomic>
 #include <chrono>
+#include <cmath>  // futari_recomp (2026-11-08): std::lround in PublishPresentedFrame
 #include <condition_variable>
 #include <cstdlib>
 #include <mutex>
@@ -29,6 +30,7 @@
 #include "renut_engine/gpu/backend/video.h"
 #include "renut_engine/gpu/backend/video_internal.h"
 #include "renut_engine/gpu/banjo_renut_capture.h"
+#include "renut_engine/gpu/backend/presented_frame.h"  // futari_recomp (2026-11-08): the last presented frame's rect
 #if defined(PLUME_DEKO3D)
 #include <plume_deko3d.h>  // banjo-nx: banjo_renut_capture_raw's format check
 #endif
@@ -184,6 +186,28 @@ void LogFrameFit(uint32_t out_w, uint32_t out_h, uint32_t src_w, uint32_t src_h,
   RGPU_INFO("Output {}x{}: the game's {}x{} image shown at {}x{} from ({}, {}) (futari_fill_crop {})", out_w, out_h,
             src_w, src_h, uint32_t(fit.viewport.width), uint32_t(fit.viewport.height), uint32_t(fit.viewport.x),
             uint32_t(fit.viewport.y), REXCVAR_GET(futari_fill_crop) ? "on" : "off");
+}
+
+// futari_recomp (2026-11-08): LastPresentedFrame's values, a sequence lock: the render thread writes them without
+// waiting (only when they change), a reader on another thread retries over a write in progress.
+std::atomic<uint32_t> g_presented_seq{0};  // odd while a write is in progress
+std::atomic<uint32_t> g_presented[6] = {};  // x, y, width, height, output width, output height
+
+// Render thread only (the single writer).
+void PublishPresentedFrame(const plume::RenderViewport &vp, uint32_t out_w, uint32_t out_h) {
+  const auto pixels = [](float v) { return uint32_t(std::lround(std::max(v, 0.0f))); };
+  const uint32_t values[6] = {pixels(vp.x), pixels(vp.y), pixels(vp.width), pixels(vp.height), out_w, out_h};
+  bool same = true;
+  for (int i = 0; i < 6; ++i)
+    same = same && g_presented[i].load(std::memory_order_relaxed) == values[i];
+  if (same)
+    return;
+  const uint32_t seq = g_presented_seq.load(std::memory_order_relaxed);
+  g_presented_seq.store(seq + 1, std::memory_order_relaxed);
+  std::atomic_thread_fence(std::memory_order_release);
+  for (int i = 0; i < 6; ++i)
+    g_presented[i].store(values[i], std::memory_order_relaxed);
+  g_presented_seq.store(seq + 2, std::memory_order_release);
 }
 
 // banjo-nx (2026-10-20, banjo_renut_game_gamma): the gamma ramp the game loads, which the 360's display applies to
@@ -520,6 +544,7 @@ void PresentLocked(VideoState &s, const PresentImage *image) {
                                   image->source_height ? image->source_height : image->height);
     covers = fit.viewport.x <= 0.0f && fit.viewport.y <= 0.0f && fit.viewport.x + fit.viewport.width >= float(out_w) &&
              fit.viewport.y + fit.viewport.height >= float(out_h);
+    PublishPresentedFrame(fit.viewport, out_w, out_h);  // futari_recomp (2026-11-08)
   }
   if (!covers)
     cmd->clearColor(0, plume::RenderColor(0.0f, 0.0f, 0.0f, 1.0f));
@@ -552,6 +577,23 @@ void PresentLocked(VideoState &s, const PresentImage *image) {
 }
 
 } // namespace
+
+// futari_recomp (2026-11-08): see presented_frame.h. Gives up (all zero) rather than spin long over a writer that was
+// preempted mid-write.
+PresentedFrame LastPresentedFrame() {
+  for (int attempt = 0; attempt < 64; ++attempt) {
+    const uint32_t seq = g_presented_seq.load(std::memory_order_acquire);
+    if (seq & 1)
+      continue;
+    uint32_t v[6];
+    for (int i = 0; i < 6; ++i)
+      v[i] = g_presented[i].load(std::memory_order_relaxed);
+    std::atomic_thread_fence(std::memory_order_acquire);
+    if (g_presented_seq.load(std::memory_order_relaxed) == seq)
+      return {v[0], v[1], v[2], v[3], v[4], v[5]};
+  }
+  return {};
+}
 
 namespace {
 
