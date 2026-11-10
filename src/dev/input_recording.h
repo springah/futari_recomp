@@ -4,7 +4,9 @@
 // One line per change of user 0's pad: "<frames since the previous line> <state | capture>", frames counted in guest
 // Swaps from the start of the process. A state is the held buttons (a b x y start back up down left right lb rb ls rs)
 // and any nonzero axis (lx= ly= rx= ry= -32768..32767, lt= rt= 0..255), or "-" for nothing held; it holds until the
-// next state line. "capture" takes an F9 frame capture. '#' starts a comment line; the end of the file ends the run.
+// next state line. "capture" takes an F9 frame capture. Window lines (added by hand, never recorded) change the window:
+// "window <W>x<H>" (client area in physical pixels, each 1..65535), "fullscreen on|off", "minimise", "restore"; like
+// "capture" they change no pad state. '#' starts a comment line; the end of the file ends the run.
 // A line counts at most 2^32 frames; a UTF-8 BOM at the start of the file is skipped.
 #pragma once
 
@@ -65,6 +67,70 @@ inline std::string FormatLine(uint64_t frames, const PadState& pad) {
 
 inline std::string FormatCaptureLine(uint64_t frames) { return std::to_string(frames) + " capture"; }
 
+// A window line's change.
+struct WindowEvent {
+  enum class Kind : uint8_t { kSize, kFullscreen, kMinimise, kRestore };
+  Kind kind = Kind::kSize;
+  uint32_t width = 0, height = 0;  // kSize: the client area in physical pixels
+  bool on = false;                 // kFullscreen
+  bool operator==(const WindowEvent&) const = default;
+};
+
+// The largest side a window line may ask for.
+inline constexpr uint32_t kMaxWindowSide = 65535;
+
+inline std::string FormatWindowLine(uint64_t frames, const WindowEvent& event) {
+  std::string line = std::to_string(frames);
+  switch (event.kind) {
+    case WindowEvent::Kind::kSize:
+      return line + " window " + std::to_string(event.width) + "x" + std::to_string(event.height);
+    case WindowEvent::Kind::kFullscreen:
+      return line + (event.on ? " fullscreen on" : " fullscreen off");
+    case WindowEvent::Kind::kMinimise:
+      return line + " minimise";
+    case WindowEvent::Kind::kRestore:
+      return line + " restore";
+  }
+  return line;
+}
+
+// The event of a window line's words after the frames, nothing when words[0] names no window event, or the reason
+// the line is wrong (also no words at all).
+inline std::optional<WindowEvent> ParseWindowEvent(const std::vector<std::string_view>& words, std::string& error) {
+  if (words.empty()) {
+    error = "a state, '-', 'capture' or a window event must follow the frames";
+    return std::nullopt;
+  }
+  WindowEvent event;
+  const std::string_view name = words[0];
+  if (name == "window") {
+    const auto side = [](std::string_view digits, uint32_t& value) {
+      const auto [end, ec] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+      return !digits.empty() && ec == std::errc{} && end == digits.data() + digits.size() && value >= 1 &&
+             value <= kMaxWindowSide;
+    };
+    const size_t x = words.size() == 2 ? words[1].find('x') : std::string_view::npos;
+    if (x == std::string_view::npos || !side(words[1].substr(0, x), event.width) ||
+        !side(words[1].substr(x + 1), event.height)) {
+      error = "'window' takes one size <W>x<H>, each 1..65535";
+    }
+  } else if (name == "fullscreen") {
+    event.kind = WindowEvent::Kind::kFullscreen;
+    event.on = words.size() == 2 && words[1] == "on";
+    if (words.size() != 2 || (!event.on && words[1] != "off")) {
+      error = "'fullscreen' takes 'on' or 'off'";
+    }
+  } else if (name == "minimise" || name == "restore") {
+    event.kind = name == "minimise" ? WindowEvent::Kind::kMinimise : WindowEvent::Kind::kRestore;
+    if (words.size() != 1) {
+      error = "'" + std::string(name) + "' stands alone on its line";
+    }
+  } else {
+    return std::nullopt;
+  }
+  return event;
+}
+
 // The frames a line written at `swap` counts since the line written at `last_line_swap`; never below 0.
 constexpr uint64_t FramesSince(uint64_t last_line_swap, uint64_t swap) {
   return swap > last_line_swap ? swap - last_line_swap : 0;
@@ -76,9 +142,10 @@ inline constexpr uint64_t kMaxLineFrames = uint64_t{1} << 32;
 struct RecordingLine {
   uint64_t frames = 0;  // since the previous line
   bool capture = false;
+  std::optional<WindowEvent> window;  // a window line
   PadState state;       // for a state line
   uint32_t source_line = 0;
-  std::string text;     // the line as FormatLine / FormatCaptureLine writes it
+  std::string text;     // the line as FormatLine / FormatCaptureLine / FormatWindowLine writes it
 };
 
 struct ParseError {
@@ -134,7 +201,17 @@ inline ParsedRecording ParseRecording(std::string_view text) {
       return fail(number, "frames must be a whole number, not '" + std::string(words[0]) + "'");
     }
     if (words.size() < 2) {
-      return fail(number, "a state, '-' or 'capture' must follow the frames");
+      return fail(number, "a state, '-', 'capture' or a window event must follow the frames");
+    }
+    std::string window_error;
+    entry.window = ParseWindowEvent(std::vector<std::string_view>(words.begin() + 1, words.end()), window_error);
+    if (!window_error.empty()) {
+      return fail(number, std::move(window_error));
+    }
+    if (entry.window) {
+      entry.text = FormatWindowLine(entry.frames, *entry.window);
+      out.lines.push_back(std::move(entry));
+      continue;
     }
     if ((words[1] == "-" || words[1] == "capture") && words.size() > 2) {
       return fail(number, "'" + std::string(words[1]) + "' stands alone on its line");
@@ -184,13 +261,14 @@ inline ParsedRecording ParseRecording(std::string_view text) {
 }
 
 // Replay: which lines are due at a guest Swap count. Every line due by then applies (the Swaps may jump between two
-// reads), each capture and the end are reported once.
+// reads), each capture, window event and the end are reported once.
 class ReplayCursor {
  public:
   struct Step {
     PadState state;               // the pad to hand to the game now
     std::vector<size_t> applied;  // the lines applied by this call (indexes)
     uint32_t captures = 0;        // capture lines among them
+    std::vector<size_t> events;   // the capture and window lines among them, in file order
     bool ended = false;           // this call applied the last line
   };
 
@@ -201,8 +279,9 @@ class ReplayCursor {
     while (next_ < lines_.size() && DueAt(lines_[next_]) <= swap) {
       const RecordingLine& line = lines_[next_];
       due_ = DueAt(line);
-      if (line.capture) {
-        ++step.captures;
+      if (line.capture || line.window) {
+        step.captures += line.capture ? 1 : 0;
+        step.events.push_back(next_);
       } else {
         state_ = line.state;
       }

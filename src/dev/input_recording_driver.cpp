@@ -37,9 +37,11 @@ std::unique_ptr<InputRecordingDriver> InputRecordingDriver::Replay(std::unique_p
   return driver;
 }
 
-void InputRecordingDriver::SetHooks(std::function<void()> on_capture, std::function<void()> on_end) {
+void InputRecordingDriver::SetHooks(std::function<void()> on_capture,
+                                    std::function<void(const WindowEvent&)> on_window, std::function<void()> on_end) {
   std::lock_guard lock(mutex_);
   on_capture_ = std::move(on_capture);
+  on_window_ = std::move(on_window);
   on_end_ = std::move(on_end);
 }
 
@@ -109,8 +111,10 @@ X_RESULT InputRecordingDriver::GetState(uint32_t user_index, X_INPUT_STATE* out_
       return X_ERROR_DEVICE_NOT_CONNECTED;
     }
     std::function<void()> on_capture;
+    std::function<void(const WindowEvent&)> on_window;
     std::function<void()> on_end;
     ReplayCursor::Step step;
+    std::vector<std::optional<WindowEvent>> events;  // nothing: a capture
     uint32_t packet = 0;
     {
       std::lock_guard lock(mutex_);
@@ -124,14 +128,22 @@ X_RESULT InputRecordingDriver::GetState(uint32_t user_index, X_INPUT_STATE* out_
           replayed_ = step.state;
           ++packet_;
         }
+        for (const size_t index : step.events) {
+          events.push_back(cursor_->line(index).window);
+        }
         on_capture = on_capture_;
+        on_window = on_window_;
         on_end = on_end_;
       }
       step.state = replayed_;
       packet = packet_;
     }
-    for (uint32_t i = 0; i < step.captures && on_capture; ++i) {
-      on_capture();
+    for (const std::optional<WindowEvent>& event : events) {
+      if (event && on_window) {
+        on_window(*event);
+      } else if (!event && on_capture) {
+        on_capture();
+      }
     }
     if (step.ended) {
       REXLOG_INFO("Input replay: finished");

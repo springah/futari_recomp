@@ -114,6 +114,30 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I src tests/input_recording_test.cpp -o input_recording_test
           ./input_recording_test
 
+  presented-frame-test:
+    # When Renut's present copies the game's frame pixel for pixel instead of
+    # scaling it (src/renut_engine/gpu/backend/presented_frame.h). Pure std.
+    name: presented frame test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/presented_frame_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/presented_frame_test.cpp -o presented_frame_test
+          ./presented_frame_test
+
+  front-buffer-block-test:
+    # Whether a resized automatic front buffer reuses its data block or needs a
+    # larger one (src/renut_engine/gpu/d3d/front_buffer_block.h). Pure std.
+    name: front buffer block test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/front_buffer_block_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/front_buffer_block_test.cpp -o front_buffer_block_test
+          ./front_buffer_block_test
+
   identity:
     name: Commit identity (springah/noreply)
     # Maintainer pushes only. Outside contributors have their own identities and

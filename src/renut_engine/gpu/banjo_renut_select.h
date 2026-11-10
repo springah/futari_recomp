@@ -44,6 +44,17 @@ namespace renut::gpu {
 bool GameShadersBuiltIn();
 // futari_recomp (2026-11-07): render/surfaces.h's, declared here too for the app: renut_resolution = output.
 bool ResolutionIsOutput();
+// futari_recomp (2026-11-10): render/surfaces.h's, declared here too for the app.
+bool ResolutionRequestsOutput();
+void SetResolutionLatchGate(bool (*ready)(bool output, uint32_t scale_code));
+// futari_recomp (2026-11-10), d3d/hooks/device.cpp: 'hook' runs on the guest thread at the start of every Swap,
+// before the frame goes to the render thread (nullptr: none). Callable from any thread.
+void SetGuestSwapHook(void (*hook)(uint32_t device));
+// Resizes the device's automatic back and front buffers in place to width x height (the objects and their addresses
+// stay; the render thread is drained first), with its stored present parameters. Guest thread, from the swap hook.
+// True when the buffers are that size now; false when the front buffer's larger block could not be allocated (then
+// nothing changed, one warning).
+bool ResizeAutoBuffers(uint32_t device, uint32_t width, uint32_t height);
 }  // namespace renut::gpu
 
 namespace banjo::renut_gpu {

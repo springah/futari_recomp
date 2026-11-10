@@ -21,6 +21,7 @@ namespace {
 
 using futari::dev::CaptureFileName;
 using futari::dev::CaptureNumber;
+using futari::dev::CaptureOutputFileName;
 using futari::dev::FreeCaptureNumber;
 using futari::dev::NextCaptureNumber;
 
@@ -44,6 +45,10 @@ void FileNames() {
         CaptureFileName("frame", 42, 1080, 1920));
   Check(CaptureFileName("f", 1234, 3840, 2160) == "f_1234_3840x2160.ppm", "past 999 the number grows",
         CaptureFileName("f", 1234, 3840, 2160));
+  Check(CaptureOutputFileName("f", 7, 2560, 1440) == "f_007_2560x1440_output.ppm",
+        "the presented picture: same number, its own size, _output", CaptureOutputFileName("f", 7, 2560, 1440));
+  Check(!CaptureNumber("f", CaptureOutputFileName("f", 7, 2560, 1440)),
+        "an output capture is not a number of the frame series", "");
 }
 
 void Numbers() {

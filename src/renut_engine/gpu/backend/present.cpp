@@ -183,9 +183,11 @@ void LogFrameFit(uint32_t out_w, uint32_t out_h, uint32_t src_w, uint32_t src_h,
   if (std::equal(std::begin(now), std::end(now), std::begin(last)))
     return;
   std::copy(std::begin(now), std::end(now), std::begin(last));
-  RGPU_INFO("Output {}x{}: the game's {}x{} image shown at {}x{} from ({}, {}) (futari_fill_crop {})", out_w, out_h,
+  // futari_recomp (2026-11-10): " 1:1" when the frame is copied pixel for pixel (RecordScanOut's point sampler).
+  RGPU_INFO("Output {}x{}: the game's {}x{} image shown at {}x{} from ({}, {}) (futari_fill_crop {}){}", out_w, out_h,
             src_w, src_h, uint32_t(fit.viewport.width), uint32_t(fit.viewport.height), uint32_t(fit.viewport.x),
-            uint32_t(fit.viewport.y), REXCVAR_GET(futari_fill_crop) ? "on" : "off");
+            uint32_t(fit.viewport.y), REXCVAR_GET(futari_fill_crop) ? "on" : "off",
+            IsExactFit(out_w, out_h, src_w, src_h) ? " 1:1" : "");
 }
 
 // futari_recomp (2026-11-08): LastPresentedFrame's values, a sequence lock: the render thread writes them without
@@ -319,7 +321,9 @@ void RecordScanOut(VideoState &s, const PresentImage &image, uint32_t out_w, uin
   push.translate[0] = frame_u * (1.0f - fit.visible[0]) * 0.5f;
   push.translate[1] = frame_v * (1.0f - fit.visible[1]) * 0.5f;
   push.texture_index = image.descriptor;
-  push.sampler_index = kLinearClampSamplerSlot;
+  // futari_recomp (2026-11-10): a frame of the output's own size is copied pixel for pixel; FitFrame gives the whole
+  // output (0, 0, W, H) then, so only the sampler changes. Any other size is scaled linearly as before.
+  push.sampler_index = IsExactFit(out_w, out_h, src_w, src_h) ? kPointClampSamplerSlot : kLinearClampSamplerSlot;
   push.param0 = image.gamma > 0.0f ? image.gamma : s.output_gamma;
   push.param1 = image.gamma > 0.0f ? 0.0f : g_gamma.param;  // banjo-nx: not on banjo_renut_diag_show_texture's views
   cmd->setGraphicsPushConstants(0, &push, 0, sizeof(push));
@@ -328,19 +332,27 @@ void RecordScanOut(VideoState &s, const PresentImage &image, uint32_t out_w, uin
 
 // banjo-nx: the test captures (banjo_renut_capture.h). CaptureFrame asks; the next Present, minimized or not, scans
 // the guest image out once more into an offscreen target of the frame's size and reads it back.
-struct FrameCapture {
-  std::mutex mutex;
-  std::condition_variable cv;
-  std::atomic<uint64_t> requested{0};
-  uint64_t served = 0;  // under mutex
-  bool ok = false;
-  rex::ui::RawImage image;
-  // Render thread only. Kept between captures of one size (the recording takes one per frame); never in flight
-  // between them, as each capture waits for the GPU.
+// futari_recomp (2026-11-10): a capture's offscreen target, one for the frame and one for the output capture.
+// Render thread only. Kept between captures of one size (the recording takes one per frame); never in flight between
+// them, as each capture waits for the GPU.
+struct CaptureTarget {
   std::unique_ptr<plume::RenderTexture> target;
   std::unique_ptr<plume::RenderFramebuffer> framebuffer;
   std::unique_ptr<plume::RenderBuffer> readback;
   uint32_t width = 0, height = 0, row_texels = 0;
+};
+struct FrameCapture {
+  std::mutex mutex;
+  std::condition_variable cv;
+  std::atomic<uint64_t> requested{0};
+  // futari_recomp (2026-11-10): the last ticket that also asked for the output capture; set before its request.
+  std::atomic<uint64_t> output_requested{0};
+  uint64_t served = 0;  // under mutex
+  bool ok = false;
+  rex::ui::RawImage image;
+  rex::ui::RawImage output_image;  // futari_recomp (2026-11-10): empty when it was not asked for or failed
+  CaptureTarget frame_target;   // futari_recomp (2026-11-10): the fields moved into CaptureTarget
+  CaptureTarget output_target;  // futari_recomp (2026-11-10)
   uint64_t served_render = 0;
 };
 FrameCapture g_capture;
@@ -348,12 +360,15 @@ FrameCapture g_capture;
 // The present pipeline's format (kSwapChainFormat in video.cpp).
 constexpr plume::RenderFormat kCaptureFormat = plume::RenderFormat::B8G8R8A8_UNORM;
 
-bool CaptureFrameLocked(VideoState &s, const PresentImage &image, rex::ui::RawImage &out) {
-  const uint32_t w = image.source_width ? image.source_width : image.width;
-  const uint32_t h = image.source_height ? image.source_height : image.height;
+// futari_recomp (2026-11-10): out_w x out_h non-zero = the output capture, the scan-out at that (the swapchain's)
+// size into its own target, bars cleared to black as the present clears them; otherwise the frame at its own size.
+bool CaptureFrameLocked(VideoState &s, const PresentImage &image, rex::ui::RawImage &out, CaptureTarget &c,
+                        uint32_t out_w = 0, uint32_t out_h = 0) {
+  const bool output = out_w && out_h;
+  const uint32_t w = output ? out_w : image.source_width ? image.source_width : image.width;
+  const uint32_t h = output ? out_h : image.source_height ? image.source_height : image.height;
   if (!w || !h || !Video::EnsureCommandListLocked())
     return false;
-  FrameCapture &c = g_capture;
   if (!c.target || c.width != w || c.height != h) {
     c.framebuffer.reset();
     c.target.reset();
@@ -380,7 +395,7 @@ bool CaptureFrameLocked(VideoState &s, const PresentImage &image, rex::ui::RawIm
   bool raw = false;
   bool raw_rgba = false;  // the frame texture's bytes are R G B A (else B G R A, as the scan-out's readback)
 #if defined(PLUME_DEKO3D)
-  if (REXCVAR_GET(banjo_renut_capture_raw) && IsDeko3D()) {
+  if (!output && REXCVAR_GET(banjo_renut_capture_raw) && IsDeko3D()) {  // futari_recomp (2026-11-10): not the output's
     const auto *t = static_cast<const plume::Deko3DTexture *>(image.texture);
     if (t && t->valid) {
       switch (t->desc.format) {
@@ -414,6 +429,8 @@ bool CaptureFrameLocked(VideoState &s, const PresentImage &image, rex::ui::RawIm
   cmd->barriers(plume::RenderBarrierStage::GRAPHICS,
                 plume::RenderTextureBarrier(c.target.get(), plume::RenderTextureLayout::COLOR_WRITE));
   cmd->setFramebuffer(c.framebuffer.get());
+  if (output)  // futari_recomp (2026-11-10)
+    cmd->clearColor(0, plume::RenderColor(0.0f, 0.0f, 0.0f, 1.0f));
   RecordScanOut(s, image, w, h);
   cmd->setFramebuffer(nullptr);
   cmd->barriers(plume::RenderBarrierStage::COPY,
@@ -455,11 +472,20 @@ void ServeCaptureLocked(VideoState &s, const PresentImage *image) {
   if (requested == c.served_render || !image || !image->texture || image->descriptor == kInvalidDescriptor)
     return;
   rex::ui::RawImage out;
-  const bool ok = CaptureFrameLocked(s, *image, out);
+  const bool ok = CaptureFrameLocked(s, *image, out, c.frame_target);
+  // futari_recomp (2026-11-10): the output capture of the same frame, at the size PresentLocked scans out to (none
+  // while minimized).
+  rex::ui::RawImage output;
+  const uint32_t out_w = s.swap_framebuffers.empty() ? 0 : s.swap_chain->getWidth();
+  const uint32_t out_h = s.swap_framebuffers.empty() ? 0 : s.swap_chain->getHeight();
+  if (c.output_requested.load(std::memory_order_acquire) > c.served_render && out_w && out_h &&
+      !CaptureFrameLocked(s, *image, output, c.output_target, out_w, out_h))
+    output = {};
   c.served_render = requested;
   {
     std::lock_guard lock(c.mutex);
     c.image = std::move(out);
+    c.output_image = std::move(output);
     c.ok = ok;
     c.served = requested;
   }
@@ -487,6 +513,16 @@ bool DiagTextureImageLocked(PresentImage &out) {
   return true;
 }
 
+// futari_recomp (2026-11-10): OutputSize's value, width in the high half: one word, so a reader never sees a width
+// from one swapchain with the height of another.
+std::atomic<uint64_t> g_output_size{0};
+
+void NoteOutputSize(const VideoState &s) {
+  const uint32_t w = s.swap_chain->getWidth(), h = s.swap_chain->getHeight();
+  if (w && h)
+    g_output_size.store(uint64_t(w) << 32 | h, std::memory_order_release);
+}
+
 // Records the back-buffer pass and presents. Caller holds s.mutex.
 void PresentLocked(VideoState &s, const PresentImage *image) {
   // Logs, once, why the GPU stopped if an earlier submission faulted.
@@ -495,8 +531,10 @@ void PresentLocked(VideoState &s, const PresentImage *image) {
   if (image && DiagTextureImageLocked(diag_image))
     image = &diag_image;
   ApplyVsync(s);
-  if (s.swap_chain->needsResize() || s.resize_requested.exchange(false, std::memory_order_acq_rel))
+  if (s.swap_chain->needsResize() || s.resize_requested.exchange(false, std::memory_order_acq_rel)) {
     RebuildSwapChain(s);
+    NoteOutputSize(s);  // futari_recomp (2026-11-10)
+  }
   PrepareGameGammaLocked(s);     // banjo-nx (2026-10-20, banjo_renut_game_gamma)
   ServeCaptureLocked(s, image);  // banjo-nx: test captures (banjo_renut_capture.h)
   if (s.swap_framebuffers.empty()) {
@@ -531,6 +569,7 @@ void PresentLocked(VideoState &s, const PresentImage *image) {
   plume::RenderFramebuffer *back_fb = s.swap_framebuffers[image_index].get();
   const uint32_t out_w = s.swap_chain->getWidth();
   const uint32_t out_h = s.swap_chain->getHeight();
+  NoteOutputSize(s);  // futari_recomp (2026-11-10): the first swapchain, built before any resize
 
   cmd->barriers(plume::RenderBarrierStage::GRAPHICS,
                 plume::RenderTextureBarrier(back, plume::RenderTextureLayout::COLOR_WRITE));
@@ -593,6 +632,12 @@ PresentedFrame LastPresentedFrame() {
       return {v[0], v[1], v[2], v[3], v[4], v[5]};
   }
   return {};
+}
+
+// futari_recomp (2026-11-10): see presented_frame.h.
+OutputPixels OutputSize() {
+  const uint64_t v = g_output_size.load(std::memory_order_acquire);
+  return {uint32_t(v >> 32), uint32_t(v)};
 }
 
 namespace {
@@ -797,13 +842,19 @@ void Video::PresentOverlayOnly() {
   PresentLocked(s, image.texture ? &image : nullptr);
 }
 
-bool CaptureFrame(rex::ui::RawImage &out, int timeout_ms) {
+bool CaptureFrame(rex::ui::RawImage &out, int timeout_ms, rex::ui::RawImage *output) {
   FrameCapture &c = g_capture;
   std::unique_lock lock(c.mutex);
+  // futari_recomp (2026-11-10): asked before the ticket is, so the Present that serves the ticket sees it (requesters
+  // take the ticket under the mutex, one at a time).
+  if (output)
+    c.output_requested.store(c.requested.load(std::memory_order_relaxed) + 1, std::memory_order_release);
   const uint64_t ticket = c.requested.fetch_add(1, std::memory_order_acq_rel) + 1;
   if (!c.cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [&] { return c.served >= ticket; }) || !c.ok)
     return false;
   out = c.image;
+  if (output)
+    *output = c.output_image;  // futari_recomp (2026-11-10): from the same Present as c.image
   return true;
 }
 

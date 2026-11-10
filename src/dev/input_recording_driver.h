@@ -29,8 +29,10 @@ class InputRecordingDriver final : public rex::input::InputDriver {
                                                       std::vector<RecordingLine> lines);
   ~InputRecordingDriver() override;
 
-  // Replay: what a capture line does, and what the end of the file does (both called on the guest thread).
-  void SetHooks(std::function<void()> on_capture, std::function<void()> on_end);
+  // Replay: what a capture line, a window line and the end of the file do (called on the guest thread; captures and
+  // window events in file order).
+  void SetHooks(std::function<void()> on_capture, std::function<void(const WindowEvent&)> on_window,
+                std::function<void()> on_end);
   // Recording: the F9 capture key was pressed.
   void NoteCapture();
   // When the window closes: the recording gets its last line; a replay that did not reach its end says where it
@@ -62,6 +64,7 @@ class InputRecordingDriver final : public rex::input::InputDriver {
   PadState replayed_;
   uint32_t packet_ = 0;
   std::function<void()> on_capture_;
+  std::function<void(const WindowEvent&)> on_window_;
   std::function<void()> on_end_;
 };
 

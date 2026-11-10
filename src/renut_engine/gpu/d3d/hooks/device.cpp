@@ -26,6 +26,7 @@
 #include <deque>
 #include <mutex>
 #include <string>
+#include <unordered_map>  // futari_recomp (2026-11-10)
 #include <utility>
 #include <vector>
 
@@ -135,6 +136,16 @@ std::atomic<u32> g_ring_data_offset{0};
 // of no-hardware devices around every section it loads.
 std::mutex g_free_devices_mutex;
 std::vector<u32> g_free_devices;
+
+// futari_recomp (2026-11-10): SetGuestSwapHook's; and each automatic front buffer's base block size and format, by
+// header (InitializePresentationParameters makes them, ResizeAutoBuffers resizes them).
+std::atomic<void (*)(u32)> g_guest_swap_hook{nullptr};
+struct FrontBufferData {
+  u32 capacity = 0;
+  u32 format = 0;
+};
+std::mutex g_front_buffers_mutex;
+std::unordered_map<u32, FrontBufferData> g_front_buffers;
 
 void WriteU32(u8 *device_bytes, u32 offset, u32 value) {
   *reinterpret_cast<be_u32 *>(device_bytes + offset) = value;
@@ -296,6 +307,10 @@ bool InitializePresentationParameters(native::Device d, u32 parameters_va) {
     if (!texture)
       return false;
     d.SetW(native::off::AutoFrontBuffer, texture);
+    {  // futari_recomp (2026-11-10): for ResizeAutoBuffers
+      std::lock_guard lock(g_front_buffers_mutex);
+      g_front_buffers[texture] = {native::TextureBaseSize(width, height, front_format), front_format};
+    }
   }
   if (!p[14]) {  // DisableAutoBackBuffer
     const u32 surface = native::CreateSurface(width, height, back_format, multisample, 0);
@@ -908,6 +923,10 @@ void D3DDevice_Swap_hook(u32 device_va, u32 front_buffer, u32 /*parameters*/) {
   rex::latency::NoteGuestSwap();  // banjo-nx (2026-10-19, input latency): the probe
   const uint64_t swap_ordinal = rex::latency::SwapCount();
   FlushDeferredVertices(device_va);
+  // futari_recomp (2026-11-10): the game layer's hook, with every draw of the frame queued (a resize it makes drains
+  // them first) and before the frame's own work.
+  if (const auto hook = g_guest_swap_hook.load(std::memory_order_acquire))
+    hook(device_va);
   SnapshotDeltasNewFrame();  // banjo-nx (2026-10-20, from sa2-nx, banjo_renut_snapshot_deltas)
 
   // What the original does after handing the frame to the video hardware:
@@ -1279,6 +1298,82 @@ void SetFence(u32 device_va) {
 }
 
 } // namespace renut::gpu::native
+
+namespace renut::gpu {
+
+// futari_recomp (2026-11-10): see banjo_renut_select.h.
+void SetGuestSwapHook(void (*hook)(uint32_t device)) {
+  g_guest_swap_hook.store(hook, std::memory_order_release);
+}
+
+// futari_recomp (2026-11-10): see banjo_renut_select.h. The guest thread waits for the render thread as QueueFrame
+// already does from the Swap: no render-thread work waits for a guest thread (a fence behind a guest callback is
+// parked until a guest thread runs it, render_thread.cpp), so the drain ends. Then nothing reads the buffers.
+// Every failure changes nothing and warns once per reason.
+bool ResizeAutoBuffers(uint32_t device, uint32_t width, uint32_t height) {
+  enum Reason : size_t { kNoDevice, kZeroSize, kForeignFront, kNoBackRecord, kNoTexture, kNoMemory, kMipBlock, kCount };
+  static std::array<std::atomic<bool>, kCount> warned{};
+  native::Device d = native::DeviceAt(device);
+  const auto fail = [&](Reason reason, const char *why) {
+    if (!warned[reason].exchange(true, std::memory_order_relaxed)) {
+      if (d)
+        RGPU_WARN("Game frame {}x{}: {}; the frame stays {}x{}", width, height, why, d.W(0x35B8), d.W(0x35BC));
+      else
+        RGPU_WARN("Game frame {}x{}: {}", width, height, why);
+    }
+    return false;
+  };
+  if (!d)
+    return fail(kNoDevice, "no device at that address");
+  if (!width || !height)
+    return fail(kZeroSize, "a zero size");
+  if (d.W(0x35B8) == width && d.W(0x35BC) == height)  // the present parameters' size
+    return true;
+  const u32 front = d.W(native::off::AutoFrontBuffer);
+  const u32 back = d.W(native::off::AutoBackBuffer);
+  FrontBufferData data;
+  if (front) {
+    std::lock_guard lock(g_front_buffers_mutex);
+    const auto it = g_front_buffers.find(front);
+    if (it == g_front_buffers.end())
+      return fail(kForeignFront, "the front buffer is not one InitializePresentationParameters made");
+    data = it->second;
+  }
+  RecordKind back_kind{};
+  if (back && (!records::Lookup(back, &back_kind) || back_kind != RecordKind::Surface))
+    return fail(kNoBackRecord, "the back buffer is no surface record");
+  render_thread::Drain();
+  if (front) {
+    native::TextureResizeFailure failure{};
+    const u32 capacity = native::ResizeTexture(front, width, height, data.format, data.capacity, failure);
+    if (!capacity) {
+      switch (failure) {
+        case native::TextureResizeFailure::kNoTexture:
+          return fail(kNoTexture, "the front buffer is not in guest memory");
+        case native::TextureResizeFailure::kMipBlock:
+          return fail(kMipBlock, "the front buffer would need a mip block it never had");
+        default:
+          return fail(kNoMemory, "no memory for the front buffer's larger block");
+      }
+    }
+    if (capacity != data.capacity) {
+      RGPU_INFO("Front buffer {:08X}: a new {}-byte block for {}x{} (was {} bytes)", front, capacity, width, height,
+                data.capacity);
+      std::lock_guard lock(g_front_buffers_mutex);
+      g_front_buffers[front].capacity = capacity;
+    }
+  }
+  if (back) {
+    native::ResizeSurface(back, width, height);  // a surface record, checked above
+    render_thread::Queue([back] { SurfaceHeaderRewrittenLocked(back); });
+  }
+  d.SetW(0x35B8, width);
+  d.SetW(0x35BC, height);
+  RGPU_INFO("Game frame {}x{} at scale 1", width, height);
+  return true;
+}
+
+} // namespace renut::gpu
 
 FUTARI_RENUT_HOOK(D3DDevice_InsertCallback, D3DDevice_InsertCallback_hook);  // N&B sub_821FB688
 FUTARI_RENUT_HOOK(D3DDevice_AddRef, D3DDevice_AddRef_hook);  // N&B sub_8264E068

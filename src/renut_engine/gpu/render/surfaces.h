@@ -109,6 +109,17 @@ void LatchResolutionScaleLocked();
 // on deko3d. Callable from any thread, without State().mutex; before the first
 // latch it answers from the cvar as the latch will.
 bool ResolutionIsOutput();
+// futari_recomp (2026-11-10): renut_resolution = output as asked for now (the cvar, read as the latch reads it; false
+// on deko3d), before the latch takes it. Callable from any thread.
+bool ResolutionRequestsOutput();
+// futari_recomp (2026-11-10): a game layer that must get its frame ready before a new renut_resolution takes effect
+// (resize it). When the cvar asks for a mode other than the latched one, the latch asks 'ready' (on the render
+// thread, State().mutex held) with the mode it would take; false keeps the latched mode this Swap (no rebuild, no
+// log) and asks again at the next. nullptr (the default): every change is taken at once. Callable from any thread.
+void SetResolutionLatchGate(bool (*ready)(bool output, uint32_t scale_code));
+// futari_recomp (2026-11-10): the surface's own header was rewritten to a new size (the automatic back buffer, at a
+// resize): cached lookups are dropped, and it takes no part in the shared-view warning from now on.
+void SurfaceHeaderRewrittenLocked(u32 surface_va);
 
 // The host target for the D3DSurface at 'surface_va', created or rebuilt as
 // needed. nullptr for 0 or when the target cannot be created.

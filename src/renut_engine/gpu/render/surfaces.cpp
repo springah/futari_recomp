@@ -42,6 +42,8 @@ std::atomic<bool> g_resolution_is_output{false};
 std::atomic<bool> g_resolution_is_output_latched{false};
 uint32_t g_logged_width = 0;
 uint32_t g_logged_height = 0;
+// futari_recomp (2026-11-10): SetResolutionLatchGate's.
+std::atomic<bool (*)(bool, uint32_t)> g_latch_gate{nullptr};
 
 struct FramebufferKey {
   const HostSurface *colors[d3d::kMaxRenderTargets] = {};
@@ -108,6 +110,8 @@ constexpr size_t kMaxLoggedTargets = 256;
 std::set<std::pair<uint64_t, u32>> g_logged_targets;
 std::unordered_map<u32, u32> g_surface_sizes;
 bool g_shared_view_warned = false;
+// futari_recomp (2026-11-10): surfaces whose own header was resized (SurfaceHeaderRewrittenLocked): not compared.
+std::set<u32> g_resized_surfaces;
 // SetTilingExtentLocked; 0 x 0 when not tiling.
 uint32_t g_tiling_width = 0;
 uint32_t g_tiling_height = 0;
@@ -262,8 +266,10 @@ void LogTarget(u32 surface_va, const d3d::SurfaceDesc &desc, uint64_t key, const
 // surface larger than the EDRAM at base 0 can be) draws both into one host texture. Warned once per process.
 void CheckSharedView(u32 surface_va, const d3d::SurfaceDesc &desc, uint64_t key) {
   const u32 size = desc.Size;
+  if (g_resized_surfaces.count(surface_va))  // futari_recomp (2026-11-10)
+    return;
   for (const auto &[va, other_key] : g_surface_keys) {
-    if (va == surface_va || other_key != key)
+    if (va == surface_va || other_key != key || g_resized_surfaces.count(va))
       continue;
     const auto other = g_surface_sizes.find(va);
     if (other == g_surface_sizes.end() || other->second == size)
@@ -310,6 +316,12 @@ void LatchResolutionScaleLocked() {
     scale = {};
     output = false;
   }
+  // futari_recomp (2026-11-10): a game layer's gate holds a mode change until its frame is ready for it.
+  if (g_resolution_latched &&
+      (scale != g_resolution_scale || output != g_resolution_is_output.load(std::memory_order_relaxed))) {
+    if (const auto ready = g_latch_gate.load(std::memory_order_acquire); ready && !ready(output, scale.code))
+      return;
+  }
   // futari_recomp (2026-11-07): the log prints the automatic back buffer's size, once the title device has made it.
   uint32_t width = 0, height = 0;
   if (const u32 device_va = Video::GuestDevice()) {
@@ -349,6 +361,20 @@ bool ResolutionIsOutput() {
     return before_latch;
   }
   return g_resolution_is_output.load(std::memory_order_acquire);
+}
+
+// futari_recomp (2026-11-10): the mode the cvar asks for now, as the latch reads it.
+bool ResolutionRequestsOutput() {
+  return !IsDeko3D() && REXCVAR_GET(renut_resolution) == "output";
+}
+
+void SetResolutionLatchGate(bool (*ready)(bool output, uint32_t scale_code)) {
+  g_latch_gate.store(ready, std::memory_order_release);
+}
+
+void SurfaceHeaderRewrittenLocked(u32 surface_va) {
+  g_resized_surfaces.insert(surface_va);
+  ++g_surface_epoch;
 }
 
 void SetTilingExtentLocked(uint32_t width, uint32_t height) {
@@ -544,6 +570,7 @@ void ReleaseHostSurfaceLocked(u32 surface_va) {
   const uint64_t key = it->second;
   g_surface_keys.erase(it);
   g_surface_sizes.erase(surface_va);  // futari_recomp (2026-11-07)
+  g_resized_surfaces.erase(surface_va);  // futari_recomp (2026-11-10)
   ++g_surface_epoch;
   UnuseTarget(key);
 }

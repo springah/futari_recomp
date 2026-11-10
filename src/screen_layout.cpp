@@ -5,7 +5,10 @@
 // the presentation block. Under a preset, on the xenos plugin (also after the stale-package fallback) and on deko3d
 // they write nothing. Under the same gate the menu wallpaper covers the frame at every aspect, every frame without
 // it is cleared, the title's background covers the frame too, and the frame around any other full-screen picture
-// is filled: the boot logos' own edge, black around the rest (the overrides at the end).
+// is filled: the boot logos' own edge, black around the rest (the overrides at the end). On Renut a swap hook
+// follows the window: a settled new output size resizes the device's buffers, then the same fields are rewritten.
+// It also switches between output and a preset at once (to the output, or to the game's own table frame), and holds
+// Renut's switch of scale until the frame is made for it.
 
 #include "generated/default/futari_init.h"
 
@@ -21,6 +24,10 @@
 #include <rex/logging.h>
 
 #if FUTARI_RENUT_RENDERER
+#include <rex/ppc.h>
+#include <rex/system/kernel_state.h>
+
+#include "renut_engine/gpu/backend/presented_frame.h"
 #include "renut_engine/gpu/banjo_renut_select.h"
 #endif
 
@@ -40,7 +47,11 @@ using futari::screen_layout::CanvasSprite;
 using futari::screen_layout::ClampFrame;
 using futari::screen_layout::ClassifyPicture;
 using futari::screen_layout::CoverPicture;
+using futari::screen_layout::FrameApplied;
+using futari::screen_layout::FrameMode;
+using futari::screen_layout::FrameReady;
 using futari::screen_layout::FrameSize;
+using futari::screen_layout::FrameTarget;
 using futari::screen_layout::IsFullCanvasPicture;
 using futari::screen_layout::IsWidescreen;
 using futari::screen_layout::kCanvasBandReach;
@@ -48,6 +59,10 @@ using futari::screen_layout::kLogoArmed;
 using futari::screen_layout::kNarrowUiCentring;
 using futari::screen_layout::ParseFrameSize;
 using futari::screen_layout::PictureDraw;
+using futari::screen_layout::PlanFrame;
+using futari::screen_layout::PresetTargets;
+using futari::screen_layout::ResizeTargets;
+using futari::screen_layout::ResizeValues;
 using futari::screen_layout::UiDesignHeight;
 using futari::screen_layout::WallpaperCover;
 using futari::screen_layout::WallpaperQuad;
@@ -104,6 +119,12 @@ std::atomic<uint64_t> g_configured_size{0};
 std::atomic<uint64_t> g_window_size{0};
 
 uint64_t Pack(uint32_t width, uint32_t height) { return uint64_t(width) << 32 | height; }
+FrameSize Unpack(uint64_t size) { return {uint32_t(size >> 32), uint32_t(size)}; }
+
+// The frame the game draws now: the boot size (the table's under a preset), then each live resize's. 0 = not booted.
+std::atomic<uint64_t> g_current_frame{0};
+// The mode that frame is made for: true output, false a preset. Read by the latch's gate on the render thread.
+std::atomic<bool> g_frame_output{false};
 
 bool OutputFrameActive() {
 #if FUTARI_RENUT_RENDERER
@@ -146,6 +167,7 @@ FrameSize BootFrameSize() {
   }
   REXLOG_INFO("Game frame {}x{} (output, from {}, {})", frame.width, frame.height, source,
               IsWidescreen(frame.width, frame.height) ? "widescreen" : "4:3 branches");
+  g_current_frame.store(Pack(frame.width, frame.height), std::memory_order_release);
   return frame;
 }
 
@@ -154,6 +176,158 @@ FrameSize BootFrame() {
   static const FrameSize frame = BootFrameSize();
   return frame;
 }
+
+// For the writers that follow a live resize.
+FrameSize CurrentFrame() {
+  const uint64_t size = g_current_frame.load(std::memory_order_acquire);
+  return size ? Unpack(size) : BootFrame();
+}
+
+#if FUTARI_RENUT_RENDERER
+// The renderer object (inferred: the global the UI matrix sub_8216DD68 takes it from): +72 the mode its centred rect
+// was built with (sub_8216B6A8), +128/+132 its constructor's float copy of block +64/+68, +152 the game device.
+constexpr uint32_t kRendererObject = 0x821F85B0;
+constexpr uint32_t kRendererMode = 72;
+constexpr uint32_t kRendererWidth = 128;
+constexpr uint32_t kRendererHeight = 132;
+constexpr uint32_t kRendererDevice = 152;
+// The game device's UI scale (its constructor's H / block +80), read every frame by the UI matrix.
+constexpr uint32_t kDeviceUiScale = 556;
+
+uint8_t* GuestBase() { return rex::system::kernel_state()->memory()->virtual_membase(); }
+
+// The size futari_dev_frame_size names: under output the frame stays at it.
+std::optional<FrameSize> DevFrame() {
+  static const std::optional<FrameSize> frame = ParseFrameSize(REXCVAR_GET(futari_dev_frame_size));
+  return frame;
+}
+
+// The renderer object, when its frame floats are 'frame' (so it is the object the constructor filled): else 0.
+uint32_t RendererAt(uint8_t* base, FrameSize frame) {
+  const uint32_t renderer = REX_LOAD_U32(kRendererObject);
+  if (renderer == 0 || REX_LOAD_U32(renderer + kRendererDevice) == 0 ||
+      REX_LOAD_U32(renderer + kRendererWidth) != std::bit_cast<uint32_t>(float(frame.width)) ||
+      REX_LOAD_U32(renderer + kRendererHeight) != std::bit_cast<uint32_t>(float(frame.height))) {
+    return 0;
+  }
+  return renderer;
+}
+
+// Once, at the first swap: what the renderer object holds against the block, for the run's log.
+void LogRendererOnce(uint8_t* base) {
+  static bool logged = false;
+  if (logged) {
+    return;
+  }
+  logged = true;
+  const uint32_t renderer = REX_LOAD_U32(kRendererObject);
+  if (renderer == 0) {
+    REXLOG_INFO("Renderer object: none at {:08X}", kRendererObject);
+    return;
+  }
+  REXLOG_INFO("Renderer object {:08X}: frame floats {}x{}, device {:08X}; block frame {}x{}", renderer,
+              std::bit_cast<float>(REX_LOAD_U32(renderer + kRendererWidth)),
+              std::bit_cast<float>(REX_LOAD_U32(renderer + kRendererHeight)),
+              REX_LOAD_U32(renderer + kRendererDevice), REX_LOAD_U32(kPresentationBlock + 64),
+              REX_LOAD_U32(kPresentationBlock + 68));
+}
+
+// The frame size this swap should resize to, and its mode, or nothing (PlanFrame's rules): a new renut_resolution
+// at once, else under output the output's size once it has settled.
+std::optional<FrameTarget> NextFrame(FrameMode& mode, FrameSize reported) {
+  const bool output = renut::gpu::ResolutionRequestsOutput();
+  const renut::gpu::OutputPixels size = renut::gpu::OutputSize();
+  const FrameSize clamped = ClampFrame(size.width, size.height);
+  static bool warned = false;
+  if (output && !warned && size.width && size.height &&
+      (clamped.width != size.width || clamped.height != size.height)) {
+    warned = true;
+    REXLOG_WARN("Game frame: the output {}x{} is outside 640..8192 x 480..8192; the game draws {}x{}", size.width,
+                size.height, clamped.width, clamped.height);
+  }
+  return PlanFrame(mode, output, {size.width, size.height}, DevFrame(), reported);
+}
+
+// After the device's buffers are v's size: the game's own copies of the frame, in the order a boot fills them. The
+// renderer object (and the device it holds) only when it still holds 'from', so a wrong guess is never written.
+void WriteFrame(FrameSize from, const ResizeValues& v) {
+  uint8_t* const base = GuestBase();
+  const uint32_t renderer = RendererAt(base, from);
+  REX_STORE_U32(kPresentationBlock + 64, v.width);
+  REX_STORE_U32(kPresentationBlock + 68, v.height);
+  REX_STORE_U8(kPresentationBlock + 73, v.widescreen);
+  REX_STORE_U32(kPresentationBlock + 80, std::bit_cast<uint32_t>(v.ui_design_height));
+  REX_STORE_U32(kScreenWidth, std::bit_cast<uint32_t>(v.screen_width));
+  REX_STORE_U32(kScreenHeight, std::bit_cast<uint32_t>(v.screen_height));
+  REX_STORE_U32(kWidescreenFlag, v.widescreen_flag);
+  if (renderer != 0) {
+    REX_STORE_U32(REX_LOAD_U32(renderer + kRendererDevice) + kDeviceUiScale, std::bit_cast<uint32_t>(v.ui_scale));
+    REX_STORE_U32(renderer + kRendererWidth, std::bit_cast<uint32_t>(v.renderer_width));
+    REX_STORE_U32(renderer + kRendererHeight, std::bit_cast<uint32_t>(v.renderer_height));
+    // Rebuilds its centred rect (+76..+104) from the block.
+    rex::ppc::GuestToHostFunction<void>(sub_8216B6A8, renderer, REX_LOAD_U32(renderer + kRendererMode));
+  } else {
+    static bool warned = false;
+    if (!warned) {
+      warned = true;
+      REXLOG_WARN("Game frame: the renderer object at {:08X} doesn't hold the {}x{} frame; its frame and the UI "
+                  "scale are left as they are",
+                  kRendererObject, from.width, from.height);
+    }
+  }
+  g_current_frame.store(Pack(v.width, v.height), std::memory_order_release);
+}
+
+const char* ModeName(bool output) { return output ? "output" : "preset"; }
+
+// Every Swap, on the guest thread before the frame is queued: a switch between output and a preset resizes the
+// game's frame at once; under output (without a fixed dev size) a settled window size resizes it live.
+void GuestSwap(uint32_t device) {
+  const uint64_t current = g_current_frame.load(std::memory_order_acquire);
+  if (current == 0) {
+    return;
+  }
+  uint8_t* const base = GuestBase();
+  LogRendererOnce(base);
+  static FrameMode mode = [current] {
+    const bool output = g_frame_output.load(std::memory_order_acquire);
+    return FrameMode{{Unpack(current), Unpack(current), 0}, output, output};
+  }();
+  // The mode the game reported at boot (+56/+60, left alone by the post-patch): the window doesn't change it.
+  const FrameSize reported{REX_LOAD_U32(kPresentationBlock + 56), REX_LOAD_U32(kPresentationBlock + 60)};
+  const std::optional<FrameTarget> target = NextFrame(mode, reported);
+  if (!target) {
+    return;
+  }
+  const FrameSize from = mode.settle.frame;
+  const bool switched = target->output != mode.output;
+  // On failure Renut has warned and nothing changed: the old frame (and mode: the gate stays closed) stays until the
+  // size or the mode asked for changes again.
+  if (!renut::gpu::ResizeAutoBuffers(device, target->frame.width, target->frame.height)) {
+    if (switched) {
+      REXLOG_WARN("Game frame: the switch to {} ({}x{}) failed; {} {}x{} stays", ModeName(target->output),
+                  target->frame.width, target->frame.height, ModeName(mode.output), from.width, from.height);
+    }
+    return;
+  }
+  WriteFrame(from, target->output ? ResizeTargets(target->frame.width, target->frame.height)
+                                  : PresetTargets(reported.width, reported.height));
+  FrameApplied(mode, *target);
+  g_frame_output.store(target->output, std::memory_order_release);
+  if (switched) {
+    REXLOG_INFO("Game frame {}x{} ({}, switched from {} {}x{})", target->frame.width, target->frame.height,
+                ModeName(target->output), ModeName(!target->output), from.width, from.height);
+  } else {
+    REXLOG_INFO("Game frame {}x{} (output, live resize from {}x{})", target->frame.width, target->frame.height,
+                from.width, from.height);
+  }
+}
+
+// Renut's latch gate (render thread): a new renut_resolution is taken once the game's frame is made for it.
+bool FrameReadyFor(bool output, uint32_t) {
+  return FrameReady(g_frame_output.load(std::memory_order_acquire), output);
+}
+#endif
 
 }  // namespace
 
@@ -175,6 +349,22 @@ void SetWindowPixelSize(uint32_t width, uint32_t height) {
 REX_EXTERN(__imp__sub_8216EBE8);
 extern "C" REX_FUNC(sub_8216EBE8) {
   __imp__sub_8216EBE8(ctx, base);
+#if FUTARI_RENUT_RENDERER
+  if (banjo::renut_gpu::Active()) {
+    static const bool registered = [] {
+      g_frame_output.store(OutputFrameActive(), std::memory_order_release);
+      renut::gpu::SetResolutionLatchGate(&FrameReadyFor);
+      renut::gpu::SetGuestSwapHook(&GuestSwap);
+      return true;
+    }();
+    (void)registered;
+    // Under a preset the game's own table frame is the current frame.
+    if (!OutputFrameActive()) {
+      g_current_frame.store(Pack(REX_LOAD_U32(kPresentationBlock + 64), REX_LOAD_U32(kPresentationBlock + 68)),
+                            std::memory_order_release);
+    }
+  }
+#endif
   if (!OutputFrameActive()) {
     return;
   }
@@ -342,7 +532,7 @@ extern "C" REX_FUNC(sub_8216DAA0) {
     __imp__sub_8216DAA0(ctx, base);
   };
   if (draw == PictureDraw::kCover) {
-    const FrameSize frame = BootFrame();
+    const FrameSize frame = CurrentFrame();
     draw_copy(CoverPicture(picture, frame.width, frame.height));
   } else {
     __imp__sub_8216DAA0(ctx, base);

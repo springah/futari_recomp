@@ -184,6 +184,20 @@ u32 CreateSurface(u32 width, u32 height, u32 format, u32 multisample, u32 parame
 // futari-nx: D3DDevice_CreateTexture(Width, Height, Depth, Levels, Usage, D3DFORMAT, Pool, D3DRESOURCETYPE): the new
 // texture, or 0.
 u32 CreateTexture(u32 width, u32 height, u32 depth, u32 levels, u32 usage, u32 format, u32 pool, u32 type);
+// futari_recomp (2026-11-10): a resize in place (the automatic buffers; the GPU must be idle). The surface, made by
+// CreateSurface without parameters, gets the header for the new size with its common and reference words kept; its
+// EDRAM is given back and reserved again as CreateSurface reserves it. False when surface_va is no surface record
+// (then nothing changed).
+bool ResizeSurface(u32 surface_va, u32 width, u32 height);
+// Why ResizeTexture changed nothing.
+enum class TextureResizeFailure : u8 { kNone, kNoTexture, kNoMemory, kMipBlock };
+// The texture, made by CreateTexture(width, height, 1, 1, 0, format, 0, 3) with a base block of 'capacity' bytes,
+// gets the header for the new size with its common and reference words kept; the block is kept when the new size
+// fits, else a new one is allocated first and the old one freed. Returns the block's capacity now, or 0 with the
+// reason in 'failure' (then nothing changed).
+u32 ResizeTexture(u32 texture_va, u32 width, u32 height, u32 format, u32 capacity, TextureResizeFailure &failure);
+// The base block CreateTexture(width, height, 1, 1, 0, format, 0, 3) allocates, in bytes.
+u32 TextureBaseSize(u32 width, u32 height, u32 format);
 // D3DResource_AddRef (a texture level's first reference is one on its texture).
 u32 AddRefResource(u32 resource);
 

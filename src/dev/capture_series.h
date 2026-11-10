@@ -21,6 +21,13 @@ inline std::string CaptureFileName(std::string_view stem, uint32_t number, uint3
   return std::string(stem) + "_" + digits + "_" + std::to_string(width) + "x" + std::to_string(height) + ".ppm";
 }
 
+// The presented picture taken with frame capture `number`: <stem>_NNN_<W>x<H>_output.ppm at the picture's own size.
+// Not a number of the series (CaptureNumber ignores it).
+inline std::string CaptureOutputFileName(std::string_view stem, uint32_t number, uint32_t width, uint32_t height) {
+  std::string name = CaptureFileName(stem, number, width, height);
+  return name.insert(name.size() - 4, "_output");
+}
+
 // The number of a capture of this stem's series, or nothing for any other file name. Stem, 'x' and ".ppm" match in any
 // ASCII case, as the Windows file system the series writes into does: a case variant is the same file.
 inline std::optional<uint32_t> CaptureNumber(std::string_view stem, std::string_view name) {

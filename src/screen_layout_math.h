@@ -103,6 +103,144 @@ constexpr float UiDesignHeight(uint32_t w, uint32_t h) {
 // The UI's scale in frame pixels per design unit: h / 720, or w / 960 below 4:3.
 constexpr float UiScale(uint32_t w, uint32_t h) { return float(double(h) / UiDesignHeight(w, h)); }
 
+// Every value a live resize to w x h writes, in the guest's own types.
+struct ResizeValues {
+  uint32_t width = 0;  // the presentation block's +64/+68
+  uint32_t height = 0;
+  uint8_t widescreen = 0;      // block +73
+  float ui_design_height = 0;  // block +80
+  float screen_width = 0;      // the screen-size floats
+  float screen_height = 0;
+  uint32_t widescreen_flag = 0;  // the game's widescreen flag
+  float ui_scale = 0;            // the game device's UI scale (H / block +80)
+  float renderer_width = 0;      // the renderer object's frame floats
+  float renderer_height = 0;
+};
+
+// The values a boot at w x h ends with: the frame, the widescreen rule, the design height (720 at 4:3 or wider) and
+// the scale the device constructor divides from it (in single precision, as the game's fdivs).
+constexpr ResizeValues ResizeTargets(uint32_t w, uint32_t h) {
+  const bool wide = IsWidescreen(w, h);
+  const float design = UiDesignHeight(w, h);
+  return {w,        h,        uint8_t(wide ? 1 : 0), design, float(w), float(h), wide ? 1u : 0u, float(h) / design,
+          float(w), float(h)};
+}
+
+// A new output size is applied once it has been seen for this many non-zero swaps since the size last changed (a
+// drag resizes once; a 0x0 swap neither counts nor resets).
+inline constexpr uint32_t kResizeSettleFrames = 10;
+
+// The settle rule's state: the frame the game draws now, the size seen since and for how many swaps.
+struct ResizeSettle {
+  FrameSize frame;
+  FrameSize pending;
+  uint32_t swaps = 0;
+};
+
+// One swap with the output at w x h: the clamped size to resize to, on the swap it has been seen for the settle time;
+// else nothing. 0x0 (minimised) is ignored; a return to the frame cancels; the caller sets s.frame once a resize
+// succeeds, and a size that failed is asked for again only after another size.
+constexpr std::optional<FrameSize> SettleResize(ResizeSettle& s, uint32_t w, uint32_t h) {
+  if (w == 0 || h == 0) {
+    return std::nullopt;
+  }
+  const FrameSize seen = ClampFrame(w, h);
+  if (seen == s.frame) {
+    s.pending = seen;
+    s.swaps = 0;
+    return std::nullopt;
+  }
+  if (seen != s.pending) {
+    s.pending = seen;
+    s.swaps = 0;
+  }
+  if (s.swaps < kResizeSettleFrames && ++s.swaps == kResizeSettleFrames) {
+    return seen;
+  }
+  return std::nullopt;
+}
+
+// The game's own frame for a reported mode of w x h (its 3-entry table): not 4:3 or wider 1920x960, wider than 1280
+// 1920x1080, else 1280x720.
+constexpr FrameSize TableFrame(uint32_t w, uint32_t h) {
+  if (!IsWidescreen(w, h)) {
+    return {1920, 960};
+  }
+  return w > 1280 ? FrameSize{1920, 1080} : FrameSize{1280, 720};
+}
+
+// The values a boot under a preset ends with for a reported mode of w x h: the table frame, the reported mode's
+// widescreen rule (the game's byte and flag; 1920x960 is wider than 4:3 but comes from a 4:3 mode), the 720-high
+// design.
+constexpr ResizeValues PresetTargets(uint32_t w, uint32_t h) {
+  const FrameSize frame = TableFrame(w, h);
+  ResizeValues v = ResizeTargets(frame.width, frame.height);
+  const bool wide = IsWidescreen(w, h);
+  v.widescreen = uint8_t(wide ? 1 : 0);
+  v.widescreen_flag = wide ? 1u : 0u;
+  v.ui_design_height = kUiDesignHeight;
+  v.ui_scale = float(frame.height) / kUiDesignHeight;
+  return v;
+}
+
+// The swap hook's state: the settle rule (its frame is the frame the game draws now), the mode that frame was made
+// for (output or a preset) and the mode last asked for.
+struct FrameMode {
+  ResizeSettle settle;
+  bool output = false;
+  bool requested = false;
+};
+
+// A frame to resize to, and the mode it is for.
+struct FrameTarget {
+  FrameSize frame;
+  bool output = false;
+};
+
+// One swap with the mode asked for ('output' or a preset), the output's size, the forced dev size and the reported
+// mode: the frame to resize to now, or nothing. A new request is one event: it skips the settle and drops a pending
+// one, and targets the output (the forced size; the frame it has while there is no output size) or the table frame;
+// a request for the mode the frame already has needs nothing. Under a preset the window changes nothing; under output
+// it settles, unless the size is forced. The caller calls FrameApplied once the resize succeeds; a failed one keeps
+// the old mode until the next request.
+constexpr std::optional<FrameTarget> PlanFrame(FrameMode& m, bool output, FrameSize output_size,
+                                               std::optional<FrameSize> forced, FrameSize reported) {
+  if (output != m.requested) {
+    m.requested = output;
+    m.settle.pending = m.settle.frame;
+    m.settle.swaps = 0;
+    if (output == m.output) {
+      return std::nullopt;
+    }
+    if (!output) {
+      return FrameTarget{TableFrame(reported.width, reported.height), false};
+    }
+    if (forced) {
+      return FrameTarget{ClampFrame(forced->width, forced->height), true};
+    }
+    if (output_size.width == 0 || output_size.height == 0) {
+      return FrameTarget{m.settle.frame, true};
+    }
+    return FrameTarget{ClampFrame(output_size.width, output_size.height), true};
+  }
+  if (!output || !m.output || forced) {
+    return std::nullopt;
+  }
+  if (const std::optional<FrameSize> frame = SettleResize(m.settle, output_size.width, output_size.height)) {
+    return FrameTarget{*frame, true};
+  }
+  return std::nullopt;
+}
+
+// The resize to 't' succeeded: the frame and its mode.
+constexpr void FrameApplied(FrameMode& m, FrameTarget t) {
+  m.settle.frame = t.frame;
+  m.output = t.output;
+}
+
+// The latch's gate: a mode is taken only once the frame is made for it (preset to preset needs no new frame).
+constexpr bool FrameReady(bool frame_output, bool output) { return frame_output == output; }
+
 // Where the present put the game's frame, in output pixels; zero size = none.
 struct FrameRect {
   uint32_t x = 0;

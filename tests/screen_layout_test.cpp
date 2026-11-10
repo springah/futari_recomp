@@ -32,8 +32,23 @@
 // at least 1, that covers the frame's design canvas; texels and colours stay.
 // The logo's texture is checked first, then the title's; the title's load ends
 // a logo that has drawn no picture yet.
+//
+// A live resize writes the values a boot at the new size would (block, floats,
+// flag, the device's UI scale, the renderer's frame floats). It asks for a size
+// once it has been seen, clamped, for 10 swaps in a row; 0x0 is ignored, a
+// return to the current frame does nothing, a failed size is asked for again
+// only after another size.
+//
+// Under a preset the game draws its own table frame for the reported mode
+// (not 4:3 or wider: 1920x960; wider than 1280: 1920x1080; else 1280x720), with
+// the reported mode's widescreen rule and the 720-high design. A switch between
+// output and a preset resizes at once, to the table frame or to the output (or
+// the forced dev size), and drops a pending window settle; under a preset the
+// window changes nothing. The latch takes the new mode only once the frame is
+// made for it; a switch that failed keeps the old mode until the next request.
 #include "screen_layout_math.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -50,8 +65,12 @@ using futari::screen_layout::ArmTitle;
 using futari::screen_layout::ClampFrame;
 using futari::screen_layout::ClassifyPicture;
 using futari::screen_layout::CoverPicture;
+using futari::screen_layout::FrameApplied;
+using futari::screen_layout::FrameMode;
+using futari::screen_layout::FrameReady;
 using futari::screen_layout::FrameRect;
 using futari::screen_layout::FrameSize;
+using futari::screen_layout::FrameTarget;
 using futari::screen_layout::HintAnchor;
 using futari::screen_layout::HintPoint;
 using futari::screen_layout::IsFullCanvasPicture;
@@ -62,10 +81,18 @@ using futari::screen_layout::kLogoArmed;
 using futari::screen_layout::kTitleArmed;
 using futari::screen_layout::kNarrowUiCentring;
 using futari::screen_layout::kUi4x3ContentWidth;
+using futari::screen_layout::kResizeSettleFrames;
 using futari::screen_layout::kUiDesignHeight;
 using futari::screen_layout::ParseFrameSize;
 using futari::screen_layout::PictureDraw;
 using futari::screen_layout::PictureFill;
+using futari::screen_layout::PlanFrame;
+using futari::screen_layout::PresetTargets;
+using futari::screen_layout::ResizeSettle;
+using futari::screen_layout::ResizeTargets;
+using futari::screen_layout::ResizeValues;
+using futari::screen_layout::SettleResize;
+using futari::screen_layout::TableFrame;
 using futari::screen_layout::UiDesignHeight;
 using futari::screen_layout::UiScale;
 using futari::screen_layout::WallpaperCover;
@@ -555,6 +582,267 @@ void TitleLoadEndsTheLogosArming() {
         std::to_string(logo));
 }
 
+bool Near(float got, double want) { return std::fabs(double(got) - want) < 1e-5 * std::max(1.0, std::fabs(want)); }
+
+std::string Text(const ResizeValues& v) {
+  return std::to_string(v.width) + "x" + std::to_string(v.height) + " wide " + std::to_string(v.widescreen) +
+         " design " + std::to_string(v.ui_design_height) + " floats " + std::to_string(v.screen_width) + "x" +
+         std::to_string(v.screen_height) + " flag " + std::to_string(v.widescreen_flag) + " scale " +
+         std::to_string(v.ui_scale) + " renderer " + std::to_string(v.renderer_width) + "x" +
+         std::to_string(v.renderer_height);
+}
+
+void CheckTargets(uint32_t w, uint32_t h, bool wide, double design, double scale) {
+  const ResizeValues v = ResizeTargets(w, h);
+  const std::string at = Text(v);
+  Check(v.width == w && v.height == h, "the block's frame is the size", at);
+  Check(v.widescreen == (wide ? 1 : 0) && v.widescreen_flag == (wide ? 1u : 0u),
+        wide ? "4:3 or wider: the block's byte and the game's flag are 1" : "narrower than 4:3: both are 0", at);
+  Check(Near(v.ui_design_height, design), "the UI design height", at);
+  Check(v.screen_width == float(w) && v.screen_height == float(h), "the screen floats are the size", at);
+  Check(Near(v.ui_scale, scale), "the device's UI scale", at);
+  Check(v.ui_scale == float(float(h) / v.ui_design_height), "the device's scale is the game's H / design height", at);
+  Check(v.renderer_width == float(w) && v.renderer_height == float(h), "the renderer's frame floats are the size", at);
+}
+
+// Every value a live resize writes, at the listed sizes.
+void ResizeTargetsAtEachSize() {
+  CheckTargets(1920, 1080, true, 720, 1.5);
+  CheckTargets(1600, 900, true, 720, 1.25);
+  CheckTargets(2560, 1080, true, 720, 1.5);
+  CheckTargets(1080, 1920, false, 960.0 * 1920 / 1080, 1080.0 / 960);
+  CheckTargets(1280, 1024, false, 768, 1280.0 / 960);
+}
+
+// Across the 4:3 line, both ways: exactly 4:3 keeps the wide values, one pixel narrower takes the 4:3 branches, and
+// the scale barely moves; going back gives the wide values again (the targets depend on the size alone).
+void ResizeTargetsAcrossThe4x3Line() {
+  CheckTargets(1440, 1080, true, 720, 1.5);
+  CheckTargets(1439, 1080, false, 960.0 * 1080 / 1439, 1439.0 / 960);
+  const ResizeValues wide = ResizeTargets(1440, 1080);
+  const ResizeValues narrow = ResizeTargets(1439, 1080);
+  Check(std::fabs(wide.ui_scale - narrow.ui_scale) < 0.002f, "the scale is continuous across 4:3", Text(narrow));
+  CheckTargets(1440, 1080, true, 720, 1.5);
+  CheckTargets(1920, 1440, true, 720, 2);
+  CheckTargets(1920, 1441, false, 960.0 * 1441 / 1920, 2);
+}
+
+// Feeds w x h for n swaps; the resizes it asks for.
+int Feed(ResizeSettle& s, uint32_t w, uint32_t h, int n, std::optional<FrameSize>* last = nullptr) {
+  int fired = 0;
+  for (int i = 0; i < n; ++i) {
+    if (const std::optional<FrameSize> got = SettleResize(s, w, h)) {
+      ++fired;
+      if (last)
+        *last = got;
+    }
+  }
+  return fired;
+}
+
+void SettleADragStormSettlesOnce() {
+  ResizeSettle s{{1280, 720}, {1280, 720}, 0};
+  int fired = 0;
+  for (uint32_t i = 0; i < 40; ++i)
+    fired += Feed(s, 1300 + i * 7, 730 + i * 3, 1);
+  Check(fired == 0, "a size that changes every swap never settles", std::to_string(fired));
+  Check(Feed(s, 1600, 900, int(kResizeSettleFrames) - 1) == 0, "9 swaps at the new size: not yet", Text(s.pending));
+  std::optional<FrameSize> got;
+  Check(Feed(s, 1600, 900, 1, &got) == 1 && got == FrameSize{1600, 900}, "the 10th swap asks for 1600x900", Text(got));
+  Check(Feed(s, 1600, 900, 50) == 0, "and only once", Text(s.pending));
+  s.frame = {1600, 900};
+  Check(Feed(s, 1600, 900, 50) == 0, "once applied, the same size does nothing", Text(s.frame));
+}
+
+void SettleReturnToTheOldSizeDoesNothing() {
+  ResizeSettle s{{1280, 720}, {1280, 720}, 0};
+  Check(Feed(s, 1600, 900, 5) == 0 && Feed(s, 1280, 720, 50) == 0, "back to the frame within the settle: nothing",
+        Text(s.pending));
+  Check(Feed(s, 1600, 900, int(kResizeSettleFrames) - 1) == 0, "the count starts again after a return",
+        Text(s.pending));
+}
+
+void SettleIgnoresZero() {
+  ResizeSettle s{{1280, 720}, {1280, 720}, 0};
+  Check(Feed(s, 0, 0, 50) == 0 && s.frame == FrameSize{1280, 720}, "0x0 asks for nothing and keeps the frame",
+        Text(s.frame));
+  Check(Feed(s, 0, 900, 5) + Feed(s, 1600, 0, 5) == 0, "a zero side is ignored too", Text(s.pending));
+  std::optional<FrameSize> got;
+  const int fired = Feed(s, 1600, 900, 5) + Feed(s, 0, 0, 30) + Feed(s, 1600, 900, 5, &got);
+  Check(fired == 1 && got == FrameSize{1600, 900}, "0x0 (minimised) between swaps neither counts nor resets",
+        Text(got));
+}
+
+void SettleCountsTheClampedSize() {
+  ResizeSettle s{{640, 480}, {640, 480}, 0};
+  Check(Feed(s, 300, 200, 50) == 0, "a size clamped to the frame does nothing", Text(s.pending));
+  s = {{1280, 720}, {1280, 720}, 0};
+  std::optional<FrameSize> got;
+  const int fired = Feed(s, 300, 200, 5) + Feed(s, 320, 240, 5, &got);
+  Check(fired == 1 && got == FrameSize{640, 480}, "two sizes clamped to 640x480 count as one", Text(got));
+  Check(Feed(s, 9000, 1080, int(kResizeSettleFrames), &got) == 1 && got == FrameSize{8192, 1080},
+        "a wide size settles at its clamped value", Text(got));
+}
+
+// A resize that failed (nothing applied) is asked for again only after the size changes.
+void SettleRetriesOnlyOnTheNextChange() {
+  ResizeSettle s{{1280, 720}, {1280, 720}, 0};
+  Check(Feed(s, 1600, 900, int(kResizeSettleFrames)) == 1, "1600x900 settles", Text(s.pending));
+  Check(Feed(s, 1600, 900, 50) == 0, "not applied: the same size is not asked for again", Text(s.pending));
+  Check(Feed(s, 1700, 900, int(kResizeSettleFrames)) == 1, "a new size settles", Text(s.pending));
+  Check(Feed(s, 1600, 900, int(kResizeSettleFrames)) == 1, "and the failed size again after it", Text(s.pending));
+}
+
+void CheckTable(uint32_t w, uint32_t h, FrameSize want, const char* what) {
+  const FrameSize got = TableFrame(w, h);
+  Check(got == want, what, Text(got));
+}
+
+// The game's own table (sub_8216EBE8) for reported modes.
+void TableFrameForReportedModes() {
+  CheckTable(1280, 720, {1280, 720}, "1280x720 reported: 1280x720");
+  CheckTable(1600, 900, {1920, 1080}, "1600x900 reported: wider than 1280, 1920x1080");
+  CheckTable(1920, 1080, {1920, 1080}, "1920x1080 reported: 1920x1080");
+  // The reported widescreen bit is "4:3 or wider" (VdQueryVideoMode), so exactly 4:3 is not the 1920x960 entry.
+  CheckTable(640, 480, {1280, 720}, "640x480 reported: 4:3 counts as wide, not wider than 1280: 1280x720");
+  CheckTable(1920, 1440, {1920, 1080}, "1920x1440 reported: 4:3 and wider than 1280: 1920x1080");
+  CheckTable(1280, 1024, {1920, 960}, "1280x1024 reported: narrower than 4:3, 1920x960");
+  CheckTable(1080, 1920, {1920, 960}, "1080x1920 reported: portrait, 1920x960");
+  CheckTable(2560, 1440, {1920, 1080}, "2560x1440 reported: 1920x1080");
+}
+
+// The values a preset's frame gets: the table frame, the reported mode's widescreen rule (as the game's +73 and
+// flag), the 720-high design and H/720.
+void CheckPreset(uint32_t w, uint32_t h, FrameSize frame, bool wide) {
+  const ResizeValues v = PresetTargets(w, h);
+  const std::string at = std::to_string(w) + "x" + std::to_string(h) + ": " + Text(v);
+  Check(v.width == frame.width && v.height == frame.height, "the block's frame is the table's", at);
+  Check(v.widescreen == (wide ? 1 : 0) && v.widescreen_flag == (wide ? 1u : 0u),
+        "the byte and the flag follow the reported mode", at);
+  Check(v.ui_design_height == kUiDesignHeight, "the design height is 720", at);
+  Check(v.ui_scale == float(float(frame.height) / kUiDesignHeight), "the device's scale is H / 720", at);
+  Check(v.screen_width == float(frame.width) && v.screen_height == float(frame.height) &&
+            v.renderer_width == float(frame.width) && v.renderer_height == float(frame.height),
+        "the floats are the table frame", at);
+}
+
+void PresetTargetsAreTheGamesOwn() {
+  CheckPreset(1280, 720, {1280, 720}, true);
+  CheckPreset(1920, 1080, {1920, 1080}, true);
+  CheckPreset(1600, 900, {1920, 1080}, true);
+  // 1920x960 is wider than 4:3, but the game's byte follows the 4:3 reported mode.
+  CheckPreset(1280, 1024, {1920, 960}, false);
+  CheckPreset(1080, 1920, {1920, 960}, false);
+  // At a table size with a widescreen reported mode, the same values as a live resize to it.
+  const ResizeValues preset = PresetTargets(1920, 1080);
+  const ResizeValues resize = ResizeTargets(1920, 1080);
+  Check(preset.widescreen == resize.widescreen && preset.ui_design_height == resize.ui_design_height &&
+            preset.ui_scale == resize.ui_scale,
+        "1080p's values are a 1920x1080 resize's", Text(preset));
+}
+
+std::string Text(std::optional<FrameTarget> t) {
+  return t ? Text(t->frame) + (t->output ? " output" : " preset") : std::string("none");
+}
+
+constexpr FrameSize kReported{1600, 900};
+
+// Output, a 2560x1440 frame (booted there), the window at 2560x1440.
+FrameMode OutputAt2560() { return {{{2560, 1440}, {2560, 1440}, 0}, true, true}; }
+
+// output -> preset: the table frame at once, no settle; the gate opens only once it is applied.
+void SwitchToAPresetAtOnce() {
+  FrameMode m = OutputAt2560();
+  Check(!FrameReady(m.output, false), "before the switch the frame is not a preset's", "");
+  const std::optional<FrameTarget> t = PlanFrame(m, false, {2560, 1440}, std::nullopt, kReported);
+  Check(t && t->frame == FrameSize{1920, 1080} && !t->output, "the first swap asks for the table frame", Text(t));
+  Check(!FrameReady(m.output, false), "the gate stays closed until the resize is applied", "");
+  FrameApplied(m, *t);
+  Check(FrameReady(m.output, false) && !FrameReady(m.output, true), "applied: the gate opens for the preset", "");
+  Check(!PlanFrame(m, false, {2560, 1440}, std::nullopt, kReported), "the next swap asks for nothing",
+        Text(m.settle.frame));
+}
+
+// A switch drops a window size that was settling.
+void SwitchDropsAPendingSettle() {
+  FrameMode m = OutputAt2560();
+  for (uint32_t i = 0; i + 1 < kResizeSettleFrames; ++i)
+    PlanFrame(m, true, {1600, 900}, std::nullopt, kReported);
+  const std::optional<FrameTarget> t = PlanFrame(m, false, {1600, 900}, std::nullopt, kReported);
+  Check(t && t->frame == FrameSize{1920, 1080}, "the switch is taken", Text(t));
+  FrameApplied(m, *t);
+  int asked = 0;
+  for (int i = 0; i < 30; ++i)
+    asked += PlanFrame(m, false, {1600, 900}, std::nullopt, kReported).has_value();
+  Check(asked == 0 && m.settle.swaps == 0, "the pending 1600x900 never fires under the preset", Text(m.settle.pending));
+}
+
+// preset -> output: the output's size at once (or the forced dev size).
+void SwitchToOutputAtOnce() {
+  FrameMode m{{{1920, 1080}, {1920, 1080}, 0}, false, false};
+  const std::optional<FrameTarget> t = PlanFrame(m, true, {2560, 1440}, std::nullopt, kReported);
+  Check(t && t->frame == FrameSize{2560, 1440} && t->output, "the first swap asks for the output", Text(t));
+  Check(!FrameReady(m.output, true), "not ready before it is applied", "");
+  FrameApplied(m, *t);
+  Check(FrameReady(m.output, true), "ready once applied", "");
+  Check(!PlanFrame(m, true, {2560, 1440}, std::nullopt, kReported), "then nothing", Text(m.settle.frame));
+  m = {{{1920, 1080}, {1920, 1080}, 0}, false, false};
+  const std::optional<FrameTarget> forced = PlanFrame(m, true, {2560, 1440}, FrameSize{3840, 2160}, kReported);
+  Check(forced && forced->frame == FrameSize{3840, 2160}, "a forced dev size wins", Text(forced));
+  m = {{{1920, 1080}, {1920, 1080}, 0}, false, false};
+  const std::optional<FrameTarget> small = PlanFrame(m, true, {300, 200}, std::nullopt, kReported);
+  Check(small && small->frame == FrameSize{640, 480}, "the output is clamped", Text(small));
+  m = {{{1920, 1080}, {1920, 1080}, 0}, false, false};
+  const std::optional<FrameTarget> none = PlanFrame(m, true, {0, 0}, std::nullopt, kReported);
+  Check(none && none->frame == FrameSize{1920, 1080} && none->output, "no output size yet: the frame it has",
+        Text(none));
+}
+
+// Under a preset the window's size changes nothing: the table frame stays and the present scales it.
+void PresetIgnoresTheWindow() {
+  FrameMode m{{{1920, 1080}, {1920, 1080}, 0}, false, false};
+  int asked = 0;
+  for (int i = 0; i < 50; ++i)
+    asked += PlanFrame(m, false, {1600 + uint32_t(i % 3), 900}, std::nullopt, kReported).has_value();
+  for (int i = 0; i < 50; ++i)
+    asked += PlanFrame(m, false, {2560, 1440}, std::nullopt, kReported).has_value();
+  Check(asked == 0 && m.settle.frame == FrameSize{1920, 1080}, "no resize under a preset", Text(m.settle.frame));
+  Check(FrameReady(m.output, false), "preset -> preset needs nothing: ready at once", "");
+}
+
+// A failed switch: the old frame and mode stay, the gate stays closed, and it is not asked for every swap.
+void FailedSwitchKeepsTheOldMode() {
+  FrameMode m = OutputAt2560();
+  Check(PlanFrame(m, false, {2560, 1440}, std::nullopt, kReported).has_value(), "the switch is asked for", "");
+  Check(!FrameReady(m.output, false) && FrameReady(m.output, true), "failed: the gate holds the old mode", "");
+  int asked = 0;
+  for (int i = 0; i < 30; ++i)
+    asked += PlanFrame(m, false, {2560, 1440}, std::nullopt, kReported).has_value();
+  Check(asked == 0 && m.settle.frame == FrameSize{2560, 1440}, "not retried every swap", Text(m.settle.frame));
+  Check(!PlanFrame(m, true, {2560, 1440}, std::nullopt, kReported), "back to the old mode: nothing to resize",
+        Text(m.settle.frame));
+  const std::optional<FrameTarget> again = PlanFrame(m, false, {2560, 1440}, std::nullopt, kReported);
+  Check(again && again->frame == FrameSize{1920, 1080}, "a new request tries again", Text(again));
+}
+
+// Under output the window still settles as before; a fixed dev size turns that off.
+void OutputStillSettles() {
+  FrameMode m = OutputAt2560();
+  int asked = 0;
+  std::optional<FrameTarget> last;
+  for (uint32_t i = 0; i < kResizeSettleFrames; ++i)
+    if (const std::optional<FrameTarget> t = PlanFrame(m, true, {1600, 900}, std::nullopt, kReported)) {
+      ++asked;
+      last = t;
+    }
+  Check(asked == 1 && last->frame == FrameSize{1600, 900} && last->output, "a settled window size", Text(last));
+  m = OutputAt2560();
+  asked = 0;
+  for (int i = 0; i < 30; ++i)
+    asked += PlanFrame(m, true, {1600, 900}, FrameSize{2560, 1440}, kReported).has_value();
+  Check(asked == 0, "a forced dev size does not follow the window", std::to_string(asked));
+}
+
 }  // namespace
 
 int main() {
@@ -585,6 +873,21 @@ int main() {
   TitlePictureAfterTheTitleLoads();
   PictureDrawFromBothWords();
   TitleLoadEndsTheLogosArming();
+  ResizeTargetsAtEachSize();
+  ResizeTargetsAcrossThe4x3Line();
+  SettleADragStormSettlesOnce();
+  SettleReturnToTheOldSizeDoesNothing();
+  SettleIgnoresZero();
+  SettleCountsTheClampedSize();
+  SettleRetriesOnlyOnTheNextChange();
+  TableFrameForReportedModes();
+  PresetTargetsAreTheGamesOwn();
+  SwitchToAPresetAtOnce();
+  SwitchDropsAPendingSettle();
+  SwitchToOutputAtOnce();
+  PresetIgnoresTheWindow();
+  FailedSwitchKeepsTheOldMode();
+  OutputStillSettles();
   std::printf("screen_layout_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

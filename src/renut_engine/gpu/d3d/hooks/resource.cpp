@@ -34,6 +34,7 @@
 #include "renut_engine/gpu/d3d/d3d.h"
 #include "renut_engine/gpu/d3d/d3d_native.h"
 #include "renut_engine/gpu/d3d/edram_tiles.h"  // futari_recomp (2026-11-07)
+#include "renut_engine/gpu/d3d/front_buffer_block.h"  // futari_recomp (2026-11-10)
 #include "renut_engine/gpu/guest/guest_memory.h"
 #include "renut_engine/gpu/guest/guest_records.h"
 #include "renut_engine/gpu/log.h"
@@ -385,6 +386,27 @@ void SetSurfaceHeader(u32 width, u32 height, u32 format, u32 multisample, u32 pa
   edram_tiles = tiles;
 }
 
+// futari_recomp (2026-11-07, out of CreateSurface 2026-11-10 so a resize reserves the same way): the EDRAM of a
+// surface without parameters. A surface no console could hold (an automatic back buffer at a large output size) keeps
+// base 0 and reserves nothing, instead of failing: host targets are sized from the surface, never from EDRAM.
+// Surfaces that fit are allocated as before. Its header's EDRAM size is 0: it owns none (and a saturated tile count
+// would wrap the byte size). A surface that fits but finds no EDRAM run left (a frame that fits takes most of it)
+// takes the same path instead of failing.
+void ReserveSurfaceEdram(be_u32 *s, u32 width, u32 height, u32 tiles) {
+  const u32 f = u32(s[10]) & 0x3F;
+  const bool depth = f == 22 || f == 23;
+  const i32 base = EdramOverflows(tiles) ? -1 : AllocateEdram(tiles);
+  if (EdramReserves(tiles, base)) {
+    s[0] = u32(s[0]) | 0x80000000u;  // owns its EDRAM
+    s[7] = native::Insert(s[7], u32(base), 0, 12);
+  } else {
+    if (base >= 0)
+      FreeEdram(u32(base), tiles);
+    LogEdramOverflow(width, height, depth, tiles, !EdramOverflows(tiles));
+    s[11] = 0u;  // +0x2C EDRAM size
+  }
+}
+
 } // namespace
 
 namespace renut::gpu::native {
@@ -403,27 +425,30 @@ u32 CreateSurface(u32 width, u32 height, u32 format, u32 multisample, u32 parame
   if (!parameters_va) {
     const u32 f = u32(s[10]) & 0x3F;
     const bool depth = f == 22 || f == 23;
-    // futari_recomp (2026-11-07): a surface no console could hold (an automatic back buffer at a large output size)
-    // keeps base 0 and reserves nothing, instead of failing: host targets are sized from the surface, never from
-    // EDRAM. Surfaces that fit are allocated as before. Its header's EDRAM size is 0: it owns none (and a saturated
-    // tile count would wrap the byte size). A surface that fits but finds no EDRAM run left (a frame that fits takes
-    // most of it) takes the same path instead of failing.
-    const i32 base = EdramOverflows(tiles) ? -1 : AllocateEdram(tiles);
-    if (EdramReserves(tiles, base)) {
-      s[0] = u32(s[0]) | 0x80000000u;  // owns its EDRAM
-      s[7] = Insert(s[7], u32(base), 0, 12);
-    } else {
-      if (base >= 0)
-        FreeEdram(u32(base), tiles);
-      LogEdramOverflow(width, height, depth, tiles, !EdramOverflows(tiles));
-      s[11] = 0u;  // +0x2C EDRAM size
-    }
+    ReserveSurfaceEdram(s, width, height, tiles);  // futari_recomp (2026-11-07)
     if (depth && !LoadU32(kHiZOwnerVa)) {
       StoreU32(kHiZOwnerVa, 1);
       s[8] = u32(s[8]) & 0x1FFFF;
     }
   }
   return record->self_va;
+}
+
+// futari_recomp (2026-11-10): see d3d_native.h. The format and samples are the header's own.
+bool ResizeSurface(u32 surface_va, u32 width, u32 height) {
+  auto *surface = FindRecord<SurfaceRecord>(surface_va, RecordKind::Surface);
+  if (!surface)
+    return false;
+  auto *s = reinterpret_cast<be_u32 *>(&surface->x360);
+  const u32 common = s[0], references = s[1];
+  if (common & 0x80000000u)
+    FreeEdram(u32(s[7]) & 0xFFF, u32(s[11]) / 0x1400);
+  u32 tiles = 0, hiz_size = 0;
+  SetSurfaceHeader(width, height, s[10], (u32(s[6]) >> 16) & 3, 0, s, tiles, hiz_size);
+  s[0] = common & ~0x80000000u;  // the owns bit again only if it reserves
+  s[1] = references;
+  ReserveSurfaceEdram(s, width, height, tiles);
+  return true;
 }
 
 } // namespace renut::gpu::native
@@ -1712,6 +1737,51 @@ u32 AddRefResource(u32 resource) {
 // futari-nx: the automatic front buffer (InitializePresentationParameters).
 u32 CreateTexture(u32 width, u32 height, u32 depth, u32 levels, u32 usage, u32 format, u32 pool, u32 type) {
   return D3DDevice_CreateTexture_hook(width, height, depth, levels, usage, format, pool, type);
+}
+
+// futari_recomp (2026-11-10): see d3d_native.h. As D3DDevice_CreateTexture_hook's arguments for the front buffer.
+u32 TextureBaseSize(u32 width, u32 height, u32 format) {
+  u32 aligned_width = 0, base = 0, mips = 0;
+  FindTextureSize(width, height, 1, 1, format & 0x3F, 1, (format >> 8) & 1, false, 0, 0, aligned_width, base, mips);
+  return base;
+}
+
+// futari_recomp (2026-11-10): see d3d_native.h. The fetch words are SetTextureHeader's inputs too, so they start from
+// zero as in CreateTexture's new header; then the kept words and the data addresses go back.
+u32 ResizeTexture(u32 texture_va, u32 width, u32 height, u32 format, u32 capacity, TextureResizeFailure &failure) {
+  failure = TextureResizeFailure::kNone;
+  auto *t = GuestPtr<be_u32>(texture_va);
+  if (!t) {
+    failure = TextureResizeFailure::kNoTexture;
+    return 0;
+  }
+  u32 saved[13];
+  for (u32 i = 0; i < 13; ++i)
+    saved[i] = t[i];
+  for (u32 i = 7; i < 13; ++i)
+    t[i] = 0u;
+  u32 base_size = 0, mip_size = 0;
+  SetTextureHeader(3, width, height, 1, 1, 0, format, 2, 0, 0, 0, texture_va, base_size, mip_size);
+  const FrontBufferBlockPlan plan = FrontBufferBlock(capacity, base_size);
+  const u32 old_base = saved[8] & ~0xFFFu;
+  u32 base = old_base;
+  if (plan.grow)
+    base = AllocPhysical(base_size, 0x8C800000u | (3u << 28));  // CreateTexture's attributes for usage 0
+  if (!base || mip_size) {  // no block, or a mip block this front buffer never had: nothing changes
+    if (base != old_base)
+      FreePhysical(base);
+    for (u32 i = 0; i < 13; ++i)
+      t[i] = saved[i];
+    failure = mip_size ? TextureResizeFailure::kMipBlock : TextureResizeFailure::kNoMemory;
+    return 0;
+  }
+  t[0] = saved[0];
+  t[1] = saved[1];
+  t[8] = (u32(t[8]) & 0xFFFu) | base;
+  t[12] = (saved[12] & ~0xFFFu) | (u32(t[12]) & 0xFFFu);
+  if (base != old_base)
+    FreePhysical(old_base);
+  return plan.capacity;
 }
 
 } // namespace renut::gpu::native

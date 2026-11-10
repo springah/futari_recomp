@@ -6,9 +6,9 @@
 //   g++ -std=c++20 -Wall -Wextra -I src tests/input_recording_test.cpp -o input_recording_test && ./input_recording_test
 //   cl /std:c++20 /EHsc /W4 /I src tests\input_recording_test.cpp && input_recording_test.exe
 //
-// One line per change: "<frames since the previous line> <state | capture>",
-// frames counted in guest Swaps, at most 2^32 per line; '#' comments, blank
-// lines and a UTF-8 BOM at the start are ignored.
+// One line per change: "<frames since the previous line> <state | capture |
+// window event>", frames counted in guest Swaps, at most 2^32 per line; '#'
+// comments, blank lines and a UTF-8 BOM at the start are ignored.
 #include "dev/input_recording.h"
 
 #include <cstdint>
@@ -20,11 +20,14 @@ namespace {
 
 using futari::dev::FormatCaptureLine;
 using futari::dev::FormatLine;
+using futari::dev::FormatWindowLine;
 using futari::dev::FramesSince;
 using futari::dev::PadState;
 using futari::dev::ParseRecording;
+using futari::dev::ParseWindowEvent;
 using futari::dev::Quantise;
 using futari::dev::ReplayCursor;
+using futari::dev::WindowEvent;
 
 int g_failed = 0;
 int g_checks = 0;
@@ -232,6 +235,124 @@ void Cursor() {
         FormatLine(0, step.state));
 }
 
+WindowEvent Size(uint32_t width, uint32_t height) {
+  WindowEvent event;
+  event.width = width;
+  event.height = height;
+  return event;
+}
+
+WindowEvent Event(WindowEvent::Kind kind, bool on = false) {
+  WindowEvent event;
+  event.kind = kind;
+  event.on = on;
+  return event;
+}
+
+// Window lines: "<frames> window <W>x<H>", "<frames> fullscreen on|off", "<frames> minimise", "<frames> restore".
+void WindowLines() {
+  const WindowEvent events[] = {Size(1600, 900), Event(WindowEvent::Kind::kFullscreen, true),
+                                Event(WindowEvent::Kind::kFullscreen, false), Event(WindowEvent::Kind::kMinimise),
+                                Event(WindowEvent::Kind::kRestore), Size(1, 65535)};
+  const char* const texts[] = {"7 window 1600x900", "7 fullscreen on", "7 fullscreen off",
+                               "7 minimise",        "7 restore",       "7 window 1x65535"};
+  std::string file;
+  for (size_t i = 0; i < std::size(events); ++i) {
+    Check(FormatWindowLine(7, events[i]) == texts[i], texts[i], FormatWindowLine(7, events[i]));
+    file += FormatWindowLine(7, events[i]) + "\n";
+  }
+  const auto parsed = ParseRecording("3 a\n" + file + "  2   window\t1280x720 \r\n");
+  Check(!parsed.error && parsed.lines.size() == std::size(events) + 2, "the window lines parse", Error(parsed));
+  if (parsed.lines.size() == std::size(events) + 2) {
+    for (size_t i = 0; i < std::size(events); ++i) {
+      const auto& line = parsed.lines[i + 1];
+      Check(line.window && *line.window == events[i] && !line.capture && line.frames == 7 && line.text == texts[i],
+            texts[i], line.text);
+    }
+    Check(parsed.lines.back().window && *parsed.lines.back().window == Size(1280, 720) &&
+              parsed.lines.back().text == "2 window 1280x720",
+          "extra spaces, a tab and CRLF", parsed.lines.back().text);
+    Check(!parsed.lines[0].window, "a state line has no window event", parsed.lines[0].text);
+  }
+  Check(parsed.captures == 0, "window lines are not captures", std::to_string(parsed.captures));
+}
+
+void BadWindowLines() {
+  const struct {
+    const char* text;
+    uint32_t line;
+    const char* what;
+  } cases[] = {
+      {"5 a\n5 window 0x900\n", 2, "a zero width"},
+      {"5 window 1600x0\n", 1, "a zero height"},
+      {"5 window 1600900\n", 1, "no 'x'"},
+      {"5 window 1600x\n", 1, "no height"},
+      {"5 window x900\n", 1, "no width"},
+      {"5 window 16a0x900\n", 1, "a non-numeric width"},
+      {"5 window 1600x9o0\n", 1, "a non-numeric height"},
+      {"5 window -1600x900\n", 1, "a negative width"},
+      {"5 window 1600X900\n", 1, "a capital X"},
+      {"5 window 1600x900x2\n", 1, "two 'x'"},
+      {"5 window 65536x900\n", 1, "a width past 65535"},
+      {"5 window 1600x99999999999\n", 1, "a height past 32 bits"},
+      {"5 window\n", 1, "window without a size"},
+      {"5 window 1600x900 a\n", 1, "window with an extra token"},
+      {"5 fullscreen\n", 1, "fullscreen without on/off"},
+      {"5 fullscreen yes\n", 1, "an unknown fullscreen argument"},
+      {"5 fullscreen ON\n", 1, "a capital ON"},
+      {"5 fullscreen on off\n", 1, "fullscreen with an extra token"},
+      {"5 minimise 1\n", 1, "minimise with an extra token"},
+      {"5 restore now\n", 1, "restore with an extra token"},
+      {"5 minimize\n", 1, "the other spelling is unknown"},
+  };
+  for (const auto& c : cases) {
+    const auto parsed = ParseRecording(c.text);
+    Check(parsed.error && parsed.error->line == c.line && !parsed.error->reason.empty() && parsed.lines.empty(), c.what,
+          Error(parsed));
+  }
+}
+
+// Window lines change no pad state, like capture; the cursor reports each due one once, in file order with captures,
+// also when the Swaps jump past several lines.
+void CursorWindowEvents() {
+  const auto parsed =
+      ParseRecording("10 a\n5 window 1600x900\n0 capture\n0 fullscreen on\n5 b\n5 minimise\n0 restore\n10 capture\n"
+                     "5 fullscreen off\n60 -\n");
+  Check(!parsed.error && parsed.lines.size() == 10, "the cursor's window file parses", Error(parsed));
+  if (parsed.lines.size() != 10) {
+    return;
+  }
+  ReplayCursor cursor(parsed.lines);
+  auto step = cursor.Advance(10);
+  Check(step.state == Pad(0x1000) && step.events.empty(), "a state line is no event", FormatLine(0, step.state));
+  step = cursor.Advance(14);
+  Check(step.events.empty() && step.applied.empty(), "nothing due before 15", std::to_string(step.events.size()));
+  step = cursor.Advance(15);
+  Check(step.state == Pad(0x1000) && step.events == (std::vector<size_t>{1, 2, 3}) && step.captures == 1,
+        "window, capture, fullscreen in file order; the pad unchanged", FormatLine(0, step.state));
+  step = cursor.Advance(16);
+  Check(step.events.empty() && step.captures == 0, "the events are not reported again",
+        std::to_string(step.events.size()));
+  step = cursor.Advance(40);  // the Swaps jumped past 20, 25 and 35
+  Check(step.state == Pad(0x2000) && step.applied == (std::vector<size_t>{4, 5, 6, 7, 8}) &&
+            step.events == (std::vector<size_t>{5, 6, 7, 8}) && step.captures == 1 && !step.ended,
+        "a jump reports every due event once, in order, interleaved with the capture", FormatLine(0, step.state));
+  const bool kinds = cursor.line(5).window->kind == WindowEvent::Kind::kMinimise &&
+                     cursor.line(6).window->kind == WindowEvent::Kind::kRestore && cursor.line(7).capture &&
+                     cursor.line(8).window->kind == WindowEvent::Kind::kFullscreen && !cursor.line(8).window->on;
+  Check(kinds, "the events' lines are the file's", cursor.line(8).text);
+  step = cursor.Advance(100);
+  Check(step.ended && step.events.empty() && step.state == PadState{}, "the end, no more events",
+        std::to_string(step.events.size()));
+}
+
+// No words after the frames is an error, not a read past the list.
+void WindowEventWithoutWords() {
+  std::string error;
+  const auto event = ParseWindowEvent({}, error);
+  Check(!event && !error.empty(), "an empty word list is an error", error);
+}
+
 }  // namespace
 
 int main() {
@@ -244,6 +365,10 @@ int main() {
   CursorDueSaturates();
   ByteOrderMark();
   FramesBetweenLines();
+  WindowLines();
+  BadWindowLines();
+  CursorWindowEvents();
+  WindowEventWithoutWords();
   std::printf("input_recording_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }
