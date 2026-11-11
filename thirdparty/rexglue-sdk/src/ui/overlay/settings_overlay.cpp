@@ -65,9 +65,25 @@ bool IsUserFacingCategory(const std::string& cat) {
   return false;
 }
 
+// futari_recomp (2026-11-10): the app's hidden cvars (SetSettingsOverlayHiddenCvars).
+rex::ui::OverlayCvarFilter g_hidden_filter;
+
+bool IsHiddenByApp(std::string_view name) {
+  return g_hidden_filter && g_hidden_filter(name);
+}
+
+// futari_recomp (2026-11-11): the app's reset-proof cvars (SetSettingsOverlayResetProofCvars).
+rex::ui::OverlayCvarFilter g_reset_proof_filter;
+
+bool KeptOnResetAll(std::string_view name) {
+  return IsHiddenByApp(name) || (g_reset_proof_filter && g_reset_proof_filter(name));
+}
+
 // Whether a cvar should appear given the current simple/advanced mode. Advanced
 // shows everything; simple hides debug-only cvars and non-player categories.
 bool IsCvarVisible(const rex::cvar::FlagEntry& entry, bool show_advanced) {
+  if (IsHiddenByApp(entry.name))  // futari_recomp (2026-11-10): in both modes
+    return false;
   if (show_advanced)
     return true;
   if (entry.is_debug_only)
@@ -211,14 +227,15 @@ void SettingsDialog::DrawDisplaySection() {
 
   // Resolution preset: sets the shared `resolution` cvar (guest video mode +
   // startup window size). Applies on next launch.
-  ImGui::TableNextRow();
-  ImGui::TableNextColumn();
-  ImGui::AlignTextToFramePadding();
-  ImGui::TextUnformatted("Resolution");
-  if (ImGui::IsItemHovered())
-    ImGui::SetTooltip("Render resolution and window size\n[Requires restart to take effect]");
-  ImGui::TableNextColumn();
-  {
+  // futari_recomp (2026-11-10): not drawn when the app hides `resolution`.
+  if (!IsHiddenByApp("resolution")) {
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Resolution");
+    if (ImGui::IsItemHovered())
+      ImGui::SetTooltip("Render resolution and window size\n[Requires restart to take effect]");
+    ImGui::TableNextColumn();
     static const char* kResolutionPresets[] = {"(default)", "1280x720",  "1600x900",
                                                "1920x1080", "2560x1440", "3840x2160"};
     std::string current_res = rex::cvar::Query<std::string>("resolution");
@@ -549,6 +566,12 @@ OverlayFontPicker g_font_picker;
 
 void SetSettingsOverlayFontPicker(OverlayFontPicker picker) { g_font_picker = std::move(picker); }
 
+void SetSettingsOverlayHiddenCvars(OverlayCvarFilter filter) { g_hidden_filter = std::move(filter); }
+
+void SetSettingsOverlayResetProofCvars(OverlayCvarFilter filter) {
+  g_reset_proof_filter = std::move(filter);
+}
+
 void SettingsDialog::OnDraw(ImGuiIO& io) {
   auto& registry = rex::cvar::GetRegistry();
   const bool show_advanced = REXCVAR_QUERY(bool, settings_show_advanced);
@@ -749,10 +772,24 @@ void SettingsDialog::OnDraw(ImGuiIO& io) {
       rex::cvar::SaveConfig(config_path_);
   }
   ImGui::SameLine();
-  if (ImGui::Button("Reset all to defaults"))
-    rex::cvar::ResetAllToDefaults();
-  if (ImGui::IsItemHovered())
-    ImGui::SetTooltip("Reset every setting to its default (cannot be undone)");
+  if (ImGui::Button("Reset all to defaults")) {
+    // futari_recomp (2026-11-10): the app's hidden cvars keep their values (the player can't see them reset);
+    // (2026-11-11) so do its reset-proof ones.
+    if (g_hidden_filter || g_reset_proof_filter) {
+      for (auto& entry : registry) {
+        if (!KeptOnResetAll(entry.name))
+          rex::cvar::ResetToDefault(entry.name);
+      }
+    } else {
+      rex::cvar::ResetAllToDefaults();
+    }
+  }
+  if (ImGui::IsItemHovered()) {
+    // futari_recomp (2026-11-10): app-hidden cvars are not reset; (2026-11-11) nor the app's reset-proof ones.
+    ImGui::SetTooltip(g_reset_proof_filter || g_hidden_filter
+                          ? "Reset the settings to their defaults, except the ones the game keeps (cannot be undone)"
+                          : "Reset every setting to its default (cannot be undone)");
+  }
   ImGui::SameLine();
   ImGui::TextDisabled("(%s)", config_path_.filename().string().c_str());
   if (!pending.empty()) {

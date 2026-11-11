@@ -11,13 +11,16 @@
 #include "ini_resolution.h"
 
 #include <cstdio>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace {
 
 using futari::ini_resolution::BootAtDpi;
 using futari::ini_resolution::BootResolution;
+using futari::ini_resolution::RepairedResolution;
 using futari::ini_resolution::SavedResolution;
 
 int g_failed = 0;
@@ -61,7 +64,7 @@ void PickEqualToTheBootLogicalSize() {
 void OtherPicks() {
   CheckSaved("2560", "1440", true, kAt150, "2560x1440", "150%: an F2 pick of 2560x1440 goes out as picked");
   CheckSaved("1920", "1080", true, kAt150, "1920x1080", "150%: an F2 pick of the typed size goes out as picked");
-  CheckSaved("1600", "900", false, kAt150, "1600x900", "an F4 edit (no flag) goes out as typed");
+  CheckSaved("1600", "900", false, kAt150, "1600x900", "a size set without the launcher (no flag) goes out as typed");
 }
 
 void NoBootLine() {
@@ -98,6 +101,50 @@ void AbsentCvars() {
   CheckSaved("1280", "", false, kAt150, "", "an absent height saves nothing");
 }
 
+// The window cvars at 0 (their default): the next boot ignores a 0x0 line, so none is written.
+void ZeroSize() {
+  CheckSaved("0", "0", false, kAt150, "", "0x0 saves nothing");
+  CheckSaved("0", "0", true, kAt150, "", "0x0 saves nothing, even after a pick");
+  CheckSaved("0", "0", false, {}, "", "0x0 with no boot line saves nothing");
+  CheckSaved("0", "720", false, kAt150, "", "a zero width saves nothing");
+  CheckSaved("1280", "0", false, {}, "", "a zero height saves nothing");
+}
+
+// Any width or height the next boot would reject (it reads [Display] resolution as two positive int32 values) saves
+// nothing, whichever way the size came.
+void SizeTheBootRejects() {
+  CheckSaved("00", "720", false, kAt150, "", "00 saves nothing");
+  CheckSaved("-5", "720", false, kAt150, "", "a negative width saves nothing");
+  CheckSaved("-1920", "-1080", false, {}, "", "a negative size saves nothing");
+  CheckSaved("1920", "-1080", true, kAt150, "", "a negative height after a pick saves nothing");
+  CheckSaved("+5", "720", false, kAt150, "", "+5 saves nothing");
+  CheckSaved("2147483648", "720", false, kAt150, "", "an int32 overflow saves nothing");
+  CheckSaved("1920.0", "1080", true, kAt150, "", "1920.0 saves nothing");
+  CheckSaved("0x780", "1080", true, kAt150, "", "0x780 saves nothing");
+  CheckSaved("1920x1080", "1080", true, kAt150, "", "1920x1080 as a width saves nothing");
+  CheckSaved("2147483647", "1080", true, kAt150, "2147483647x1080", "the largest int32 is still a size");
+}
+
+void CheckRepaired(std::optional<std::string_view> line, int32_t booted_width, int32_t booted_height,
+                   const char* want, const char* what) {
+  const auto [got_w, got_h] = RepairedResolution(line, booted_width, booted_height);
+  const std::string got = got_w.empty() && got_h.empty() ? std::string() : got_w + "x" + got_h;
+  Check(got == want, what, got.empty() ? std::string("nothing") : got);
+}
+
+// A save with no size to write: a [Display] resolution line the boot rejected gets the size the window booted at
+// (a fresh install's 1920x1080 when that is unknown); a line the boot used, or no line, is left alone.
+void DamagedLineRepaired() {
+  CheckRepaired("0x0", 1600, 900, "1600x900", "0x0 becomes the size the window booted at");
+  CheckRepaired("0x0", 0, 0, "1920x1080", "0x0 with no booted size becomes a fresh install's 1920x1080");
+  CheckRepaired("-5x1080", 1600, 900, "1600x900", "-5x1080 is repaired");
+  CheckRepaired("big", 1600, 900, "1600x900", "garbage is repaired");
+  CheckRepaired("", 1600, 900, "1600x900", "an empty value is repaired");
+  CheckRepaired("1920x1080", 1600, 900, "", "a line the boot used is kept");
+  CheckRepaired(" 1920 X 1080 ", 1600, 900, "", "spaces and an upper-case X are a size the boot uses");
+  CheckRepaired(std::nullopt, 1600, 900, "", "no line: nothing is added");
+}
+
 }  // namespace
 
 int main() {
@@ -107,6 +154,9 @@ int main() {
   NoBootLine();
   AtDpi();
   AbsentCvars();
+  ZeroSize();
+  SizeTheBootRejects();
+  DamagedLineRepaired();
   std::printf("ini_resolution_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

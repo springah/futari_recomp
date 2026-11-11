@@ -124,6 +124,45 @@ void DamagedBlockMarkersLoseNothing() {
   Check(Contains(out, "[Display]\nvsync = true\n"), "section after it intact", out);
 }
 
+// A file saved with a UTF-8 BOM (PowerShell 5.1's Set-Content, some editors): the block right after the BOM is still
+// the block, so a save replaces it rather than adding a second one.
+void BomBeforeTheBlockIsReplaced() {
+  const std::string ini = "\xEF\xBB\xBF" + std::string(ini_merge::kBlockBegin) +
+                          "\nrenut_resolution = 1080p\nfullscreen = 1\n" + std::string(ini_merge::kBlockEnd) +
+                          "\n[Display]\nresolution = 1920x1080\n";
+  const std::string once = ini_merge::Merge(ini, {}, "renut_resolution = 1080p\n");
+  Check(Count(once, ini_merge::kBlockBegin.data()) == 1, "BOM: one block after a save", once);
+  Check(Count(once, "renut_resolution") == 1, "BOM: the key once", once);
+  Check(!Contains(once, "fullscreen = 1"), "BOM: the old block's contents are replaced", once);
+  const std::string twice = ini_merge::Merge(once, {}, "renut_resolution = 1080p\n");
+  const std::string thrice = ini_merge::Merge(twice, {}, "renut_resolution = 1080p\n");
+  Check(once == twice && twice == thrice, "BOM: repeated saves are stable", thrice);
+}
+
+// A file that went through two BOM-adding tools starts with two BOMs: still the same block.
+void DoubleBomBeforeTheBlockIsReplaced() {
+  const std::string ini = "\xEF\xBB\xBF\xEF\xBB\xBF" + std::string(ini_merge::kBlockBegin) +
+                          "\nrenut_resolution = 1080p\n" + std::string(ini_merge::kBlockEnd) +
+                          "\n[Display]\nresolution = 1920x1080\n";
+  const std::string once = ini_merge::Merge(ini, {}, "renut_resolution = 1080p\nfoo = 1\n");
+  Check(Count(once, ini_merge::kBlockBegin.data()) == 1, "double BOM: one block after a save", once);
+  Check(Count(once, "foo = 1") == 1, "double BOM: the new key once", once);
+  const std::string twice = ini_merge::Merge(once, {}, "renut_resolution = 1080p\nfoo = 1\n");
+  const std::string thrice = ini_merge::Merge(twice, {}, "renut_resolution = 1080p\nfoo = 1\n");
+  Check(once == twice && twice == thrice, "double BOM: repeated saves are stable", thrice);
+}
+
+// A BOM pasted in with a later line (files joined by hand): the begin marker after it still counts.
+void BomOnALaterLineBeforeTheBlock() {
+  const std::string ini = "fullscreen = true\n\xEF\xBB\xBF" + std::string(ini_merge::kBlockBegin) +
+                          "\nrenut_resolution = 1080p\n" + std::string(ini_merge::kBlockEnd) +
+                          "\n[Display]\nresolution = 1920x1080\n";
+  const std::string out = ini_merge::Merge(ini, {}, "foo = 1\n");
+  Check(Count(out, ini_merge::kBlockBegin.data()) == 1, "BOM on a later line: one block after a save", out);
+  Check(!Contains(out, "renut_resolution"), "BOM on a later line: the old block's contents are replaced", out);
+  Check(Contains(out, "fullscreen = true\n"), "BOM on a later line: the line above it kept", out);
+}
+
 }  // namespace
 
 int main() {
@@ -135,6 +174,9 @@ int main() {
   MissingSectionIsAppended();
   CrlfInputIsHandled();
   DamagedBlockMarkersLoseNothing();
+  BomBeforeTheBlockIsReplaced();
+  DoubleBomBeforeTheBlockIsReplaced();
+  BomOnALaterLineBeforeTheBlock();
   std::printf("ini_merge_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

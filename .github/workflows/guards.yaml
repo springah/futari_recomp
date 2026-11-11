@@ -54,6 +54,18 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I src tests/ini_merge_test.cpp -o ini_merge_test
           ./ini_merge_test
 
+  hidden-settings-test:
+    # The resolution settings F4 hides (src/hidden_settings.h) and when a save
+    # keeps one in the managed block: only where the file already had it. Pure std.
+    name: hidden settings test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/hidden_settings_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/hidden_settings_test.cpp -o hidden_settings_test
+          ./hidden_settings_test
+
   screen-layout-test:
     # The size rules of the game's output-sized frame (src/screen_layout_math.h):
     # the clamp and the game's widescreen rule. Pure std, like the ini merge test.

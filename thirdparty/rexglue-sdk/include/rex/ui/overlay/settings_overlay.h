@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <rex/ui/imgui_dialog.h>
 
 struct ImFont;
@@ -29,6 +30,16 @@ namespace rex::ui {
 // A null picker, or nullptr from it, keeps the stretched base font.
 using OverlayFontPicker = std::function<ImFont*(float display_height)>;
 void SetSettingsOverlayFontPicker(OverlayFontPicker picker);
+
+// futari_recomp (2026-11-10): cvars the app keeps out of the settings overlay. A cvar the filter accepts is not
+// listed in simple or advanced mode nor found by search, "Reset all to defaults" leaves it alone, and when it accepts
+// "resolution" the Display section's Resolution row is not drawn. A null filter (the default) hides nothing.
+using OverlayCvarFilter = std::function<bool(std::string_view name)>;
+void SetSettingsOverlayHiddenCvars(OverlayCvarFilter filter);
+// futari_recomp (2026-11-11): cvars the overlay lists but "Reset all to defaults" leaves alone. An init-only one's row
+// stays disabled, so the overlay can't reset it at all; the app sets it some other way. A null filter (the default)
+// keeps nothing back.
+void SetSettingsOverlayResetProofCvars(OverlayCvarFilter filter);
 
 class SettingsDialog : public ImGuiDialog {
  public:

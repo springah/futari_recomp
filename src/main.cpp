@@ -10,6 +10,7 @@
 
 #include "generated/default/futari_init.h"
 
+#include "hidden_settings.h"
 #include "ini_merge.h"
 #include "ini_resolution.h"
 #include "screen_layout.h"
@@ -224,16 +225,6 @@ std::string StripInlineComment(std::string_view value) {
   return Trim(value);
 }
 
-std::optional<int32_t> ParseInt(std::string_view value) {
-  const std::string text = Trim(value);
-  int32_t out = 0;
-  auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), out);
-  if (ec != std::errc() || ptr != text.data() + text.size()) {
-    return std::nullopt;
-  }
-  return out;
-}
-
 std::optional<double> ParseDouble(std::string_view value) {
   try {
     size_t parsed = 0;
@@ -259,20 +250,6 @@ std::optional<bool> ParseBool(std::string_view value) {
   return std::nullopt;
 }
 
-std::optional<std::pair<int32_t, int32_t>> ParseResolution(std::string_view value) {
-  std::string text = Lower(Trim(value));
-  const size_t sep = text.find('x');
-  if (sep == std::string::npos) {
-    return std::nullopt;
-  }
-  auto width = ParseInt(text.substr(0, sep));
-  auto height = ParseInt(text.substr(sep + 1));
-  if (!width || !height || *width <= 0 || *height <= 0) {
-    return std::nullopt;
-  }
-  return std::pair<int32_t, int32_t>(*width, *height);
-}
-
 int32_t ClampInt(int32_t value, int32_t min, int32_t max) {
   return std::clamp(value, min, max);
 }
@@ -293,6 +270,10 @@ struct IniResolution {
 IniResolution g_ini_resolution;
 // The launcher (F2) wrote window_width/height since boot: a save writes them as they are (ini_resolution.h).
 std::atomic<bool> g_window_size_picked{false};
+// The window's client in physical pixels when the game booted windowed (0 after a fullscreen boot): what a save writes
+// over a [Display] resolution line the boot rejected (RepairedResolution).
+std::atomic<int32_t> g_boot_window_width{0};
+std::atomic<int32_t> g_boot_window_height{0};
 
 constexpr uint32_t kMediumDpi = 96;
 
@@ -359,7 +340,8 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "[Display]\n"
        << "# Window size as WxH. The game opens windowed at this size; the guest\n"
        << "# still renders at its native resolution and is scaled to fit.\n"
-       << "resolution = 1920x1080\n"
+       << "resolution = " << futari::ini_resolution::kDefaultWidth << "x" << futari::ini_resolution::kDefaultHeight
+       << "\n"
        << "fullscreen = false\n"
        << "# vsync paces the game at refresh_rate (its own 60 Hz clock). Leave it on:\n"
        << "# off, the game runs as fast as the machine goes.\n"
@@ -450,7 +432,7 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
   };
 
   if (auto* v = find("display.resolution")) {
-    if (auto res = ParseResolution(*v)) {
+    if (auto res = futari::ini_resolution::ParseResolution(*v)) {
       // The typed size is the frame in physical pixels: the window gets it as logical pixels at the primary display's
       // scale, Renut's output resolution takes it as the frame (screen_layout), and the guest's video mode stays it.
       const int32_t width = ClampInt(res->first, 640, 8192);
@@ -557,7 +539,7 @@ std::string GetCvarByName(std::string_view name) {
 }
 
 // [Display] resolution as a save writes it, in physical pixels (width, height; empty when the cvars are absent): the
-// size as typed while nothing changed window_width/height since boot. A size set since (an F2 pick, an F4 edit) is a
+// size as typed while nothing changed window_width/height since boot. A size set since (an F2 pick) is a
 // typed frame size too and goes out as it is: the next boot converts it like any typed value, so the frame is exactly
 // the size picked (multiplying it by the Windows scale would turn a 1920x1080 pick at 150% into a 2880x1620 frame).
 std::pair<std::string, std::string> TypedResolution() {
@@ -612,6 +594,16 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
   };
   if (const auto [w, h] = TypedResolution(); !w.empty()) {
     add("Display", "resolution", w + "x" + h);
+  } else {
+    // Read as the boot reads it, so a damaged line (e.g. 0x0) is repaired rather than kept.
+    const auto values = ReadIni(ini_path);
+    const auto it = values.find("display.resolution");
+    const auto [rw, rh] = futari::ini_resolution::RepairedResolution(
+        it != values.end() ? std::optional<std::string_view>(it->second) : std::nullopt, g_boot_window_width.load(),
+        g_boot_window_height.load());
+    if (!rw.empty()) {
+      add("Display", "resolution", rw + "x" + rh);
+    }
   }
   add("Display", "fullscreen", GetCvarByName("fullscreen"));
   // In a Renut session the SDK's `vsync` is not registered (it lives in the
@@ -652,6 +644,10 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
       }
       const std::string key = Trim(std::string_view(line).substr(0, eq));
       const std::string value = Trim(std::string_view(line).substr(eq + 1));
+      // A setting F4 hides is written below from the file's own block line, never from its current value.
+      if (futari::hidden_settings::IsHiddenSetting(key)) {
+        continue;
+      }
       // The video mode LoadFutariIni pinned to [Display] resolution comes from that line again at the next boot.
       const bool pinned = g_ini_resolution.video_mode_pinned &&
                           ((key == "video_mode_width" && value == std::to_string(g_ini_resolution.width)) ||
@@ -660,6 +656,14 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
                                                   [&](std::string_view e) { return e == key; });
       if (!excluded) {
         raw_block += line;
+        raw_block += '\n';
+      }
+    }
+    // A setting F4 hides stays only where the file already had it (a released build's F4 save, a hand edit), with the
+    // file's own line, serialised this run or not: a value from the command line alone is not saved.
+    for (const auto& [key, hidden_line] : futari::hidden_settings::HiddenBlockLines(original)) {
+      if (std::none_of(std::begin(kExcluded), std::end(kExcluded), [&](std::string_view e) { return e == key; })) {
+        raw_block += hidden_line;
         raw_block += '\n';
       }
     }
@@ -866,6 +870,10 @@ class FutariApp : public rex::ReXApp {
   void OnConfigureFonts(ImFontAtlas* atlas) override {
     futari::launcher::LauncherDialog::AddFonts(atlas);
     rex::ui::SetSettingsOverlayFontPicker(&futari::launcher::LauncherDialog::PickFont);
+    // F4 lists no resolution setting: [Display] resolution and F2 set the window size (2026-11-10).
+    rex::ui::SetSettingsOverlayHiddenCvars(&futari::hidden_settings::IsHiddenSetting);
+    // "Reset all to defaults" keeps the renderer choice, so a save after it keeps futari_renderer = renut (2026-11-11).
+    rex::ui::SetSettingsOverlayResetProofCvars(&futari::hidden_settings::IsResetProofSetting);
   }
 
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
@@ -1515,6 +1523,10 @@ class FutariApp : public rex::ReXApp {
     if (auto* wnd = window()) {
       wnd->SetTitle("Mushihimesama Futari v" FUTARI_VERSION_STRING " " REXGLUE_BUILD_TITLE);
       FitWindowToTypedSize(*wnd);
+      if (!wnd->IsFullscreen()) {
+        g_boot_window_width = int32_t(wnd->GetActualPhysicalWidth());
+        g_boot_window_height = int32_t(wnd->GetActualPhysicalHeight());
+      }
       LogDpiAwareness(*wnd);
     }
     InstallBundledDlc();
