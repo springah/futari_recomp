@@ -8,13 +8,15 @@
 // is filled: the boot logos' own edge, black around the rest (the overrides at the end). On Renut a swap hook
 // follows the window: a settled new output size resizes the device's buffers, then the same fields are rewritten.
 // It also switches between output and a preset at once (to the output, or to the game's own table frame), and holds
-// Renut's switch of scale until the frame is made for it.
+// Renut's switch of scale until the frame is made for it. The gameplay zoom's default, maximum and value text follow
+// the frame under output too; only the maximum's "never below the stored value" applies in every mode.
 
 #include "generated/default/futari_init.h"
 
 #include "screen_layout.h"
 #include "screen_layout_math.h"
 
+#include <algorithm>
 #include <atomic>
 #include <bit>
 #include <optional>
@@ -38,6 +40,12 @@ REXCVAR_DEFINE_STRING(futari_dev_frame_size, "", "Futari",
                       "Dev: the game's frame size WxH under renut_resolution = output (empty: the output's size)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
+// Dev aid: draw gameplay at a chosen zoom value v (2 + v/80 Arcade pixels) without touching the save, for captures:
+//   --futari_dev_zoom=110
+REXCVAR_DEFINE_STRING(futari_dev_zoom, "", "Futari",
+                      "Dev: the gameplay zoom value (at least -120) under renut_resolution = output (empty: the save's)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+
 namespace {
 
 using futari::screen_layout::ArmTitle;
@@ -57,6 +65,8 @@ using futari::screen_layout::IsWidescreen;
 using futari::screen_layout::kCanvasBandReach;
 using futari::screen_layout::kLogoArmed;
 using futari::screen_layout::kNarrowUiCentring;
+using futari::screen_layout::kZoomLabelScale;
+using futari::screen_layout::ParseDevZoom;
 using futari::screen_layout::ParseFrameSize;
 using futari::screen_layout::PictureDraw;
 using futari::screen_layout::PlanFrame;
@@ -67,6 +77,12 @@ using futari::screen_layout::UiDesignHeight;
 using futari::screen_layout::WallpaperCover;
 using futari::screen_layout::WallpaperQuad;
 using futari::screen_layout::WallpaperSlide;
+using futari::screen_layout::ZoomBound;
+using futari::screen_layout::ZoomDefault;
+using futari::screen_layout::ZoomLabelName;
+using futari::screen_layout::ZoomMax;
+using futari::screen_layout::ZoomMultiplier;
+using futari::screen_layout::ZoomText;
 
 // The presentation block sub_8216EBE8 fills: +56/+60 the reported mode (left alone), +64/+68 the frame size, +73 the
 // widescreen byte, +80 the UI's design height (the device constructor's scale is +68 / +80).
@@ -113,6 +129,38 @@ constexpr uint32_t kBandSpriteOffset = 16;
 // only at the next other full-screen picture.
 std::atomic<uint32_t> g_logo_texture{0};
 std::atomic<uint32_t> g_title_texture{0};
+
+// The display block (the settings object + 1408, also at this global): +8 the gameplay zoom as a float (2v), +60 the
+// screen mode (0 normal, 1 its variant, 2 separate x/y sizes; the zoom row is shown in modes 0 and 1).
+constexpr uint32_t kDisplayBlockPointer = 0x821F8264;
+constexpr uint32_t kSettingsDisplayBlock = 1408;
+constexpr uint32_t kDisplayZoom = 8;
+constexpr uint32_t kDisplayScreenMode = 60;
+constexpr uint32_t kScreenModeSeparateSizes = 2;
+// The game's label scale (multiplier = float(4v + 640) * it), checked once against kZoomLabelScale.
+constexpr uint32_t kGuestZoomLabelScale = 0x8204F96C;
+// A Screen page (the r3 of its item load, sub_8219D980 or sub_8219DAC0): its items from +324 to +328, 80 bytes each.
+// An item: +28 its id, +36 its type (1 = a number), +40 the value, +52 the maximum. The zoom (the active screen
+// group's +8) is id 5 on the Layout page and id 2 on the Simple page (their accessors sub_8219D4E8, sub_8219D5E8).
+constexpr uint32_t kPageItemsBegin = 324;
+constexpr uint32_t kPageItemsEnd = 328;
+constexpr uint32_t kItemStride = 80;
+constexpr uint32_t kItemId = 28;
+constexpr uint32_t kItemType = 36;
+constexpr uint32_t kItemValue = 40;
+constexpr uint32_t kItemMax = 52;
+constexpr uint32_t kLayoutZoomItemId = 5;
+constexpr uint32_t kSimpleZoomItemId = 2;
+constexpr uint32_t kNumberItemType = 1;
+
+// The zoom item the last Screen page load left, address in the high half and its id in the low; 0 = none seen.
+std::atomic<uint64_t> g_zoom_item{0};
+// The zoom item while sub_821B5D28 writes its row on this thread under output; 0 otherwise.
+thread_local uint32_t g_zoom_text_item = 0;
+
+bool IsZoomItem(uint8_t* base, uint32_t item, uint32_t zoom_id) {
+  return REX_LOAD_U32(item + kItemId) == zoom_id && REX_LOAD_U32(item + kItemType) == kNumberItemType;
+}
 
 // Width in the high half, height in the low; 0 = not known.
 std::atomic<uint64_t> g_configured_size{0};
@@ -181,6 +229,33 @@ FrameSize BootFrame() {
 FrameSize CurrentFrame() {
   const uint64_t size = g_current_frame.load(std::memory_order_acquire);
   return size ? Unpack(size) : BootFrame();
+}
+
+// After a Screen page loads its items' values: its zoom item (zoom_id, a number; the page's other items have other
+// ids) gets the frame's maximum under output, never below its value: the game turns a value above the maximum into 0.
+// In every other mode only that last part, so a value set under output survives a preset or xenos.
+void BoundZoomItems(uint8_t* base, uint32_t page, uint32_t zoom_id) {
+  const bool output = OutputFrameActive();
+  const uint32_t end = REX_LOAD_U32(page + kPageItemsEnd);
+  for (uint32_t item = REX_LOAD_U32(page + kPageItemsBegin); item + kItemStride <= end; item += kItemStride) {
+    if (!IsZoomItem(base, item, zoom_id)) {
+      continue;
+    }
+    const int32_t v = int32_t(REX_LOAD_U32(item + kItemValue));
+    int32_t max = int32_t(REX_LOAD_U32(item + kItemMax));
+    if (output) {
+      const FrameSize frame = CurrentFrame();
+      max = ZoomMax(frame.width, frame.height);
+    }
+    max = ZoomBound(max, v);
+    REX_STORE_U32(item + kItemMax, uint32_t(max));
+    g_zoom_item.store(uint64_t(item) << 32 | zoom_id, std::memory_order_relaxed);
+    static uint64_t logged = 0;
+    if (const uint64_t now = uint64_t(uint32_t(v)) << 32 | uint32_t(max); now != logged) {
+      logged = now;
+      REXLOG_INFO("Zoom item: value {}, max {}", v, max);
+    }
+  }
 }
 
 #if FUTARI_RENUT_RENDERER
@@ -542,4 +617,145 @@ extern "C" REX_FUNC(sub_8216DAA0) {
     }
   }
   ctx.r1.u32 = stack;
+}
+
+// The zoom a new settings object's group 0 and the Screen page's Reset take: the frame's fit.
+REX_EXTERN(__imp__sub_82185758);
+extern "C" REX_FUNC(sub_82185758) {
+  __imp__sub_82185758(ctx, base);
+  if (!OutputFrameActive()) {
+    return;
+  }
+  const FrameSize frame = CurrentFrame();
+  const int32_t v = ZoomDefault(frame.width, frame.height);
+  ctx.r3.s64 = v;
+  static std::optional<int32_t> logged;
+  if (logged != v) {
+    logged = v;
+    REXLOG_INFO("Zoom default {} ({:.2f}x) for {}x{}", v, ZoomMultiplier(v), frame.width, frame.height);
+  }
+}
+
+// The Layout page loads its items' values.
+REX_EXTERN(__imp__sub_8219D980);
+extern "C" REX_FUNC(sub_8219D980) {
+  const uint32_t page = ctx.r3.u32;
+  __imp__sub_8219D980(ctx, base);
+  BoundZoomItems(base, page, kLayoutZoomItemId);
+}
+
+// The Simple page (a fresh save's Screen page) loads its items' values.
+REX_EXTERN(__imp__sub_8219DAC0);
+extern "C" REX_FUNC(sub_8219DAC0) {
+  const uint32_t page = ctx.r3.u32;
+  __imp__sub_8219DAC0(ctx, base);
+  BoundZoomItems(base, page, kSimpleZoomItemId);
+}
+
+// A menu row's text: on the zoom item under output, mark it for sub_8207A990 below, which prints its value.
+// Screen mode 2 has no single zoom and keeps the game's text.
+REX_EXTERN(__imp__sub_821B5D28);
+extern "C" REX_FUNC(sub_821B5D28) {
+  const uint32_t item = ctx.r4.u32;
+  const uint64_t zoom = g_zoom_item.load(std::memory_order_relaxed);
+  if (!OutputFrameActive() || item == 0 || item != uint32_t(zoom >> 32) || !IsZoomItem(base, item, uint32_t(zoom)) ||
+      REX_LOAD_U32(REX_LOAD_U32(kDisplayBlockPointer) + kDisplayScreenMode) == kScreenModeSeparateSizes) {
+    __imp__sub_821B5D28(ctx, base);
+    return;
+  }
+  g_zoom_text_item = item;
+  __imp__sub_821B5D28(ctx, base);
+  g_zoom_text_item = 0;
+}
+
+// The game's _snprintf_s(buffer, size, format, value): for the marked zoom row, the value as its multiplier
+// ("3.00x", " DbD" at integers in screen mode 0, as the game's label), else the game's own text.
+REX_EXTERN(__imp__sub_8207A990);
+extern "C" REX_FUNC(sub_8207A990) {
+  const uint32_t buffer = ctx.r3.u32;
+  const uint32_t size = ctx.r4.u32;
+  const int32_t v = ctx.r6.s32;
+  __imp__sub_8207A990(ctx, base);
+  if (g_zoom_text_item == 0 || size == 0) {
+    return;
+  }
+  static const bool checked = [base] {
+    const float guest = std::bit_cast<float>(REX_LOAD_U32(kGuestZoomLabelScale));
+    if (guest != kZoomLabelScale) {
+      REXLOG_WARN("Zoom: the game's label scale at {:08X} is {}, not {}; the value text may round differently",
+                  kGuestZoomLabelScale, guest, kZoomLabelScale);
+    }
+    return true;
+  }();
+  (void)checked;
+  const uint32_t block = REX_LOAD_U32(kDisplayBlockPointer);
+  const std::string text = ZoomText(v, REX_LOAD_U32(block + kDisplayScreenMode) == 0);
+  const uint32_t length = std::min<uint32_t>(uint32_t(text.size()), size - 1);
+  for (uint32_t i = 0; i < length; ++i) {
+    REX_STORE_U8(buffer + i, uint8_t(text[i]));
+  }
+  REX_STORE_U8(buffer + length, 0);
+  ctx.r3.s64 = length;
+}
+
+// The game's sprintf(buffer, format, ...) into a 128-byte buffer; its only caller is the Layout page's per-frame
+// update sub_821A0760, which prints the zoom item's label with kZoomLabelFormat ("Zoom(x3.00 DbD)"). Under output the
+// label ends before its "(" (the value text shows the multiplier); presets, xenos and screen mode 2 keep the game's.
+constexpr uint32_t kZoomLabelFormat = 0x8204965C;
+constexpr uint32_t kZoomLabelBufferSize = 128;
+REX_EXTERN(__imp__sub_82069198);
+extern "C" REX_FUNC(sub_82069198) {
+  const uint32_t buffer = ctx.r3.u32;
+  const uint32_t format = ctx.r4.u32;
+  __imp__sub_82069198(ctx, base);
+  if (format != kZoomLabelFormat || !OutputFrameActive() ||
+      REX_LOAD_U32(REX_LOAD_U32(kDisplayBlockPointer) + kDisplayScreenMode) == kScreenModeSeparateSizes) {
+    return;
+  }
+  std::string label;
+  for (uint32_t i = 0; i < kZoomLabelBufferSize; ++i) {
+    const char c = char(REX_LOAD_U8(buffer + i));
+    if (c == '\0') {
+      break;
+    }
+    label += c;
+  }
+  const uint32_t length = uint32_t(ZoomLabelName(label).size());
+  if (length == label.size()) {
+    return;
+  }
+  REX_STORE_U8(buffer + length, 0);
+  ctx.r3.s64 = length;
+}
+
+// The display values from the settings: under output with futari_dev_zoom set, the gameplay size is its value's
+// instead of the save's (the save is not written). Screen mode 2 has no single zoom and keeps the game's.
+REX_EXTERN(__imp__sub_82187EE0);
+extern "C" REX_FUNC(sub_82187EE0) {
+  const uint32_t settings = ctx.r3.u32;
+  __imp__sub_82187EE0(ctx, base);
+  static const std::optional<int32_t> zoom = [] {
+    const std::string text = REXCVAR_GET(futari_dev_zoom);
+    if (text.empty()) {
+      return std::optional<int32_t>{};
+    }
+    const std::optional<int32_t> parsed = ParseDevZoom(text);
+    if (!parsed) {
+      REXLOG_WARN("futari_dev_zoom = \"{}\" is not a whole number of at least -120; ignored", text);
+    }
+    return parsed;
+  }();
+  if (!zoom || !OutputFrameActive()) {
+    return;
+  }
+  const uint32_t block = settings + kSettingsDisplayBlock;
+  if (REX_LOAD_U32(block + kDisplayScreenMode) == kScreenModeSeparateSizes) {
+    return;
+  }
+  REX_STORE_U32(block + kDisplayZoom, std::bit_cast<uint32_t>(float(2.0 * *zoom)));
+  static bool logged = false;
+  if (!logged) {
+    logged = true;
+    REXLOG_INFO("Zoom {} ({:.2f}x) from futari_dev_zoom; the save keeps its own", *zoom, ZoomMultiplier(*zoom));
+  }
 }

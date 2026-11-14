@@ -46,6 +46,14 @@
 // the forced dev size), and drops a pending window settle; under a preset the
 // window changes nothing. The latch takes the new mode only once the frame is
 // made for it; a switch that failed keeps the old mode until the next request.
+//
+// Gameplay zoom: the stored value v is the game's multiplier of the Arcade art
+// size, 2 + v/80. The largest integer multiplier whose 240x320 window fits the
+// frame is k = max(1, min(W/240, H/320)); a fresh save defaults to it, and the
+// item's maximum reaches one step past it, never below 5.00x (v 240), and never
+// below the stored value. The value text is the game's label maths in single
+// precision, "%.2fx", plus " DbD" at integer multipliers in its normal mode.
+// The dev zoom futari_dev_zoom is a whole number of at least -120.
 #include "screen_layout_math.h"
 
 #include <algorithm>
@@ -53,8 +61,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -71,6 +81,7 @@ using futari::screen_layout::FrameReady;
 using futari::screen_layout::FrameRect;
 using futari::screen_layout::FrameSize;
 using futari::screen_layout::FrameTarget;
+using futari::screen_layout::FitInteger;
 using futari::screen_layout::HintAnchor;
 using futari::screen_layout::HintPoint;
 using futari::screen_layout::IsFullCanvasPicture;
@@ -83,6 +94,8 @@ using futari::screen_layout::kNarrowUiCentring;
 using futari::screen_layout::kUi4x3ContentWidth;
 using futari::screen_layout::kResizeSettleFrames;
 using futari::screen_layout::kUiDesignHeight;
+using futari::screen_layout::kZoomLabelScale;
+using futari::screen_layout::ParseDevZoom;
 using futari::screen_layout::ParseFrameSize;
 using futari::screen_layout::PictureDraw;
 using futari::screen_layout::PictureFill;
@@ -98,6 +111,12 @@ using futari::screen_layout::UiScale;
 using futari::screen_layout::WallpaperCover;
 using futari::screen_layout::WallpaperQuad;
 using futari::screen_layout::WallpaperSlide;
+using futari::screen_layout::ZoomBound;
+using futari::screen_layout::ZoomDefault;
+using futari::screen_layout::ZoomLabelName;
+using futari::screen_layout::ZoomMax;
+using futari::screen_layout::ZoomMultiplier;
+using futari::screen_layout::ZoomText;
 
 int g_failed = 0;
 int g_checks = 0;
@@ -843,6 +862,137 @@ void OutputStillSettles() {
   Check(asked == 0, "a forced dev size does not follow the window", std::to_string(asked));
 }
 
+void CheckZoomDefault(uint32_t w, uint32_t h, int32_t want, const char* what) {
+  const int32_t got = ZoomDefault(w, h);
+  Check(got == want, what, std::to_string(got));
+}
+
+// A fresh save's zoom: the largest integer multiplier whose 240x320 window fits the frame.
+void ZoomDefaultFitsTheFrame() {
+  CheckZoomDefault(1280, 720, 0, "1280x720 -> 2x (v 0)");
+  CheckZoomDefault(1600, 900, 0, "1600x900 -> 2x (v 0)");
+  CheckZoomDefault(1920, 1080, 80, "1920x1080 -> 3x (v 80)");
+  CheckZoomDefault(1920, 1200, 80, "1920x1200 -> 3x (v 80)");
+  CheckZoomDefault(2520, 1680, 240, "2520x1680 -> 5x (v 240)");
+  CheckZoomDefault(3840, 2160, 320, "3840x2160 -> 6x (v 320)");
+  CheckZoomDefault(1080, 1920, 160, "portrait 1080x1920 -> 4x, width-bound (v 160)");
+  CheckZoomDefault(640, 480, -80, "640x480 -> 1x (v -80)");
+}
+
+// The fit is at least 1 for frames too small to hold the window.
+void ZoomFitAtLeastOne() {
+  Check(FitInteger(1, 1) == 1, "1x1 fits 1x", std::to_string(FitInteger(1, 1)));
+  Check(FitInteger(0, 0) == 1, "0x0 fits 1x", std::to_string(FitInteger(0, 0)));
+  Check(FitInteger(239, 4000) == 1, "239 wide fits 1x", std::to_string(FitInteger(239, 4000)));
+  CheckZoomDefault(0, 0, -80, "0x0 defaults to 1x (v -80)");
+}
+
+// v and the multiplier: 2 + v/80.
+void ZoomMultiplierFromTheValue() {
+  const std::pair<int32_t, double> table[] = {{-120, 0.5}, {-80, 1}, {0, 2}, {80, 3}, {160, 4}, {240, 5}};
+  for (const auto& [v, want] : table) {
+    const double got = ZoomMultiplier(v);
+    Check(got == want, "multiplier = 2 + v/80", std::to_string(v) + " -> " + std::to_string(got));
+  }
+}
+
+void CheckZoomMax(uint32_t w, uint32_t h, int32_t want, const char* what) {
+  const int32_t got = ZoomMax(w, h);
+  Check(got == want, what, std::to_string(got));
+}
+
+// The item's maximum: one integer step past the fit, never below 5.00x.
+void ZoomMaxOneStepPastTheFit() {
+  CheckZoomMax(3840, 2160, 400, "3840x2160 -> 7x (v 400)");
+  CheckZoomMax(1920, 1080, 240, "1920x1080 -> 5x (v 240)");
+  CheckZoomMax(2520, 1680, 320, "2520x1680 -> 6x (v 320)");
+  CheckZoomMax(1080, 1920, 240, "1080x1920 -> 5x (v 240)");
+  const FrameSize sizes[] = {{1280, 720},  {1600, 900},  {1920, 1080}, {1920, 1200}, {2560, 1080},
+                             {2560, 1440}, {3840, 2160}, {2520, 1680}, {1080, 1920}};
+  for (const FrameSize size : sizes) {
+    const int32_t max = ZoomMax(size.width, size.height);
+    const int32_t next = (int32_t(FitInteger(size.width, size.height)) + 1 - 2) * 80;
+    Check(max >= next && max >= 240, "the fit + 1 and 5.00x are reachable", Text(size) + " -> " + std::to_string(max));
+  }
+}
+
+// A stored value above the maximum raises it (the game would reset it otherwise).
+void ZoomBoundKeepsTheValue() {
+  Check(ZoomBound(240, 400) == 400, "a stored 400 raises 240 to 400", std::to_string(ZoomBound(240, 400)));
+  Check(ZoomBound(240, 80) == 240, "a stored 80 keeps 240", std::to_string(ZoomBound(240, 80)));
+}
+
+void CheckZoomText(int32_t v, bool dbd_mode, const std::string& want) {
+  const std::string got = ZoomText(v, dbd_mode);
+  Check(got == want, ("zoom text for " + std::to_string(v) + ": " + want).c_str(), got);
+}
+
+// The value text: the game's label maths in single precision, "%.2fx", " DbD" at integers in its normal mode.
+void ZoomTextAsTheGamesLabel() {
+  CheckZoomText(80, true, "3.00x DbD");
+  CheckZoomText(80, false, "3.00x");
+  CheckZoomText(20, true, "2.25x");
+  CheckZoomText(-120, true, "0.50x");
+  CheckZoomText(-80, true, "1.00x DbD");
+  CheckZoomText(110, true, "3.38x");
+  CheckZoomText(400, true, "7.00x DbD");
+  CheckZoomText(1, true, "2.01x");
+  CheckZoomText(2, true, "2.03x");  // the game's single-precision 2.025 rounds up
+  CheckZoomText(-118, true, "0.53x");
+}
+
+// A stored value far outside the game's range (a hand-edited save): a finite multiplier on the right side of
+// zero, near 2 + v/80, that fits the game's 260-byte buffer.
+void ZoomTextAtTheExtremes() {
+  for (const int32_t v : {INT32_MAX, INT32_MIN, int32_t{536870752}, int32_t{1073741824}}) {
+    const std::string got = ZoomText(v, false);
+    const double m = std::strtod(got.c_str(), nullptr);
+    const double want = ZoomMultiplier(v);
+    const std::string what = "zoom text for " + std::to_string(v);
+    Check(std::isfinite(m) && (m > 0) == (v > -160), (what + " has the multiplier's sign").c_str(), got);
+    Check(std::abs(m - want) <= std::abs(want) * 1e-6, (what + " is near 2 + v/80").c_str(), got);
+    Check(got.size() < 260 && got.back() == 'x', (what + " fits and ends in x").c_str(), got);
+  }
+}
+
+void CheckZoomLabel(const char* label, const char* want, const char* what) {
+  const std::string got(ZoomLabelName(label));
+  Check(got == want, what, got);
+}
+
+// The label without the game's multiplier: its text before the "(", in any language; else the label unchanged.
+void ZoomLabelDropsTheMultiplier() {
+  CheckZoomLabel("Zoom(x3.38)", "Zoom", "the multiplier goes");
+  CheckZoomLabel("Zoom(x3.00 DbD)", "Zoom", "the multiplier and DbD go");
+  CheckZoomLabel("Zoom", "Zoom", "no ( keeps the label");
+  CheckZoomLabel("", "", "an empty label stays empty");
+  CheckZoomLabel("(x3.00)", "(x3.00)", "a ( first keeps the label");
+}
+
+void CheckDevZoom(const char* text, std::optional<int32_t> want, const char* what) {
+  const std::optional<int32_t> got = ParseDevZoom(text);
+  Check(got == want, what, got ? std::to_string(*got) : std::string("nothing"));
+}
+
+// The dev zoom: a whole number of at least -120 (the game's minimum), spaces around it allowed; else nothing.
+void ParseDevZoomValue() {
+  CheckDevZoom("80", 80, "80");
+  CheckDevZoom("110", 110, "110");
+  CheckDevZoom("0", 0, "0");
+  CheckDevZoom("-120", -120, "the game's minimum -120");
+  CheckDevZoom("400", 400, "400, past the game's 240");
+  CheckDevZoom(" 20\t", 20, "spaces around the number");
+  CheckDevZoom("2147483647", INT32_MAX, "the largest i32");
+  CheckDevZoom("-121", std::nullopt, "below the minimum is nothing");
+  CheckDevZoom("", std::nullopt, "empty is nothing");
+  CheckDevZoom("  ", std::nullopt, "only spaces is nothing");
+  CheckDevZoom("+80", std::nullopt, "a plus sign is nothing");
+  CheckDevZoom("80x", std::nullopt, "trailing garbage is nothing");
+  CheckDevZoom("8 0", std::nullopt, "a space inside the number is nothing");
+  CheckDevZoom("3.0", std::nullopt, "a fraction is nothing");
+  CheckDevZoom("2147483648", std::nullopt, "past 32 bits is nothing");
+}
+
 }  // namespace
 
 int main() {
@@ -888,6 +1038,15 @@ int main() {
   PresetIgnoresTheWindow();
   FailedSwitchKeepsTheOldMode();
   OutputStillSettles();
+  ZoomDefaultFitsTheFrame();
+  ZoomFitAtLeastOne();
+  ZoomMultiplierFromTheValue();
+  ZoomMaxOneStepPastTheFit();
+  ZoomBoundKeepsTheValue();
+  ZoomTextAsTheGamesLabel();
+  ZoomTextAtTheExtremes();
+  ZoomLabelDropsTheMultiplier();
+  ParseDevZoomValue();
   std::printf("screen_layout_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

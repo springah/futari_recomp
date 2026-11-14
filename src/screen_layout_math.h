@@ -6,9 +6,11 @@
 #include <array>
 #include <charconv>
 #include <cstdint>
+#include <cstdio>
 #include <initializer_list>
 #include <iterator>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace futari::screen_layout {
@@ -395,6 +397,58 @@ constexpr std::array<CanvasSprite, 8> CanvasBands(const CanvasSprite& s, CanvasF
           band(x1, y0 - reach, x1 + reach, y0, right, top, 0, 0, {tr, tr, tr, tr}),
           band(x1, y1, x1 + reach, y1 + reach, right, bottom, 0, 0, {br, br, br, br}),
           band(x0 - reach, y1, x0, y1 + reach, left, bottom, 0, 0, {bl, bl, bl, bl})};
+}
+
+// Gameplay zoom: the stored value v is the game's multiplier of the Arcade art size, 2 + v/80 (one step = 0.0125x).
+constexpr double ZoomMultiplier(int32_t v) { return 2 + double(v) / 80; }
+
+// The largest integer multiplier whose 240x320 gameplay window fits a w x h frame, at least 1.
+constexpr uint32_t FitInteger(uint32_t w, uint32_t h) { return std::max(1u, std::min(w / 240, h / 320)); }
+
+// A fresh save's zoom: the fit's value.
+constexpr int32_t ZoomDefault(uint32_t w, uint32_t h) { return (int32_t(FitInteger(w, h)) - 2) * 80; }
+
+// The zoom item's maximum: one integer step past the fit, never below the game's own 240 (5.00x).
+constexpr int32_t ZoomMax(uint32_t w, uint32_t h) { return std::max(240, (int32_t(FitInteger(w, h)) - 1) * 80); }
+
+// The item's maximum with a stored value v: never below v, so the game does not reset a value above it.
+constexpr int32_t ZoomBound(int32_t max, int32_t v) { return std::max(max, v); }
+
+// The game's label scale (its constant at 0x8204F96C): multiplier = float(4v + 640) * this.
+inline constexpr float kZoomLabelScale = 0.003125f;
+
+// The zoom item's value text: the multiplier as the game's label computes it (single precision), "%.2fx", and
+// " DbD" at integer multipliers when the game's screen mode shows it.
+inline std::string ZoomText(int32_t v, bool dbd_mode) {
+  const float m = float(int64_t{4} * v + 640) * kZoomLabelScale;
+  char text[32];
+  std::snprintf(text, sizeof text, "%.2fx%s", m, dbd_mode && v % 80 == 0 ? " DbD" : "");
+  return text;
+}
+
+// The zoom item's label without the game's multiplier ("Zoom(x3.38)" -> "Zoom", the value shows it): the text
+// before its first "(", in whatever language the game uses; a label without one, or starting with it, is kept.
+constexpr std::string_view ZoomLabelName(std::string_view label) {
+  const size_t open = label.find('(');
+  return open == std::string_view::npos || open == 0 ? label : label.substr(0, open);
+}
+
+// The game's smallest zoom value (0.50x).
+inline constexpr int32_t kZoomMin = -120;
+
+// The dev zoom futari_dev_zoom: a whole number of at least kZoomMin, spaces around it allowed; else nothing.
+inline std::optional<int32_t> ParseDevZoom(std::string_view text) {
+  const size_t first = text.find_first_not_of(" \t");
+  if (first == std::string_view::npos) {
+    return std::nullopt;
+  }
+  text = text.substr(first, text.find_last_not_of(" \t") - first + 1);
+  int32_t value = 0;
+  const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+  if (error != std::errc{} || end != text.data() + text.size() || value < kZoomMin) {
+    return std::nullopt;
+  }
+  return value;
 }
 
 }  // namespace futari::screen_layout
