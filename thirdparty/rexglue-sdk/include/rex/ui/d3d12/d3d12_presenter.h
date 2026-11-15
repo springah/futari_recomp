@@ -251,7 +251,8 @@ class D3D12Presenter final : public Presenter {
     uint32_t swap_chain_width = 0;
     uint32_t swap_chain_height = 0;
     bool swap_chain_allows_tearing = false;
-    // present_vsync value the present path was last logged for (-1 = never),
+    // Present path last logged (-1 = never; 0 tearing allowed, 1 vsync without
+    // a wait, 2 vsync waiting in Present),
     // so the log shows the path once per swap chain and on every toggle.
     int8_t last_logged_present_vsync = -1;
     Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain;

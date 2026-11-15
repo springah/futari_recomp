@@ -53,6 +53,16 @@ list below describes only the vendoring commit itself.
   for `.dylib`, the name CMake builds and the helper stages (the bundle script
   used to rename the file to `.so` to satisfy it).
 
+- `src/ui/presenter.cpp`, `src/ui/d3d12/d3d12_presenter.cpp`,
+  `include/rex/ui/flags.h` (2026-11-15): `present_vsync` on Direct3D 12 no
+  longer waits in `Present`. It presents with sync interval 0 and without
+  `DXGI_PRESENT_ALLOW_TEARING` (the newest frame at each refresh, no tear
+  line, no wait), and reports no implicit vsync, so the guest output thread
+  may present as it does with `present_vsync` off. The earlier `Present(1)`
+  from the UI thread is kept behind the new cvar `present_vsync_wait`
+  (default false). Reason: the wait held the guest below its own 60 Hz
+  (futari_recomp issue #8; `docs/upstream/host-vsync.md`).
+
 ## Auditing against the source tag
 
 ```sh

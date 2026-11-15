@@ -518,8 +518,8 @@ void LauncherDialog::DrawSettings() {
   ImGui::Checkbox("VSync", &vsync_);
   ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
   WrappedText(vsync_renut_ ? "Renut: off shows frames at once; on waits for the display's refresh"
-                           : "Off shows frames at once and the game holds 60; on waits for the display's refresh "
-                             "(no tearing in fullscreen) and costs frames on a panel that is not exactly 60 Hz");
+                           : "Off shows frames at once (fullscreen may tear); on shows the newest frame at each "
+                             "refresh (no tearing). The game holds 60 either way");
   ImGui::PopStyleColor();
   ImGui::TextUnformatted("Window size");
   ImGui::SameLine();
@@ -752,12 +752,13 @@ void LauncherDialog::FinishPlay() {
 void LauncherDialog::LoadSettings() {
   renderer_renut_ = env_.renut_available && rex::cvar::Query<std::string>("futari_renderer") == "renut";
   fullscreen_ = rex::cvar::Query<bool>("fullscreen");
-  // The box is the host present's wait for the display: present_vsync on the
-  // default renderer (its own [Display] line since 2026-11-07, off by default
-  // on Windows: the wait cost the game 1.5 frames a second on a 59.94 Hz
-  // panel), renut_vsync while Renut runs (the SDK's presenter is not in use
-  // there). The guest pacing switch `vsync` stays out of reach here: off, the
-  // game runs as fast as the machine goes.
+  // The box is the host present's vsync: present_vsync on the default
+  // renderer (its own [Display] line since 2026-11-07, off by default on
+  // Windows; on, it used to wait in Present, which cost the game 1.5 frames a
+  // second on a 59.94 Hz panel, and since 2026-11-15 it presents at once
+  // without tearing instead), renut_vsync while Renut runs (the SDK's
+  // presenter is not in use there). The guest pacing switch `vsync` stays out
+  // of reach here: off, the game runs as fast as the machine goes.
   vsync_renut_ = env_.renut_running;
   vsync_ = rex::cvar::Query<bool>(vsync_renut_ ? "renut_vsync" : "present_vsync");
   resolution_index_ = 0;

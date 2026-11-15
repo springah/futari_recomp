@@ -50,6 +50,29 @@ the host side:
   (re)creation.
 - `SettingsDialog`'s VSync checkbox sets both `vsync` and `present_vsync`.
 
+## Follow-up, 2026-11-15: no wait inside `Present`
+
+`Present(1)` turned out to hold the guest back. A census on 2026-11-07 (RTX
+3080, 59.94 Hz panel) read 58.2 to 59.4 guest swaps a second with
+`present_vsync` on against 60.00 with it off, and a player on an AMD
+integrated GPU reported the game plainly slow with VSync on
+(springah/futari_recomp#8). On 2026-11-15 the same build read 60.00 on a 60 Hz
+and a 100 Hz monitor, windowed and fullscreen, even with the guest clock set to
+61 Hz, so the loss depends on the display or the driver and is not there on
+every machine.
+
+- D3D12 with `present_vsync`: `Present(0, DXGI_PRESENT_RESTART)`, without
+  `DXGI_PRESENT_ALLOW_TEARING`. A flip-model swap chain then shows the newest
+  finished frame at each refresh and drops one that was replaced first: no
+  tear line, and the call never waits.
+- `is_vsync_implicit_out` is false in that case, so the guest output thread
+  may present, as with `present_vsync` off.
+- New cvar `present_vsync_wait` (bool, default `false`) restores
+  `Present(1)` from the UI thread for comparison.
+- This also closes the first open question below for D3D12: both values of
+  `present_vsync` now use the same thread arrangement, so a runtime toggle
+  takes full effect at once.
+
 ## Open questions for upstream
 
 - Whether the default should be `true` (no tearing, what the word VSync means
