@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <initializer_list>
@@ -449,6 +450,69 @@ inline std::optional<int32_t> ParseDevZoom(std::string_view text) {
     return std::nullopt;
   }
   return value;
+}
+
+// The gameplay blit's VS rows 0 and 1 (clip x, clip y) as x, y, z, w coefficients of a quad vertex (x, y, 0, 1).
+struct BlitTransform {
+  float r0[4] = {};
+  float r1[4] = {};
+};
+
+// What to add to every blit vertex's x and y, in quad units.
+struct QuadShift {
+  float x = 0;
+  float y = 0;
+  bool operator==(const QuadShift&) const = default;
+};
+
+// How close to a whole pixel, and to a 90-degree turn at scale 1, counts as one.
+inline constexpr double kBlitSnapEpsilon = 1e-3;
+
+// The shift is a whole number of 1/1024 units, so adding it to the game's whole quad coordinates is exact in f32 below
+// 16384 (the quad keeps its size) and stays within half a step (< kBlitSnapEpsilon) of the whole pixel.
+inline constexpr double kBlitShiftSteps = 1024;
+
+// The shift that puts the blit's quad on whole pixels of a w x h frame: its vertex (x0, y0) lands at host
+// ((clip x + 1) * w/2, (1 - clip y) * h/2) + pixel_center (Renut's viewport origin), and each quad axis moves by
+// d in [0, 1) towards +q until that position is whole along the frame axis it runs on (ceil where the axis is kept,
+// floor where it is flipped: the grid nearest sampling already resolves its ties to). d within kBlitSnapEpsilon of
+// 0 or 1 is 0, the rest is rounded to kBlitShiftSteps. Only a 90-degree turn or mirror at scale 1 (within
+// kBlitSnapEpsilon) is snapped; any other matrix, or a non-finite input, gives nothing. The quad's size is unchanged:
+// every vertex gets the same shift. The rule has no Smoothing input.
+// What it guarantees: (x0, y0) lands on a whole pixel (within kBlitSnapEpsilon). The kBlitSnapEpsilon gate only
+// bounds each axis's scale near 1; the far edges land on whole pixels too only at scale 1 (the game's matrices are
+// within ~1e-7 of it) and when the quad's extent is a whole number of quad units.
+inline std::optional<QuadShift> BlitWholePixelShift(const BlitTransform& t, float w, float h, float pixel_center,
+                                                     float x0, float y0) {
+  const float inputs[] = {t.r0[0], t.r0[1], t.r0[2], t.r0[3], t.r1[0], t.r1[1], t.r1[2], t.r1[3],
+                          w,       h,       pixel_center, x0, y0};
+  if (!std::all_of(std::begin(inputs), std::end(inputs), [](float v) { return std::isfinite(v); })) {
+    return std::nullopt;
+  }
+  const double half_w = double(w) / 2;
+  const double half_h = double(h) / 2;
+  // Host pixels per quad unit: frame[axis][quad axis].
+  const double frame[2][2] = {{t.r0[0] * half_w, t.r0[1] * half_w}, {-t.r1[0] * half_h, -t.r1[1] * half_h}};
+  const double host[2] = {(double(t.r0[0]) * x0 + double(t.r0[1]) * y0 + t.r0[3] + 1) * half_w + pixel_center,
+                          (1 - (double(t.r1[0]) * x0 + double(t.r1[1]) * y0 + t.r1[3])) * half_h + pixel_center};
+  const auto near = [](double v, double want) { return std::abs(v - want) <= kBlitSnapEpsilon; };
+  int axes[2] = {};
+  double shift[2] = {};
+  for (int q = 0; q < 2; ++q) {
+    const int a = near(std::abs(frame[0][q]), 1) ? 0 : 1;
+    if (!near(std::abs(frame[a][q]), 1) || !near(frame[1 - a][q], 0)) {
+      return std::nullopt;
+    }
+    const double p = host[a];
+    const double d = frame[a][q] > 0 ? std::ceil(p) - p : p - std::floor(p);
+    axes[q] = a;
+    const bool whole = d < kBlitSnapEpsilon || d > 1 - kBlitSnapEpsilon;
+    shift[q] = whole ? 0 : std::nearbyint(d * kBlitShiftSteps) / kBlitShiftSteps;
+  }
+  if (axes[0] == axes[1]) {
+    return std::nullopt;
+  }
+  return QuadShift{float(shift[0]), float(shift[1])};
 }
 
 }  // namespace futari::screen_layout

@@ -25,4 +25,8 @@ bool IsGameplayDescriptor(const d3d::SurfaceDesc &desc);
 // thread; the render thread takes it at its next draw.
 void SetBlitSmoothing(u32 game_mode);
 
+// banjo_renut_half_pixel_offset as Renut latched it (banjo_renut_tuning.h's HalfPixelOffsetOn, out of line for the
+// app; also declared in banjo_renut_select.h). Any thread.
+bool HalfPixelOffsetOn();
+
 }  // namespace renut::gpu

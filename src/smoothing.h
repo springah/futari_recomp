@@ -15,5 +15,8 @@ void ApplyDevSmoothing(uint8_t* base, uint32_t display_block);
 // The generic draw-from-memory (count vertices at the guest address `vertices`): while futari_dev_smoothing is set
 // and the draw is the gameplay blit's, logs its 4 vertices (x, y, u, v) once per change. Every other draw: nothing.
 void NoteBlitDraw(uint8_t* base, uint32_t vertices, uint32_t count);
+// The same draw: when it is the gameplay blit's own (under every Smoothing and cvar), the guest address of the blit's
+// VS matrix (c10..c13: 4 rows of 4 big-endian f32, clip x first, then clip y); 0 for every other draw.
+uint32_t BlitDrawMatrix(uint32_t vertices, uint32_t count);
 
 }  // namespace futari::smoothing

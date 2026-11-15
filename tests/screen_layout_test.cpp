@@ -54,6 +54,15 @@
 // below the stored value. The value text is the game's label maths in single
 // precision, "%.2fx", plus " DbD" at integer multipliers in its normal mode.
 // The dev zoom futari_dev_zoom is a whole number of at least -120.
+//
+// The gameplay blit's quad (whole quad units, centred on (320, 240)) lands on
+// half pixels where the frame is odd: the game's matrix turns it by 90 degrees
+// onto the frame centre W/2, H/2, and its -0.5 cancels Renut's +0.5 pixel
+// centre. The shift moves the quad by less than one quad unit per axis, towards
+// +q, so its edges land on whole pixels: the grid Off already resolves its ties
+// to. Only a 90-degree turn (or mirror) at scale 1 is snapped; even frames and
+// non-finite input are left alone. The rule has no Smoothing input: Off, On and
+// Sharp get the same quad.
 #include "screen_layout_math.h"
 
 #include <algorithm>
@@ -62,12 +71,15 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
 
 namespace {
 
+using futari::screen_layout::BlitTransform;
+using futari::screen_layout::BlitWholePixelShift;
 using futari::screen_layout::CanvasBands;
 using futari::screen_layout::CanvasFill;
 using futari::screen_layout::CanvasSprite;
@@ -101,6 +113,7 @@ using futari::screen_layout::PictureDraw;
 using futari::screen_layout::PictureFill;
 using futari::screen_layout::PlanFrame;
 using futari::screen_layout::PresetTargets;
+using futari::screen_layout::QuadShift;
 using futari::screen_layout::ResizeSettle;
 using futari::screen_layout::ResizeTargets;
 using futari::screen_layout::ResizeValues;
@@ -993,6 +1006,245 @@ void ParseDevZoomValue() {
   CheckDevZoom("2147483648", std::nullopt, "past 32 bits is nothing");
 }
 
+// The linear part of the game's blit matrix: frame x = xx*qx + xy*qy, frame y = yx*qx + yy*qy (plus the centre).
+struct Turn {
+  double xx = 0;
+  double xy = 0;
+  double yx = 0;
+  double yy = 0;
+};
+
+// The game's own orientation: quad x runs up the frame (flipped), quad y across it.
+constexpr Turn kGameTurn{0, 1, -1, 0};
+
+// Every 90-degree turn and mirror at scale 1.
+constexpr Turn kAllTurns[] = {{1, 0, 0, 1},  {0, 1, -1, 0}, {-1, 0, 0, -1}, {0, -1, 1, 0},
+                              {-1, 0, 0, 1}, {1, 0, 0, -1}, {0, 1, 1, 0},   {0, -1, -1, 0}};
+
+// The blit's VS rows as the game builds them for a w x h frame: the turn about the quad's centre (320, 240) onto the
+// frame centre, with the game's -0.5 half-pixel term, in clip space, stored as floats.
+BlitTransform GameTransform(Turn r, double w, double h) {
+  const double gx = w / 2 - 0.5 - (r.xx * 320 + r.xy * 240);
+  const double gy = h / 2 - 0.5 - (r.yx * 320 + r.yy * 240);
+  return {{float(r.xx * 2 / w), float(r.xy * 2 / w), 0, float(gx * 2 / w - 1)},
+          {float(-r.yx * 2 / h), float(-r.yy * 2 / h), 0, float(1 - gy * 2 / h)}};
+}
+
+// A quad position in host pixels: D3D9 window coordinates plus Renut's pixel centre.
+std::pair<double, double> Host(const BlitTransform& t, double w, double h, double pixel_center, double x, double y) {
+  const double cx = t.r0[0] * x + t.r0[1] * y + t.r0[3];
+  const double cy = t.r1[0] * x + t.r1[1] * y + t.r1[3];
+  return {(cx + 1) * w / 2 + pixel_center, (1 - cy) * h / 2 + pixel_center};
+}
+
+// The game's quad at multiplier m: 320m x 240m quad units centred on (320, 240), rounded to whole units.
+struct Quad {
+  float x0 = 0;
+  float y0 = 0;
+  float x1 = 0;
+  float y1 = 0;
+};
+
+Quad GameQuad(double m) {
+  return {float(std::nearbyint(320 - 160 * m)), float(std::nearbyint(240 - 120 * m)),
+          float(std::nearbyint(320 + 160 * m)), float(std::nearbyint(240 + 120 * m))};
+}
+
+constexpr double kMultipliers[] = {1, 2, 3, 2.25};
+
+bool Whole(double v) { return std::abs(v - std::nearbyint(v)) < 1e-3; }
+
+std::string Text(const std::optional<QuadShift>& s) {
+  return s ? std::to_string(s->x) + ", " + std::to_string(s->y) : std::string("nothing");
+}
+
+// The shift for 'q' under 't': less than one quad unit per axis and not negative, every corner on whole pixels
+// afterwards, the quad's size in pixels unchanged, its host position moved by less than one pixel. Returns it.
+std::optional<QuadShift> CheckSnapped(const BlitTransform& t, double w, double h, Quad q, const std::string& what) {
+  const std::optional<QuadShift> s = BlitWholePixelShift(t, float(w), float(h), 0.5f, q.x0, q.y0);
+  Check(s.has_value(), (what + ": snapped").c_str(), Text(s));
+  if (!s)
+    return s;
+  Check(s->x >= 0 && s->x < 1 && s->y >= 0 && s->y < 1, (what + ": shift in [0, 1)").c_str(), Text(s));
+  const Quad moved{q.x0 + s->x, q.y0 + s->y, q.x1 + s->x, q.y1 + s->y};
+  Check(moved.x1 - moved.x0 == q.x1 - q.x0 && moved.y1 - moved.y0 == q.y1 - q.y0,
+        (what + ": quad size unchanged").c_str(), Text(s));
+  const auto [ax, ay] = Host(t, w, h, 0.5, moved.x0, moved.y0);
+  const auto [bx, by] = Host(t, w, h, 0.5, moved.x1, moved.y1);
+  const auto [cx, cy] = Host(t, w, h, 0.5, moved.x1, moved.y0);
+  const auto [dx, dy] = Host(t, w, h, 0.5, moved.x0, moved.y1);
+  const std::string corners = std::to_string(ax) + ", " + std::to_string(ay) + " .. " + std::to_string(bx) + ", " +
+                              std::to_string(by);
+  Check(Whole(ax) && Whole(ay) && Whole(bx) && Whole(by) && Whole(cx) && Whole(cy) && Whole(dx) && Whole(dy),
+        (what + ": every corner on whole pixels").c_str(), corners);
+  const double size_x = std::max({ax, bx, cx, dx}) - std::min({ax, bx, cx, dx});
+  const double size_y = std::max({ay, by, cy, dy}) - std::min({ay, by, cy, dy});
+  const double quad_w = q.x1 - q.x0;
+  const double quad_h = q.y1 - q.y0;
+  const bool same = (std::abs(size_x - quad_w) < 1e-3 && std::abs(size_y - quad_h) < 1e-3) ||
+                    (std::abs(size_x - quad_h) < 1e-3 && std::abs(size_y - quad_w) < 1e-3);
+  Check(same, (what + ": size in pixels unchanged").c_str(), corners);
+  const auto [ox, oy] = Host(t, w, h, 0.5, q.x0, q.y0);
+  Check(std::abs(ax - ox) < 1 && std::abs(ay - oy) < 1, (what + ": host offset below one pixel").c_str(),
+        std::to_string(ax - ox) + ", " + std::to_string(ay - oy));
+  return s;
+}
+
+bool About(float v, double want) { return std::abs(v - want) < 1e-3; }
+
+std::string Name(double w, double h, double m) {
+  return std::to_string(int(w)) + "x" + std::to_string(int(h)) + " at " + std::to_string(m) + "x";
+}
+
+// The VS rows logged at 3.00x (quad -160, -120 .. 800, 600), literally: 1920x1080 is already whole, 1920x1017 moves
+// half a unit along quad x (the frame's y), 1919x1080 half a unit along quad y (the frame's x).
+void BlitShiftMeasuredRows() {
+  const BlitTransform h1080{{-6.2e-10f, 0.0010416667f, 0, -0.2505206f}, {0.0018518518f, 1.1e-9f, 0, -0.59166694f}};
+  const BlitTransform h1017{{-6.2e-10f, 0.0010416667f, 0, -0.2505206f}, {0.0019665684f, 1.2e-9f, 0, -0.6283189f}};
+  const BlitTransform w1919{{-6.2e-10f, 0.0010422094f, 0, -0.25065118f}, {0.0018518518f, 1.1e-9f, 0, -0.59166694f}};
+  const Quad q{-160, -120, 800, 600};
+  const std::optional<QuadShift> a = CheckSnapped(h1080, 1920, 1080, q, "measured 1920x1080");
+  Check(a && *a == QuadShift{0, 0}, "measured 1920x1080: no shift", Text(a));
+  const std::optional<QuadShift> b = CheckSnapped(h1017, 1920, 1017, q, "measured 1920x1017");
+  Check(b && About(b->x, 0.5) && b->y == 0, "measured 1920x1017: quad x +0.5", Text(b));
+  const std::optional<QuadShift> c = CheckSnapped(w1919, 1919, 1080, q, "measured 1919x1080");
+  Check(c && c->x == 0 && About(c->y, 0.5), "measured 1919x1080: quad y +0.5", Text(c));
+}
+
+// Even frames: the game's quad is already on whole pixels at every multiplier.
+void BlitShiftEvenFrameIsZero() {
+  for (const auto [w, h] : {std::pair{1920.0, 1080.0}, {1280.0, 720.0}, {3840.0, 2160.0}, {1080.0, 1920.0}}) {
+    for (const double m : kMultipliers) {
+      const std::string what = Name(w, h, m);
+      const std::optional<QuadShift> s = CheckSnapped(GameTransform(kGameTurn, w, h), w, h, GameQuad(m), what);
+      Check(s && *s == QuadShift{0, 0}, (what + ": no shift").c_str(), Text(s));
+    }
+  }
+}
+
+void CheckGameShift(double w, double h, double want_x, double want_y) {
+  for (const double m : kMultipliers) {
+    const std::string what = Name(w, h, m);
+    const std::optional<QuadShift> s = CheckSnapped(GameTransform(kGameTurn, w, h), w, h, GameQuad(m), what);
+    Check(s && About(s->x, want_x) && About(s->y, want_y), (what + ": shift").c_str(), Text(s));
+  }
+}
+
+// An odd height: half a unit along quad x, which runs along the frame's y. The same for every Smoothing (the rule
+// has no Smoothing input).
+void BlitShiftOddHeight() {
+  CheckGameShift(1920, 1017, 0.5, 0);
+  CheckGameShift(1280, 721, 0.5, 0);
+}
+
+// An odd width: half a unit along quad y, which runs along the frame's x.
+void BlitShiftOddWidth() {
+  CheckGameShift(1919, 1080, 0, 0.5);
+  CheckGameShift(1365, 768, 0, 0.5);
+}
+
+void BlitShiftOddBoth() {
+  CheckGameShift(1919, 1017, 0.5, 0.5);
+  CheckGameShift(1365, 767, 0.5, 0.5);
+  // A large frame and zoom: the shifted quad still keeps its size in f32.
+  const std::optional<QuadShift> s =
+      CheckSnapped(GameTransform(kGameTurn, 8191, 8191), 8191, 8191, GameQuad(25), "8191x8191 at 25x");
+  Check(s && About(s->x, 0.5) && About(s->y, 0.5), "8191x8191 at 25x: shift", Text(s));
+}
+
+// Every 90-degree turn and mirror at odd and even sizes: on whole pixels, size kept, offset below one pixel.
+void BlitShiftAllOrientations() {
+  for (const Turn& r : kAllTurns) {
+    for (const auto [w, h] : {std::pair{1919.0, 1017.0}, {1920.0, 1017.0}, {1919.0, 1080.0}, {1920.0, 1080.0}}) {
+      for (const double m : kMultipliers) {
+        const std::string what = Name(w, h, m) + " turn " + std::to_string(int(r.xx)) + " " +
+                                 std::to_string(int(r.xy)) + " " + std::to_string(int(r.yx)) + " " +
+                                 std::to_string(int(r.yy));
+        CheckSnapped(GameTransform(r, w, h), w, h, GameQuad(m), what);
+      }
+    }
+  }
+}
+
+// At the game's orientation the frame moves +0.5 in x and -0.5 in y: the grid Off already resolves its ties to.
+void BlitShiftSameAsOffGrid() {
+  const BlitTransform t = GameTransform(kGameTurn, 1919, 1017);
+  const Quad q = GameQuad(3);
+  const std::optional<QuadShift> s = BlitWholePixelShift(t, 1919, 1017, 0.5f, q.x0, q.y0);
+  Check(s.has_value(), "1919x1017 at 3x: snapped", Text(s));
+  if (!s)
+    return;
+  const auto [x0, y0] = Host(t, 1919, 1017, 0.5, q.x0, q.y0);
+  const auto [x1, y1] = Host(t, 1919, 1017, 0.5, q.x0 + s->x, q.y0 + s->y);
+  Check(std::abs(x1 - x0 - 0.5) < 1e-3 && std::abs(y1 - y0 + 0.5) < 1e-3, "the frame moves +0.5 in x, -0.5 in y",
+        std::to_string(x1 - x0) + ", " + std::to_string(y1 - y0));
+}
+
+void CheckNoSnap(Turn r, double w, double h, const char* what) {
+  const Quad q = GameQuad(3);
+  const std::optional<QuadShift> s = BlitWholePixelShift(GameTransform(r, w, h), float(w), float(h), 0.5f, q.x0, q.y0);
+  Check(!s, what, Text(s));
+}
+
+// A rotation ease or any other angle or scale: the quad is left alone.
+void BlitShiftSkipsRotationEase() {
+  const double c = std::cos(0.7853981633974483);
+  CheckNoSnap({c, -c, c, c}, 1920, 1017, "45 degrees");
+  CheckNoSnap({0.866, -0.5, 0.5, 0.866}, 1920, 1017, "30 degrees");
+  CheckNoSnap({0, 0.999, -0.999, 0}, 1920, 1017, "scale 0.999");
+  CheckNoSnap({0, 1.002, -1.002, 0}, 1920, 1017, "scale 1.002");
+  CheckNoSnap({0, 1, -1, 0.01}, 1920, 1017, "a skew of 0.01");
+  CheckNoSnap({0, 1, 0, 1}, 1920, 1017, "both quad axes along the frame's y");
+  CheckNoSnap({0, 0, 0, 0}, 1920, 1017, "a zero matrix");
+  const Quad q = GameQuad(3);
+  const std::optional<QuadShift> near =
+      BlitWholePixelShift(GameTransform({1e-4, 1, -1, 1e-4}, 1920, 1017), 1920, 1017, 0.5f, q.x0, q.y0);
+  Check(near.has_value(), "within 1e-3 of a turn still snaps", Text(near));
+  const std::optional<QuadShift> zero = BlitWholePixelShift(GameTransform(kGameTurn, 1920, 1017), 0, 1017, 0.5f, q.x0,
+                                                            q.y0);
+  Check(!zero, "a zero-wide frame is left alone", Text(zero));
+}
+
+// A host position within 1e-3 of a whole pixel, on either side, counts as whole.
+void BlitShiftAlmostWhole() {
+  const BlitTransform t = GameTransform(kGameTurn, 1920, 1080);
+  const Quad q = GameQuad(3);
+  for (const float pixel_center : {0.5f + 1e-4f, 0.5f - 1e-4f}) {
+    const std::optional<QuadShift> s = BlitWholePixelShift(t, 1920, 1080, pixel_center, q.x0, q.y0);
+    Check(s && *s == QuadShift{0, 0}, "1e-4 from a whole pixel is no shift", Text(s));
+  }
+}
+
+// Without Renut's pixel centre an even frame is half a pixel off, so it moves on both axes.
+void BlitShiftWithoutThePixelCentre() {
+  const Quad q = GameQuad(3);
+  const std::optional<QuadShift> s = BlitWholePixelShift(GameTransform(kGameTurn, 1920, 1080), 1920, 1080, 0, q.x0,
+                                                         q.y0);
+  Check(s && About(s->x, 0.5) && About(s->y, 0.5), "pixel centre 0 at 1920x1080: half a unit on both axes", Text(s));
+}
+
+// NaN or infinity anywhere: nothing.
+void BlitShiftNonFinite() {
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const float inf = std::numeric_limits<float>::infinity();
+  const BlitTransform good = GameTransform(kGameTurn, 1920, 1017);
+  for (int i = 0; i < 8; ++i) {
+    BlitTransform t = good;
+    (i < 4 ? t.r0[i] : t.r1[i - 4]) = i % 2 ? inf : nan;
+    const std::optional<QuadShift> s = BlitWholePixelShift(t, 1920, 1017, 0.5f, -160, -120);
+    Check(!s, ("a non-finite matrix entry " + std::to_string(i)).c_str(), Text(s));
+  }
+  const auto none = [&](float w, float h, float pc, float x0, float y0, const char* what) {
+    const std::optional<QuadShift> s = BlitWholePixelShift(good, w, h, pc, x0, y0);
+    Check(!s, what, Text(s));
+  };
+  none(nan, 1017, 0.5f, -160, -120, "a NaN width");
+  none(1920, inf, 0.5f, -160, -120, "an infinite height");
+  none(1920, 1017, nan, -160, -120, "a NaN pixel centre");
+  none(1920, 1017, 0.5f, nan, -120, "a NaN x0");
+  none(1920, 1017, 0.5f, -160, -inf, "an infinite y0");
+}
+
 }  // namespace
 
 int main() {
@@ -1047,6 +1299,17 @@ int main() {
   ZoomTextAtTheExtremes();
   ZoomLabelDropsTheMultiplier();
   ParseDevZoomValue();
+  BlitShiftMeasuredRows();
+  BlitShiftEvenFrameIsZero();
+  BlitShiftOddHeight();
+  BlitShiftOddWidth();
+  BlitShiftOddBoth();
+  BlitShiftAllOrientations();
+  BlitShiftSameAsOffGrid();
+  BlitShiftSkipsRotationEase();
+  BlitShiftAlmostWhole();
+  BlitShiftWithoutThePixelCentre();
+  BlitShiftNonFinite();
   std::printf("screen_layout_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

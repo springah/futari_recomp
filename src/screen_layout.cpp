@@ -18,6 +18,7 @@
 #include "smoothing.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <bit>
 #include <optional>
@@ -50,6 +51,8 @@ REXCVAR_DEFINE_STRING(futari_dev_zoom, "", "Futari",
 namespace {
 
 using futari::screen_layout::ArmTitle;
+using futari::screen_layout::BlitTransform;
+using futari::screen_layout::BlitWholePixelShift;
 using futari::screen_layout::CanvasBands;
 using futari::screen_layout::CanvasFill;
 using futari::screen_layout::CanvasSprite;
@@ -72,6 +75,7 @@ using futari::screen_layout::ParseFrameSize;
 using futari::screen_layout::PictureDraw;
 using futari::screen_layout::PlanFrame;
 using futari::screen_layout::PresetTargets;
+using futari::screen_layout::QuadShift;
 using futari::screen_layout::ResizeTargets;
 using futari::screen_layout::ResizeValues;
 using futari::screen_layout::UiDesignHeight;
@@ -269,6 +273,19 @@ constexpr uint32_t kRendererHeight = 132;
 constexpr uint32_t kRendererDevice = 152;
 // The game device's UI scale (its constructor's H / block +80), read every frame by the UI matrix.
 constexpr uint32_t kDeviceUiScale = 556;
+// The D3D device's PA_SU_VTX_CNTL word: bit 0 (pix_center, D3DRS_HALFPIXELOFFSET) set puts pixel centres at half
+// pixels, so Renut's viewport takes no half-pixel origin.
+constexpr uint32_t kD3DVertexControl = 0x29C0;
+constexpr uint32_t kPixelCentreBit = 1;
+// The blit's quad: 4 vertices of 16 bytes (x, y, u, v), and its VS rows (clip x, clip y), 16 bytes each.
+constexpr uint32_t kBlitVertexCount = 4;
+constexpr uint32_t kBlitVertexStride = 16;
+constexpr uint32_t kBlitMatrixRow = 16;
+
+// The D3D device the game swaps (its guest address); 0 before the first swap.
+std::atomic<uint32_t> g_d3d_device{0};
+// The gameplay quad's shift and frame size last logged (x, y, w, h), per guest thread that draws the blit.
+thread_local std::optional<std::array<float, 4>> g_logged_shift;
 
 uint8_t* GuestBase() { return rex::system::kernel_state()->memory()->virtual_membase(); }
 
@@ -359,6 +376,7 @@ const char* ModeName(bool output) { return output ? "output" : "preset"; }
 // Every Swap, on the guest thread before the frame is queued: a switch between output and a preset resizes the
 // game's frame at once; under output (without a fixed dev size) a settled window size resizes it live.
 void GuestSwap(uint32_t device) {
+  g_d3d_device.store(device, std::memory_order_relaxed);
   const uint64_t current = g_current_frame.load(std::memory_order_acquire);
   if (current == 0) {
     return;
@@ -402,6 +420,51 @@ void GuestSwap(uint32_t device) {
 // Renut's latch gate (render thread): a new renut_resolution is taken once the game's frame is made for it.
 bool FrameReadyFor(bool output, uint32_t) {
   return FrameReady(g_frame_output.load(std::memory_order_acquire), output);
+}
+
+// Renut's viewport origin for the device's draws, as its draw.cpp sets it: half a pixel with
+// banjo_renut_half_pixel_offset (Renut's own latch) unless the device's pix_center bit is set (the device starts with
+// it clear; before the first swap the device isn't known, so clear).
+float RenutPixelCentre(uint8_t* base) {
+  const uint32_t device = g_d3d_device.load(std::memory_order_relaxed);
+  const bool pixel_centre_bit = device != 0 && (REX_LOAD_U32(device + kD3DVertexControl) & kPixelCentreBit) != 0;
+  return renut::gpu::HalfPixelOffsetOn() && !pixel_centre_bit ? 0.5f : 0.0f;
+}
+
+// The gameplay blit's own draw under output: its quad moves by under a pixel (x, y of all 4 vertices, the same
+// amount; u, v untouched) so its edges land on whole frame pixels at odd frame sizes too. Written in place and left:
+// the game's later passes over the same quad stay aligned with it (sub_82183658 also reads the reused quad; that
+// consumer is untraced). A matrix that isn't a 90-degree turn at scale 1
+// (a rotation ease) leaves the quad alone.
+void SnapBlitQuad(uint8_t* base, uint32_t vertices, uint32_t matrix) {
+  BlitTransform transform;
+  for (uint32_t i = 0; i < 4; ++i) {
+    transform.r0[i] = std::bit_cast<float>(REX_LOAD_U32(matrix + 4 * i));
+    transform.r1[i] = std::bit_cast<float>(REX_LOAD_U32(matrix + kBlitMatrixRow + 4 * i));
+  }
+  const float width = std::bit_cast<float>(REX_LOAD_U32(kScreenWidth));
+  const float height = std::bit_cast<float>(REX_LOAD_U32(kScreenHeight));
+  const float x0 = std::bit_cast<float>(REX_LOAD_U32(vertices));
+  const float y0 = std::bit_cast<float>(REX_LOAD_U32(vertices + 4));
+  const std::optional<QuadShift> shift = BlitWholePixelShift(transform, width, height, RenutPixelCentre(base), x0, y0);
+  if (!shift) {
+    return;
+  }
+  if (shift->x != 0 || shift->y != 0) {
+    for (uint32_t i = 0; i < kBlitVertexCount; ++i) {
+      const uint32_t vertex = vertices + i * kBlitVertexStride;
+      REX_STORE_U32(vertex + 0, std::bit_cast<uint32_t>(std::bit_cast<float>(REX_LOAD_U32(vertex + 0)) + shift->x));
+      REX_STORE_U32(vertex + 4, std::bit_cast<uint32_t>(std::bit_cast<float>(REX_LOAD_U32(vertex + 4)) + shift->y));
+    }
+  }
+  if (const std::array<float, 4> now{shift->x, shift->y, width, height}; g_logged_shift != now) {
+    g_logged_shift = now;
+    if (shift->x == 0 && shift->y == 0) {
+      REXLOG_INFO("Gameplay quad already on whole pixels at {}x{}", width, height);
+    } else {
+      REXLOG_INFO("Gameplay quad shifted ({}, {}) to whole pixels at {}x{}", shift->x, shift->y, width, height);
+    }
+  }
 }
 #endif
 
@@ -491,10 +554,17 @@ extern "C" REX_FUNC(sub_82184CC8) {
 }
 
 // The generic draw-from-memory: on the wallpaper's own quad only, cover the frame with the 16:9 art at the game's
-// slide-in offset, then draw. Every other draw passes through (the gameplay blit's quad is logged for dev captures).
+// slide-in offset, then draw. On the gameplay blit's own quad under output, move it onto whole frame pixels. Every
+// other draw passes through (the gameplay blit's quad is logged for dev captures, as drawn).
 REX_EXTERN(__imp__sub_8206BF48);
 extern "C" REX_FUNC(sub_8206BF48) {
   const uint32_t vertices = ctx.r6.u32;
+#if FUTARI_RENUT_RENDERER
+  if (const uint32_t matrix = futari::smoothing::BlitDrawMatrix(vertices, ctx.r5.u32);
+      matrix != 0 && OutputFrameActive()) {
+    SnapBlitQuad(base, vertices, matrix);
+  }
+#endif
   futari::smoothing::NoteBlitDraw(base, vertices, ctx.r5.u32);
   if (g_wallpaper_vertices != 0 && vertices == g_wallpaper_vertices && ctx.r5.u32 == kWallpaperVertexCount) {
     const bool wide = REX_LOAD_U32(kWidescreenFlag) != 0;

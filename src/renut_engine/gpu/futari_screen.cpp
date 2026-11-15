@@ -4,6 +4,7 @@
 #include <atomic>
 
 #include "renut_engine/gpu/backend/video.h"
+#include "renut_engine/gpu/banjo_renut_tuning.h"
 #include "renut_engine/gpu/futari_screen_rules.h"
 #include "renut_engine/gpu/guest/guest_memory.h"
 #include "renut_engine/gpu/log.h"
@@ -64,6 +65,10 @@ void SetBlitSmoothing(u32 game_mode) {
     RGPU_INFO("Smoothing: {}", smoothing == BlitSmoothing::kSharp      ? "Sharp bilinear"
                                : smoothing == BlitSmoothing::kBilinear ? "float bilinear (On)"
                                                                        : "the game's");
+}
+
+bool HalfPixelOffsetOn() {
+  return banjo::renut_gpu::HalfPixelOffsetOn();
 }
 
 }  // namespace renut::gpu

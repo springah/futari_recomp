@@ -84,9 +84,12 @@ constexpr uint32_t kPushCopyOffset = 112;
 constexpr uint32_t kBlitVertexCount = 4;
 constexpr uint32_t kBlitVertexWords = 4;
 using BlitQuad = std::array<uint32_t, kBlitVertexCount * kBlitVertexWords>;
+// sub_82183C68 builds its VS matrix (c10..c13, uploaded once before its one draw) at its entry r1 - 160.
+constexpr uint32_t kBlitMatrixBelowEntry = 160;
 
-// The blit's vertex address while sub_82183C68 runs on this thread; 0 otherwise.
+// The blit's vertex address and its entry r1 while sub_82183C68 runs on this thread; 0 otherwise.
 thread_local uint32_t g_blit_vertices = 0;
+thread_local uint32_t g_blit_entry_sp = 0;
 // The quad last logged (raw words), per guest thread that draws the blit.
 thread_local std::optional<BlitQuad> g_logged_quad;
 
@@ -249,6 +252,13 @@ void NoteBlitDraw(uint8_t* base, uint32_t vertices, uint32_t count) {
               f(2), f(3), f(4), f(5), f(6), f(7), f(8), f(9), f(10), f(11), f(12), f(13), f(14), f(15));
 }
 
+uint32_t BlitDrawMatrix(uint32_t vertices, uint32_t count) {
+  if (g_blit_vertices == 0 || vertices != g_blit_vertices || count != kBlitVertexCount) {
+    return 0;
+  }
+  return g_blit_entry_sp - kBlitMatrixBelowEntry;
+}
+
 }  // namespace futari::smoothing
 
 // The gameplay blit (r4 = its quad): Sharp runs as On, restored after unless the game changed it meanwhile.
@@ -269,8 +279,10 @@ extern "C" REX_FUNC(sub_82183C68) {
     REX_STORE_U32(block + kDisplaySmoothing, draw_mode);
   }
   g_blit_vertices = ctx.r4.u32;
+  g_blit_entry_sp = ctx.r1.u32;
   __imp__sub_82183C68(ctx, base);
   g_blit_vertices = 0;
+  g_blit_entry_sp = 0;
   if (patched && REX_LOAD_U32(block + kDisplaySmoothing) == draw_mode) {
     REX_STORE_U32(block + kDisplaySmoothing, mode);
   }
