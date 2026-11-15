@@ -39,7 +39,8 @@ const std::string& FallbackReason();
 }  // namespace banjo::renut_gpu
 
 namespace renut::gpu {
-// render/shader_library.h's, declared here too for the app (which has no plume include path): true on a build
+// futari_recomp (2026-11-07): render/shader_library.h's, declared here too for the app (which has no plume include
+// path): true on a build
 // with the translated game shaders built in, false on a distribution build that reads vulkan_spirv.bin.
 bool GameShadersBuiltIn();
 // futari_recomp (2026-11-07): render/surfaces.h's, declared here too for the app: renut_resolution = output.
@@ -59,10 +60,6 @@ bool ResizeAutoBuffers(uint32_t device, uint32_t width, uint32_t height);
 // 1 On, 4 Sharp bilinear). Any thread.
 void SetBlitSmoothing(uint32_t game_mode);
 }  // namespace renut::gpu
-
-namespace banjo::renut_gpu {
-
-}  // namespace banjo::renut_gpu
 
 #include "renut_engine/futari_renut_hooks.h"
 

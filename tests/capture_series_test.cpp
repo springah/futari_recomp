@@ -1,6 +1,6 @@
 // Standalone test of src/dev/capture_series.h (pure std, no SDK): the names of
 // the F9 frame captures written next to futari_renut_capture_path, and of
-// src/renut_engine/gpu/futari_capture_math.h: the conversions of a 16-bit
+// src/renut_engine/gpu/backend/capture_math.h: the conversions of a 16-bit
 // float source capture. Runs in CI
 // (Guards, "capture-series-test") on g++, and locally with any C++20 compiler:
 //
@@ -11,7 +11,7 @@
 // continues past the highest number already in the folder, so nothing is
 // overwritten.
 #include "dev/capture_series.h"
-#include "renut_engine/gpu/futari_capture_math.h"
+#include "renut_engine/gpu/backend/capture_math.h"
 
 #include <algorithm>
 #include <bit>
@@ -33,8 +33,8 @@ using futari::dev::CaptureSourceFloatFileName;
 using futari::dev::FreeCaptureNumber;
 using futari::dev::NextCaptureNumber;
 using futari::dev::PfmFile;
-using renut::gpu::futari_capture::HalfToFloat;
-using renut::gpu::futari_capture::UnitToByte;
+using renut::gpu::capture_math::HalfToFloat;
+using renut::gpu::capture_math::UnitToByte;
 
 int g_failed = 0;
 int g_checks = 0;

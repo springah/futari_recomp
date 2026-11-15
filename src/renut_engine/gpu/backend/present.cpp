@@ -34,8 +34,8 @@
 #include "renut_engine/gpu/backend/video_internal.h"
 #include "renut_engine/gpu/banjo_renut_capture.h"
 #include "renut_engine/gpu/backend/presented_frame.h"  // futari_recomp (2026-11-08): the last presented frame's rect
-#include "renut_engine/gpu/futari_screen.h"  // futari_recomp (2026-11-15): the blit's source for the dev capture
-#include "renut_engine/gpu/futari_capture_math.h"  // futari_recomp (2026-11-15): the source capture's fp16 values
+#include "renut_engine/gpu/render/graphics_options.h"  // futari_recomp (2026-11-15): the blit's source for the dev capture
+#include "renut_engine/gpu/backend/capture_math.h"  // futari_recomp (2026-11-15): the source capture's fp16 values
 #if defined(PLUME_DEKO3D)
 #include <plume_deko3d.h>  // banjo-nx: banjo_renut_capture_raw's format check
 #endif
@@ -527,8 +527,8 @@ bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::v
         for (uint32_t c = 0; c < 3; ++c) {
           uint16_t value;
           std::memcpy(&value, row + x * 8 + (swap ? 2 - c : c) * 2, 2);
-          exact[i * 3 + c] = futari_capture::HalfToFloat(value);
-          out.data[i * 4 + c] = futari_capture::UnitToByte(exact[i * 3 + c]);
+          exact[i * 3 + c] = capture_math::HalfToFloat(value);
+          out.data[i * 4 + c] = capture_math::UnitToByte(exact[i * 3 + c]);
         }
         out.data[i * 4 + 3] = 0xFF;
       }
@@ -554,7 +554,7 @@ bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::v
 // From PresentLocked: one relaxed load when nobody asked.
 void ServeCaptureLocked(VideoState &s, const PresentImage *image) {
   FrameCapture &c = g_capture;
-  // futari_recomp (2026-11-15): taken at every present, so it is always this frame's blit (futari_screen.h).
+  // futari_recomp (2026-11-15): taken at every present, so it is always this frame's blit (graphics_options.h).
   const std::optional<u32> blit_page = TakeBlitSourcePageLocked();
   const uint64_t requested = c.requested.load(std::memory_order_acquire);
   if (requested == c.served_render || !image || !image->texture || image->descriptor == kInvalidDescriptor)

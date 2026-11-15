@@ -1,4 +1,4 @@
-// futari_recomp (2026-11-15): see futari_screen.h.
+// futari_recomp (2026-11-15): see futari_screen.h; also defines the blit seam render/graphics_options.h declares.
 #include "renut_engine/gpu/futari_screen.h"
 
 #include <atomic>
@@ -7,6 +7,7 @@
 #include "renut_engine/gpu/futari_screen_rules.h"
 #include "renut_engine/gpu/guest/guest_memory.h"
 #include "renut_engine/gpu/log.h"
+#include "renut_engine/gpu/render/graphics_options.h"
 #include "renut_engine/gpu/render/texture_layout.h"
 
 namespace renut::gpu {
@@ -46,9 +47,9 @@ u32 BlitHostPixelShaderLocked(uint64_t ps_hash, const d3d::TextureFetchConstant 
   const u32 shader = futari_screen::BlitHostPixelShader(g_blit_smoothing.load(std::memory_order_relaxed), ps_hash,
                                                         gameplay_source, gameplay_target);
   // No shader (failed to build, warned once in video.cpp; deko3d): the game's own, i.e. On.
-  if ((shader == futari_screen::kHostPixelShaderSharp && !State().sharp_bilinear_ps) ||
-      (shader == futari_screen::kHostPixelShaderBilinear && !State().blit_bilinear_ps))
-    return futari_screen::kHostPixelShaderGuest;
+  if ((shader == kHostPixelShaderSharp && !State().sharp_bilinear_ps) ||
+      (shader == kHostPixelShaderBilinear && !State().blit_bilinear_ps))
+    return kHostPixelShaderGuest;
   return shader;
 }
 

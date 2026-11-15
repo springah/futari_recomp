@@ -6,9 +6,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <string>
 #include <utility>
 #include <vector>
+
+#include "renut_engine/gpu/render/host_pixel_shader.h"
 
 namespace renut::gpu::futari_screen {
 
@@ -67,27 +68,7 @@ constexpr BlitSmoothing BlitSmoothingOf(uint32_t game_mode) {
   return game_mode == 1 ? BlitSmoothing::kBilinear : BlitSmoothing::kGame;
 }
 
-// PipelineKey::host_pixel_shader's values: the guest's, sharp_bilinear_ps, blit_bilinear_ps (the same with k = 1).
-constexpr uint32_t kHostPixelShaderGuest = 0;
-constexpr uint32_t kHostPixelShaderSharp = 1;
-constexpr uint32_t kHostPixelShaderBilinear = 2;
-
-// A host pixel shader's suffix in a pipeline's debug name (render/pipeline.cpp): none for the guest's, else its name
-// (a value with no shader of its own, as from a corrupt pipeline list: " host_ps_<n>").
-inline std::string HostPixelShaderName(uint32_t host_pixel_shader) {
-  switch (host_pixel_shader) {
-  case kHostPixelShaderGuest:
-    return {};
-  case kHostPixelShaderSharp:
-    return " sharp_bilinear_ps";
-  case kHostPixelShaderBilinear:
-    return " blit_bilinear_ps";
-  default:
-    return " host_ps_" + std::to_string(host_pixel_shader);
-  }
-}
-
-// The draw's host pixel shader: the one 'smoothing' asks for when the draw is the gameplay blit, else the guest's.
+// The draw's host pixel shader (render/host_pixel_shader.h's values): the one 'smoothing' asks for when the draw is the gameplay blit, else the guest's.
 constexpr uint32_t BlitHostPixelShader(BlitSmoothing smoothing, uint64_t ps_hash, bool slot0_is_gameplay_resolve,
                                        bool colour0_is_gameplay) {
   if (smoothing == BlitSmoothing::kGame || !IsGameplayBlit(ps_hash, slot0_is_gameplay_resolve, colour0_is_gameplay))

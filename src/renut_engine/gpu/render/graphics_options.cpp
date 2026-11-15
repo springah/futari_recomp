@@ -9,16 +9,17 @@
  */
 #include "renut_engine/gpu/render/graphics_options.h"
 
-#include <array>
+#include <array>  // futari_recomp (2026-11-15)
 #include <cstdlib>
-#include <set>
+#include <set>  // futari_recomp (2026-11-15)
 #include <string>
 
 #include <rex/cvar.h>
 #include <rex/types.h>
 
-#include "renut_engine/gpu/futari_screen.h"
-#include "renut_engine/gpu/log.h"
+// futari_recomp (2026-11-08): no guest/widescreen.h (removed with GuestScreenWidth).
+#include "renut_engine/gpu/futari_screen.h"  // futari_recomp (2026-11-15): the gameplay targets
+#include "renut_engine/gpu/log.h"            // futari_recomp (2026-11-15)
 #include "renut_engine/gpu/render/format.h"
 
 REXCVAR_DEFINE_STRING(renut_anisotropic_filtering, "Game", "Futari/Renut",

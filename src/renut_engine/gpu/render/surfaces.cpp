@@ -368,10 +368,12 @@ bool ResolutionRequestsOutput() {
   return !IsDeko3D() && REXCVAR_GET(renut_resolution) == "output";
 }
 
+// futari_recomp (2026-11-10): see surfaces.h.
 void SetResolutionLatchGate(bool (*ready)(bool output, uint32_t scale_code)) {
   g_latch_gate.store(ready, std::memory_order_release);
 }
 
+// futari_recomp (2026-11-10): see surfaces.h.
 void SurfaceHeaderRewrittenLocked(u32 surface_va) {
   g_resized_surfaces.insert(surface_va);
   ++g_surface_epoch;

@@ -1313,11 +1313,14 @@ void SetGuestSwapHook(void (*hook)(uint32_t device)) {
 bool ResizeAutoBuffers(uint32_t device, uint32_t width, uint32_t height) {
   enum Reason : size_t { kNoDevice, kZeroSize, kForeignFront, kNoBackRecord, kNoTexture, kNoMemory, kMipBlock, kCount };
   static std::array<std::atomic<bool>, kCount> warned{};
+  // futari_recomp (2026-11-15): the present parameters' size, in the device layout's named offset.
+  constexpr u32 kWidth = native::off::PresentParameters;
+  constexpr u32 kHeight = native::off::PresentParameters + 4;
   native::Device d = native::DeviceAt(device);
   const auto fail = [&](Reason reason, const char *why) {
     if (!warned[reason].exchange(true, std::memory_order_relaxed)) {
       if (d)
-        RGPU_WARN("Game frame {}x{}: {}; the frame stays {}x{}", width, height, why, d.W(0x35B8), d.W(0x35BC));
+        RGPU_WARN("Game frame {}x{}: {}; the frame stays {}x{}", width, height, why, d.W(kWidth), d.W(kHeight));
       else
         RGPU_WARN("Game frame {}x{}: {}", width, height, why);
     }
@@ -1327,7 +1330,7 @@ bool ResizeAutoBuffers(uint32_t device, uint32_t width, uint32_t height) {
     return fail(kNoDevice, "no device at that address");
   if (!width || !height)
     return fail(kZeroSize, "a zero size");
-  if (d.W(0x35B8) == width && d.W(0x35BC) == height)  // the present parameters' size
+  if (d.W(kWidth) == width && d.W(kHeight) == height)
     return true;
   const u32 front = d.W(native::off::AutoFrontBuffer);
   const u32 back = d.W(native::off::AutoBackBuffer);
@@ -1367,8 +1370,8 @@ bool ResizeAutoBuffers(uint32_t device, uint32_t width, uint32_t height) {
     native::ResizeSurface(back, width, height);  // a surface record, checked above
     render_thread::Queue([back] { SurfaceHeaderRewrittenLocked(back); });
   }
-  d.SetW(0x35B8, width);
-  d.SetW(0x35BC, height);
+  d.SetW(kWidth, width);
+  d.SetW(kHeight, height);
   RGPU_INFO("Game frame {}x{} at scale 1", width, height);
   return true;
 }

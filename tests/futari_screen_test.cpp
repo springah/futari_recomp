@@ -26,15 +26,16 @@ using renut::gpu::futari_screen::BlitHostPixelShader;
 using renut::gpu::futari_screen::BlitSmoothing;
 using renut::gpu::futari_screen::BlitSmoothingOf;
 using renut::gpu::futari_screen::GameplayResolvePages;
-using renut::gpu::futari_screen::HostPixelShaderName;
 using renut::gpu::futari_screen::IsGameplayBlit;
 using renut::gpu::futari_screen::IsGameplayTarget;
 using renut::gpu::futari_screen::kBlitPixelShaderHash;
 using renut::gpu::futari_screen::kGameplayResolvePages;
-using renut::gpu::futari_screen::kHostPixelShaderBilinear;
-using renut::gpu::futari_screen::kHostPixelShaderGuest;
-using renut::gpu::futari_screen::kHostPixelShaderSharp;
 using renut::gpu::futari_screen::LastBlitSource;
+// The values the rules pick from (render/host_pixel_shader.h, which futari_screen_rules.h includes).
+using renut::gpu::HostPixelShaderName;
+using renut::gpu::kHostPixelShaderBilinear;
+using renut::gpu::kHostPixelShaderGuest;
+using renut::gpu::kHostPixelShaderSharp;
 
 constexpr uint32_t kArgb = 0x1A2201BF;  // the 320x240 and 640x480 targets' format
 constexpr uint32_t kXrgb = 0x28280186;  // the 640x512 target's

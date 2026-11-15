@@ -7,7 +7,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace renut::gpu::futari_capture {
+namespace renut::gpu::capture_math {
 
 // An IEEE 754 half as a float, exactly (subnormals, infinities and NaN included).
 inline float HalfToFloat(uint16_t half) {
@@ -31,4 +31,4 @@ inline uint8_t UnitToByte(float value) {
   return uint8_t(std::lround(std::min(value, 1.0f) * 255.0f));
 }
 
-}  // namespace renut::gpu::futari_capture
+}  // namespace renut::gpu::capture_math

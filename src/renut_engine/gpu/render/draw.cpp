@@ -47,7 +47,7 @@
 #include "renut_engine/gpu/backend/video_internal.h"
 #include "renut_engine/gpu/banjo_renut_tuning.h"
 #include "renut_engine/gpu/futari_rect_timing.h"  // futari_recomp (leg/rectlist)
-#include "renut_engine/gpu/futari_screen.h"  // futari_recomp (2026-11-15)
+#include "renut_engine/gpu/render/graphics_options.h"  // futari_recomp (2026-11-15): the game layer's blit seam
 #if defined(PLUME_DEKO3D)
 #include <plume_deko3d.h>  // banjo-nx (2026-10-17): Deko3DBindMemExport
 #endif
@@ -4621,7 +4621,7 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
   g_handover_targets = nullptr;
 
   const d3d::Device &dev = device.dev();
-  // futari_recomp (2026-11-15): the game layer's host pixel shader for this draw (futari_screen.h), from what chain
+  // futari_recomp (2026-11-15): the game layer's host pixel shader for this draw (graphics_options.h), from what chain
   // reuse compares (the shaders, fetch constants and targets) and its own state, which KeyReuse compares.
   const u32 host_pixel_shader = BlitHostPixelShaderLocked(ps ? ps->hash : 0, dev.m_Constants.TextureFetch[0],
                                                           device.U32(d3d::kDeviceOffsetRenderTargets));
@@ -5888,8 +5888,8 @@ void ResolveStateLocked(const u8 *device_state, u32 flags, const ClearRect *sour
       const uint32_t slice = volume ? 0 : dest_slice;
       const uint32_t z = volume ? dest_slice : 0;
       const bool fits = fit(dest, src);
-      // futari_recomp (2026-11-15): which destinations hold the gameplay image (futari_screen.h); an empty rect writes
-      // nothing, a skipped resolve's image is in dest already.
+      // futari_recomp (2026-11-15): which destinations hold the game layer's image (graphics_options.h); an empty
+      // rect writes nothing, a skipped resolve's image is in dest already.
       if (fits && dest_format)
         NoteResolveLocked(source_va, *dest_format);
       const uint64_t sig = fits ? ResolveSignature(surface, src, dest_x, dest_y, dest_level, dest_slice) : 0;

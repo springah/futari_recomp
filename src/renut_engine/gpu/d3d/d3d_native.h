@@ -150,6 +150,9 @@ constexpr u32 TileRects = 0x3280;          // D3DRECT[TileCount]
 constexpr u32 TileOrigins = 0x3370;        // per tile, x & ~31, y & ~31
 constexpr u32 TilingExtent = 0x342C;       // widest and tallest tile edge
 constexpr u32 CommandBuffer = 0x359C;      // the D3DCommandBuffer being recorded
+// futari_recomp (2026-11-15): InitializePresentationParameters' copy of the D3DPRESENT_PARAMETERS (Futari's layout;
+// N&B's is at 0x34E8): +0 BackBufferWidth, +4 BackBufferHeight.
+constexpr u32 PresentParameters = 0x35B8;
 constexpr u32 SideBuffer = 0x4228;
 constexpr u32 AutoDepthStencil = 0x3AB8;   // InitializePresentationParameters' surfaces
 constexpr u32 AutoFrontBuffer = 0x3ABC;
