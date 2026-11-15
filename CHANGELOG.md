@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.9 — 2026-11-15 (Windows, macOS)
 
 - **Windows, default renderer: VSync on no longer slows the game (#8).** With
   the F2 VSync box ticked (`present_vsync = true`) the window used to wait for
