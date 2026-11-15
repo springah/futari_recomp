@@ -301,7 +301,7 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# off, the game runs as fast as the machine goes.\n"
        << "vsync = true\n"
 #ifdef _WIN32
-       << "# present_vsync: whether a frame may be shown in the middle of your\n"
+       << "# present_vsync: keeps a frame from being shown in the middle of your\n"
        << "# display's refresh. Off (the default) shows each frame at once; windowed,\n"
        << "# the desktop still composes the picture, so nothing tears, but fullscreen\n"
        << "# may tear on a display without variable refresh. On shows the newest\n"
