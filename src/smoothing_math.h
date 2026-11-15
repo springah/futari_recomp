@@ -2,6 +2,7 @@
 // (tests/smoothing_test.cpp).
 #pragma once
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <optional>
@@ -33,6 +34,85 @@ inline std::optional<uint32_t> ParseDevSmoothing(std::string_view text) {
     return std::nullopt;
   }
   return value;
+}
+
+// The Picture page's Smoothing item holds a menu index, not the word: Smooth 0, Sharp 1, Off 2, so the game's row
+// step (right +1, ends clamp) goes Smooth -> Sharp -> Off. The game's unused linear modes 2 and 3 show as Smooth,
+// any other unknown word as Off.
+constexpr uint32_t SmoothingIndex(uint32_t word) {
+  switch (word) {
+    case kSmoothingOn:
+    case 2:
+    case 3:
+      return 0;
+    case kSmoothingSharp:
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+// The word an index stores: 0 On, 1 Sharp, anything else Off.
+constexpr uint32_t SmoothingWord(uint32_t index) {
+  switch (index) {
+    case 0:
+      return kSmoothingOn;
+    case 1:
+      return kSmoothingSharp;
+    default:
+      return kSmoothingOff;
+  }
+}
+
+// The word the page stores for an index: the stored word when it already shows as that index (the game stores the
+// row once without input after each load, which must not turn a 2 or 3 into 1), else the index's own word.
+constexpr uint32_t SmoothingStore(uint32_t index, uint32_t stored) {
+  return SmoothingIndex(stored) == index ? stored : SmoothingWord(index);
+}
+
+// The default Smoothing word: Sharp with Renut, the game's On elsewhere (where Sharp would draw as On anyway).
+constexpr uint32_t ResetSmoothing(bool renut) { return renut ? kSmoothingSharp : kSmoothingOn; }
+
+// The item's label for an index: ASCII, at most 15 bytes (it is written into the game's short-string buffer).
+// Off has none: it keeps the game's own "Off".
+constexpr std::optional<std::string_view> SmoothingLabel(uint32_t index) {
+  switch (index) {
+    case 0:
+      return std::string_view("Smooth");
+    case 1:
+      return std::string_view("Sharp");
+    default:
+      return std::nullopt;
+  }
+}
+
+// The Smoothing item's labels as its load finds them: the game's two (labels 0 and 1 read exactly "Off" and "On"),
+// our three (a reload of an item already relabelled: labels 0 and 1 hold our texts), or anything else. `plain` =
+// every label is a short string with no nested labels of its own; `first` and `second` are the texts of labels 0
+// and 1 (empty where there is none).
+enum class SmoothingLabelSet { kGames, kOurs, kUnexpected };
+
+constexpr SmoothingLabelSet FindSmoothingLabels(uint32_t count, bool plain, std::string_view first,
+                                                std::string_view second) {
+  if (!plain) {
+    return SmoothingLabelSet::kUnexpected;
+  }
+  switch (count) {
+    case 2:
+      return first == "Off" && second == "On" ? SmoothingLabelSet::kGames : SmoothingLabelSet::kUnexpected;
+    case 3:
+      return first == SmoothingLabel(0) && second == SmoothingLabel(1) ? SmoothingLabelSet::kOurs
+                                                                        : SmoothingLabelSet::kUnexpected;
+    default:
+      return SmoothingLabelSet::kUnexpected;
+  }
+}
+
+// The label index when the item keeps the game's labels: Off for 0, On for any other word, always below the label
+// count (0 when there are none).
+constexpr uint32_t SmoothingFallbackIndex(uint32_t word, uint32_t count) {
+  const uint32_t index = word == kSmoothingOff ? 0 : 1;
+  return count == 0 ? 0 : std::min(index, count - 1);
 }
 
 }  // namespace futari::smoothing
