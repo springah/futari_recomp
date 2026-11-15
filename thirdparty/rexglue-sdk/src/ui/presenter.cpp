@@ -42,6 +42,16 @@ REXCVAR_DEFINE_BOOL(present_vsync, true, "UI/Presenter",
                     "Synchronize host presentation to the display refresh (no tearing). "
                     "Turn off for variable refresh rate displays");
 
+// How Direct3D 12 keeps present_vsync's promise (futari_recomp, 2026-11-15). Off, the default: every frame is
+// presented at once with tearing disallowed, so the display takes the newest finished frame at each refresh and no
+// thread ever waits in Present; the guest keeps its own pace whatever the panel's rate is. On: the earlier
+// arrangement, Present(1) from the UI thread, which waits for the refresh inside Present. That wait was measured
+// costing the game 1 to 2 of its 60 frames a second on a 59.94 Hz panel (2026-11-07) and was reported as a plain
+// slowdown on an AMD integrated GPU (futari_recomp issue #8), so it stays only as a switch for comparison.
+REXCVAR_DEFINE_BOOL(present_vsync_wait, false, "UI/Presenter",
+                    "With present_vsync on Direct3D 12: wait for the display refresh inside Present "
+                    "(the older arrangement, can slow the game) instead of presenting at once without tearing");
+
 REXCVAR_DEFINE_BOOL(present_letterbox, true, "UI/Presenter",
                     "Enable letterboxing for non-native aspect ratios");
 

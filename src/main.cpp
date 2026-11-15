@@ -301,13 +301,14 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# off, the game runs as fast as the machine goes.\n"
        << "vsync = true\n"
 #ifdef _WIN32
-       << "# present_vsync: whether the window waits for your display's refresh\n"
-       << "# before showing a frame. Off (the default) shows each frame at once and\n"
-       << "# the game holds 60 on every display; windowed, the desktop still composes\n"
-       << "# the picture, so nothing tears. On waits for the refresh (no tearing in\n"
-       << "# fullscreen) but on a panel that is not exactly 60 Hz the game loses\n"
-       << "# about 1.5 frames a second to the wait (measured 2026-11-07). The F2\n"
-       << "# VSync box is this switch while the default renderer runs.\n"
+       << "# present_vsync: whether a frame may be shown in the middle of your\n"
+       << "# display's refresh. Off (the default) shows each frame at once; windowed,\n"
+       << "# the desktop still composes the picture, so nothing tears, but fullscreen\n"
+       << "# may tear on a display without variable refresh. On shows the newest\n"
+       << "# finished frame at each refresh, so fullscreen does not tear either. The\n"
+       << "# game holds 60 both ways (up to v1.5.8, on waited for the refresh and\n"
+       << "# could slow the game). The F2 VSync box is this switch while the\n"
+       << "# default renderer runs.\n"
        << "present_vsync = false\n"
 #endif
 #if FUTARI_RENUT_RENDERER
@@ -403,7 +404,10 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
   // 2026-11-07: on a 59.94 Hz panel the wait cost the game about 1.5 of its 60
   // frames a second (Present(1) back-pressure on the one D3D12 queue), so on
   // Windows it defaults to off; windowed, the desktop composes the picture and
-  // nothing tears. Elsewhere it still follows the vsync line (not measured).
+  // nothing tears. Since 2026-11-15 on no longer waits on Direct3D 12 (sync
+  // interval 0 without the tearing flag; present_vsync_wait brings Present(1)
+  // back), so the default is a matter of taste, no longer of speed.
+  // Elsewhere it still follows the vsync line (not measured).
   // A `present_vsync = false` left in an older ini's managed block still wins
   // (the block loads after this).
   bool vsync_on = true;

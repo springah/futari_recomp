@@ -483,13 +483,15 @@ D3D12Presenter::ConnectOrReconnectPaintingToSurfaceFromUIThread(Surface& new_sur
         provider_.OffsetRTVDescriptor(rtv_heap_start, PaintContext::kRTVIndexSwapChainBuffer0 + i));
   }
 
-  // With present_vsync, Present(1) may block until the vertical blank once the
-  // present queue fills up. Report that so the presenter paints from the UI
-  // thread on request rather than letting the guest output thread stall in
-  // Present (the same arrangement as a FIFO Vulkan swapchain). Read here, at
-  // (re)connection; a runtime toggle changes the Present call immediately and
-  // the thread arrangement at the next reconnect.
-  is_vsync_implicit_out = REXCVAR_GET(present_vsync);
+  // With present_vsync and present_vsync_wait, Present(1) may block until the
+  // vertical blank once the present queue fills up. Report that so the
+  // presenter paints from the UI thread on request rather than letting the
+  // guest output thread stall in Present (the same arrangement as a FIFO
+  // Vulkan swapchain). Read here, at (re)connection; a runtime toggle changes
+  // the Present call immediately and the thread arrangement at the next
+  // reconnect. Without present_vsync_wait (the default) no Present call waits,
+  // vsync or not, so the guest output thread may present.
+  is_vsync_implicit_out = REXCVAR_GET(present_vsync) && REXCVAR_GET(present_vsync_wait);
   return SurfacePaintConnectResult::kSuccess;
 }
 
@@ -1158,8 +1160,15 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
     ui_submission_tracker_.NextSubmission();
   }
   paint_context_.paint_submission_tracker.NextSubmission();
-  // With present_vsync (the default), present on the next vertical blank with
-  // tearing disallowed, so a fixed-refresh display never shows a tear line.
+  // With present_vsync, tearing is disallowed, so a fixed-refresh display
+  // never shows a tear line. There are two ways to get that from a flip-model
+  // swap chain. The default is sync interval 0 without the tearing flag: the
+  // call returns at once and the display (or the compositor) takes the newest
+  // finished frame at each refresh, dropping a frame that was replaced before
+  // it was shown. Nothing waits, so the guest's own 60 Hz pacing is untouched
+  // whatever the panel's rate is. With present_vsync_wait, sync interval 1
+  // instead: Present waits for the vertical blank once the queue fills, which
+  // was measured holding the guest below its rate (see the cvar).
   // DXGI_PRESENT_RESTART still drops queued-but-undisplayed frames, so a guest
   // frame arriving after the UI thread has re-presented the previous one
   // replaces it instead of waiting behind it, keeping guest frames on time.
@@ -1174,17 +1183,22 @@ Presenter::PaintResult D3D12Presenter::PaintAndPresentImpl(bool execute_ui_drawe
   // with DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING either way (it only permits the
   // per-present flag), so toggling at runtime needs no swap chain recreation.
   const bool host_vsync = REXCVAR_GET(present_vsync);
+  const bool host_vsync_wait = host_vsync && REXCVAR_GET(present_vsync_wait);
   const bool allow_tearing_flag = !host_vsync && paint_context_.swap_chain_allows_tearing;
-  if (paint_context_.last_logged_present_vsync != int8_t(host_vsync)) {
+  // 0 = tearing allowed, 1 = no tearing and no wait, 2 = no tearing, waiting.
+  const int8_t present_path = host_vsync_wait ? 2 : (host_vsync ? 1 : 0);
+  if (paint_context_.last_logged_present_vsync != present_path) {
     // Once per swap chain and on every runtime toggle, so a player's log says
     // which present path was in use (a tearing report used to be invisible
     // in the log).
-    paint_context_.last_logged_present_vsync = int8_t(host_vsync);
-    REXLOG_INFO("D3D12Presenter: Presenting with sync interval {}, DXGI_PRESENT_RESTART{}",
-                host_vsync ? 1 : 0, allow_tearing_flag ? " | DXGI_PRESENT_ALLOW_TEARING" : "");
+    paint_context_.last_logged_present_vsync = present_path;
+    REXLOG_INFO("D3D12Presenter: Presenting with sync interval {}, DXGI_PRESENT_RESTART{}{}",
+                host_vsync_wait ? 1 : 0, allow_tearing_flag ? " | DXGI_PRESENT_ALLOW_TEARING" : "",
+                present_path == 1 ? " (vsync: no tearing, newest frame at each refresh, no wait)"
+                                  : present_path == 2 ? " (vsync: waits for the refresh)" : "");
   }
   HRESULT present_result = paint_context_.swap_chain->Present(
-      host_vsync ? 1 : 0,
+      host_vsync_wait ? 1 : 0,
       DXGI_PRESENT_RESTART | (allow_tearing_flag ? DXGI_PRESENT_ALLOW_TEARING : 0));
   // Even if presentation has failed, work might have been enqueued anyway
   // internally before the failure according to Jesse Natalie from the DirectX

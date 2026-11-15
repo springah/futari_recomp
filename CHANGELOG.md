@@ -6,6 +6,25 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 
 ## Unreleased
 
+- **Windows, default renderer: VSync on no longer slows the game (#8).** With
+  the F2 VSync box ticked (`present_vsync = true`) the window used to wait for
+  the display's refresh inside every present (`Present(1)`). That wait was
+  measured costing the game 1 to 2 of its 60 frames a second on a 59.94 Hz
+  panel (2026-11-07, the reason v1.5.7 turned the box off by default), and a
+  player on a Ryzen 4750GE's integrated Radeon reported the game plainly slow
+  with VSync on and right with it off. VSync on now presents each frame at
+  once with tearing disallowed: the display takes the newest finished frame at
+  each refresh and nothing waits, so the game keeps its own 60 Hz pace on any
+  panel, and fullscreen still does not tear. It is the same present call as
+  VSync off minus the tearing permission, which is the call the 11-07 census
+  read at 60.00. The old waiting path stays for comparison as
+  `present_vsync_wait = true` (command line `--present_vsync_wait=true`). The
+  log's `Presenting with sync interval` line now names the path. The box stays
+  off by default. A census on 2026-11-15 (RTX 3080; 60 Hz and 100 Hz monitors,
+  window and fullscreen) could not reproduce the loss on the old path at all,
+  so it depends on the display or the graphics driver; the new path does not
+  have the wait to lose frames to.
+
 - `make_shaders.py`: closing its own log file raised `OSError: [Errno 5]` once on
   a macOS Desktop folder, after the package and stamp were written; the
   traceback hid the success and left `shader_work/` (game-derived data) behind.
