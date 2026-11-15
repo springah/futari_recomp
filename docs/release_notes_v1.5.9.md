@@ -17,5 +17,5 @@ Full details in [CHANGELOG.md](https://github.com/springah/futari_recomp/blob/v1
 
 | File | SHA-256 |
 |---|---|
-| `Mushihimesama-Futari-PC-v1.5.9.zip` | `PENDING` |
-| `Mushihimesama-Futari-macOS-v1.5.9.zip` | `PENDING` |
+| `Mushihimesama-Futari-PC-v1.5.9.zip` | `240ff146726a46679e908c5c3508794921a663f1e2b9d2a54d9b7c094949c012` |
+| `Mushihimesama-Futari-macOS-v1.5.9.zip` | `cbab5339cb732361e7329d07f430418ab9c298b0a10c1eda6d341c727ae58b5e` |
