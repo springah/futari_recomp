@@ -150,6 +150,43 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I src tests/front_buffer_block_test.cpp -o front_buffer_block_test
           ./front_buffer_block_test
 
+  sharp-bilinear-test:
+    # The Sharp bilinear filter of the gameplay image against its definition
+    # (nearest prescale, then bilinear) (src/sharp_bilinear_math.h). Pure std.
+    name: sharp bilinear test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/sharp_bilinear_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/sharp_bilinear_test.cpp -o sharp_bilinear_test
+          ./sharp_bilinear_test
+
+  futari-screen-test:
+    # Which targets hold the gameplay image, which resolve destinations do, and
+    # when a draw is the gameplay blit Sharp bilinear redraws
+    # (src/renut_engine/gpu/futari_screen_rules.h). Pure std.
+    name: futari screen test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/futari_screen_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/futari_screen_test.cpp -o futari_screen_test
+          ./futari_screen_test
+
+  smoothing-test:
+    # The game's Smoothing modes: Sharp bilinear drawn as On by the game, and
+    # the dev value that forces a mode (src/smoothing_math.h). Pure std.
+    name: smoothing test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/smoothing_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/smoothing_test.cpp -o smoothing_test
+          ./smoothing_test
+
   identity:
     name: Commit identity (springah/noreply)
     # Maintainer pushes only. Outside contributors have their own identities and

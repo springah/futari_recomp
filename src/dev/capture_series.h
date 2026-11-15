@@ -1,8 +1,10 @@
-// Dev aid: the names of the F9 frame captures (src/main.cpp), numbered files next to futari_renut_capture_path,
-// pure std so a test can run them without the SDK (tests/capture_series_test.cpp).
+// Dev aid: the names of the F9 frame captures (src/main.cpp), numbered files next to futari_renut_capture_path, and
+// the PFM file of a 16-bit float source capture, pure std so a test can run them without the SDK
+// (tests/capture_series_test.cpp).
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <charconv>
 #include <cstdint>
 #include <optional>
@@ -26,6 +28,40 @@ inline std::string CaptureFileName(std::string_view stem, uint32_t number, uint3
 inline std::string CaptureOutputFileName(std::string_view stem, uint32_t number, uint32_t width, uint32_t height) {
   std::string name = CaptureFileName(stem, number, width, height);
   return name.insert(name.size() - 4, "_output");
+}
+
+// The gameplay image the blit sampled in the frame of capture `number` (Renut's resolve of the game's own target):
+// <stem>_NNN_source_<W>x<H>.ppm at that image's size. Not a number of the series (CaptureNumber ignores it).
+inline std::string CaptureSourceFileName(std::string_view stem, uint32_t number, uint32_t width, uint32_t height) {
+  std::string name = CaptureFileName(stem, number, width, height);
+  return name.insert(name.rfind('_') + 1, "source_");  // the last '_' is the one before the size
+}
+
+// The same image's exact values when it is stored as 16-bit floats: <stem>_NNN_source_<W>x<H>.pfm (float32, PFM).
+inline std::string CaptureSourceFloatFileName(std::string_view stem, uint32_t number, uint32_t width,
+                                              uint32_t height) {
+  std::string name = CaptureSourceFileName(stem, number, width, height);
+  return name.replace(name.size() - 4, 4, ".pfm");
+}
+
+// A colour PFM file of float R G B texels given rows top to bottom: "PF", the size, scale -1 (little-endian), then
+// the rows bottom to top as the format stores them. Empty when 'rgb' holds fewer than width * height * 3 values.
+inline std::string PfmFile(uint32_t width, uint32_t height, const std::vector<float>& rgb) {
+  const size_t row_values = size_t(width) * 3;
+  if (rgb.size() < row_values * height) {
+    return {};
+  }
+  std::string file = "PF\n" + std::to_string(width) + " " + std::to_string(height) + "\n-1.0\n";
+  file.reserve(file.size() + rgb.size() * 4);
+  for (uint32_t y = height; y-- > 0;) {
+    for (size_t i = 0; i < row_values; ++i) {
+      const uint32_t bits = std::bit_cast<uint32_t>(rgb[y * row_values + i]);
+      for (int shift = 0; shift < 32; shift += 8) {
+        file.push_back(char(uint8_t(bits >> shift)));
+      }
+    }
+  }
+  return file;
 }
 
 // The number of a capture of this stem's series, or nothing for any other file name. Stem, 'x' and ".ppm" match in any

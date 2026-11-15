@@ -9,12 +9,16 @@
  */
 #include "renut_engine/gpu/render/graphics_options.h"
 
+#include <array>
 #include <cstdlib>
+#include <set>
 #include <string>
 
 #include <rex/cvar.h>
 #include <rex/types.h>
 
+#include "renut_engine/gpu/futari_screen.h"
+#include "renut_engine/gpu/log.h"
 #include "renut_engine/gpu/render/format.h"
 
 REXCVAR_DEFINE_STRING(renut_anisotropic_filtering, "Game", "Futari/Renut",
@@ -26,6 +30,7 @@ namespace renut::gpu {
 
 namespace {
 uint32_t g_min_anisotropy = 1;
+std::set<std::array<u32, 3>> g_logged_gameplay_targets;  // futari_recomp (2026-11-15): size, format, base
 }  // namespace
 
 void LatchGraphicsOptionsLocked() {
@@ -33,8 +38,16 @@ void LatchGraphicsOptionsLocked() {
   g_min_anisotropy = anisotropy >= 2 ? uint32_t(anisotropy) : 1;
 }
 
-RenderScale SurfaceRenderScale(const d3d::SurfaceDesc & /*desc*/, RenderScale resolution) {
-  return resolution;
+// futari_recomp (2026-11-15): the gameplay targets at 1x under every render resolution, so the blit into the frame
+// is the gameplay image's only resample (futari_screen.h). Each one logged once.
+RenderScale SurfaceRenderScale(const d3d::SurfaceDesc &desc, RenderScale resolution) {
+  if (!IsGameplayDescriptor(desc))
+    return resolution;
+  const u32 base = u32(desc.ColorInfo) & 0xFFF;
+  if (g_logged_gameplay_targets.insert({u32(desc.Size), u32(desc.Format), base}).second)
+    RGPU_INFO("Gameplay target {}x{} at 1x (base {})", d3d::SurfaceWidth(desc.Size), d3d::SurfaceHeight(desc.Size),
+              base);
+  return RenderScale{};
 }
 
 plume::RenderFormat SurfaceColorFormat(const d3d::SurfaceDesc &desc) {

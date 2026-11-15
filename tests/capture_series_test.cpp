@@ -1,5 +1,7 @@
 // Standalone test of src/dev/capture_series.h (pure std, no SDK): the names of
-// the F9 frame captures written next to futari_renut_capture_path. Runs in CI
+// the F9 frame captures written next to futari_renut_capture_path, and of
+// src/renut_engine/gpu/futari_capture_math.h: the conversions of a 16-bit
+// float source capture. Runs in CI
 // (Guards, "capture-series-test") on g++, and locally with any C++20 compiler:
 //
 //   g++ -std=c++20 -Wall -Wextra -I src tests/capture_series_test.cpp -o capture_series_test && ./capture_series_test
@@ -9,10 +11,14 @@
 // continues past the highest number already in the folder, so nothing is
 // overwritten.
 #include "dev/capture_series.h"
+#include "renut_engine/gpu/futari_capture_math.h"
 
 #include <algorithm>
+#include <bit>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -22,8 +28,13 @@ namespace {
 using futari::dev::CaptureFileName;
 using futari::dev::CaptureNumber;
 using futari::dev::CaptureOutputFileName;
+using futari::dev::CaptureSourceFileName;
+using futari::dev::CaptureSourceFloatFileName;
 using futari::dev::FreeCaptureNumber;
 using futari::dev::NextCaptureNumber;
+using futari::dev::PfmFile;
+using renut::gpu::futari_capture::HalfToFloat;
+using renut::gpu::futari_capture::UnitToByte;
 
 int g_failed = 0;
 int g_checks = 0;
@@ -49,6 +60,77 @@ void FileNames() {
         "the presented picture: same number, its own size, _output", CaptureOutputFileName("f", 7, 2560, 1440));
   Check(!CaptureNumber("f", CaptureOutputFileName("f", 7, 2560, 1440)),
         "an output capture is not a number of the frame series", "");
+  Check(CaptureSourceFileName("f", 7, 320, 240) == "f_007_source_320x240.ppm",
+        "the blit's source image: same number, its own size, source_", CaptureSourceFileName("f", 7, 320, 240));
+  Check(CaptureSourceFileName("frame", 1234, 640, 512) == "frame_1234_source_640x512.ppm",
+        "the source image past 999", CaptureSourceFileName("frame", 1234, 640, 512));
+  Check(!CaptureNumber("f", CaptureSourceFileName("f", 7, 320, 240)),
+        "a source capture is not a number of the frame series", "");
+  Check(CaptureSourceFloatFileName("f", 7, 320, 240) == "f_007_source_320x240.pfm",
+        "the float source image: the source's name as .pfm", CaptureSourceFloatFileName("f", 7, 320, 240));
+  Check(!CaptureNumber("f", CaptureSourceFloatFileName("f", 7, 320, 240)),
+        "a float source capture is not a number of the frame series", "");
+}
+
+std::string Text(float v) { return std::to_string(v); }
+
+// The fp16 source's values as written to the .pfm: IEEE half to float, exact.
+void Halves() {
+  const auto is = [](uint16_t h, float want, const char* what) {
+    Check(HalfToFloat(h) == want && std::signbit(HalfToFloat(h)) == std::signbit(want), what, Text(HalfToFloat(h)));
+  };
+  is(0x0000, 0.0f, "zero");
+  is(0x8000, -0.0f, "negative zero keeps its sign");
+  is(0x3C00, 1.0f, "one");
+  is(0x3800, 0.5f, "a half");
+  is(0xC000, -2.0f, "minus two");
+  is(0x3555, 0.333251953125f, "a third as a half holds it");
+  is(0x7BFF, 65504.0f, "the largest finite half");
+  is(0x0400, 6.103515625e-05f, "the smallest normal");
+  is(0x0001, 5.9604644775390625e-08f, "the smallest subnormal");
+  is(0x03FF, 6.0975551605224609375e-05f, "the largest subnormal");
+  is(0x7C00, std::numeric_limits<float>::infinity(), "infinity");
+  is(0xFC00, -std::numeric_limits<float>::infinity(), "minus infinity");
+  Check(std::isnan(HalfToFloat(0x7E00)), "NaN stays NaN", Text(HalfToFloat(0x7E00)));
+}
+
+// The 8-bit view of a float source: clamped to [0, 1], rounded to the nearest of 255 steps.
+void Bytes() {
+  const auto is = [](float v, int want, const char* what) {
+    Check(UnitToByte(v) == want, what, std::to_string(int(UnitToByte(v))));
+  };
+  is(0.0f, 0, "zero");
+  is(1.0f, 255, "one");
+  is(-0.25f, 0, "below zero clamps");
+  is(1.5f, 255, "above one clamps");
+  is(0.5f, 128, "127.5 rounds away from zero");
+  is(127.0f / 255.0f, 127, "a byte value comes back");
+  is(0.49f / 255.0f, 0, "below half a step");
+  is(0.51f / 255.0f, 1, "above half a step");
+  is(std::numeric_limits<float>::quiet_NaN(), 0, "NaN is black");
+}
+
+uint32_t Le32(const std::string& s, size_t at) {
+  return uint32_t(uint8_t(s[at])) | uint32_t(uint8_t(s[at + 1])) << 8 | uint32_t(uint8_t(s[at + 2])) << 16 |
+         uint32_t(uint8_t(s[at + 3])) << 24;
+}
+
+// A colour PFM: "PF", the size, a negative scale (little-endian), then float R G B rows from the bottom up.
+void PfmFiles() {
+  // 2x2, top row (1, 2) then bottom row (3, 4), each texel's R G B = n, n + 0.25, n + 0.5.
+  std::vector<float> rgb;
+  for (float n : {1.0f, 2.0f, 3.0f, 4.0f}) {
+    rgb.insert(rgb.end(), {n, n + 0.25f, n + 0.5f});
+  }
+  const std::string file = PfmFile(2, 2, rgb);
+  const std::string header = "PF\n2 2\n-1.0\n";
+  Check(file.size() == header.size() + 2 * 2 * 3 * 4, "header and 12 floats", std::to_string(file.size()));
+  Check(file.compare(0, header.size(), header) == 0, "colour, size, little-endian scale", file.substr(0, 12));
+  const auto at = [&](size_t i) { return std::bit_cast<float>(Le32(file, header.size() + i * 4)); };
+  Check(at(0) == 3.0f && at(1) == 3.25f && at(2) == 3.5f, "the bottom row comes first", Text(at(0)));
+  Check(at(3) == 4.0f && at(5) == 4.5f, "left to right within a row", Text(at(3)));
+  Check(at(6) == 1.0f && at(11) == 2.5f, "the top row comes last", Text(at(6)));
+  Check(PfmFile(3, 1, {}).empty(), "too few values: nothing", "");
 }
 
 void Numbers() {
@@ -111,6 +193,9 @@ void Next() {
 
 int main() {
   FileNames();
+  Halves();
+  Bytes();
+  PfmFiles();
   Numbers();
   CaseVariants();
   FreeNumbers();

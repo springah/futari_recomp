@@ -55,6 +55,7 @@ REXCVAR_DEFINE_BOOL(banjo_deko3d_variant_log, false, "Banjo/Renut",
 #include "renut_engine/gpu/guest/resources.h"
 #include "renut_engine/gpu/render/shader_library.h"
 #include "renut_engine/gpu/banjo_renut_tuning.h"
+#include "renut_engine/gpu/futari_screen_rules.h"  // futari_recomp (2026-11-15): host_pixel_shader's values, names
 
 REXCVAR_DEFINE_STRING(renut_pipeline_list, "pipeline_list.bin", "Nuts&Bolts/Graphics",
                       "The pipelines the renderer has built, which it builds ahead of use at the "
@@ -286,6 +287,14 @@ std::unique_ptr<plume::RenderPipeline> Build(const PipelineKey &key, const Pipel
   desc.pipelineLayout = s.draw_layout.get();
   desc.vertexShader = inputs.vertex_shader;
   desc.pixelShader = inputs.pixel_shader;
+  // futari_recomp (2026-11-15): the game blit with Sharp bilinear or On (futari_screen.h) takes a host pixel shader;
+  // without it (no shader, e.g. a listed key on a device that failed to build it) no pipeline, so the draw falls back.
+  if (key.host_pixel_shader) {
+    desc.pixelShader = key.host_pixel_shader == futari_screen::kHostPixelShaderSharp ? s.sharp_bilinear_ps.get()
+                                                                                      : s.blit_bilinear_ps.get();
+    if (!desc.pixelShader)
+      return nullptr;
+  }
   if (key.rectangle_list) {
     desc.geometryShader = s.rectangle_list_gs.get();
     // futari_recomp (leg/rectlist): no geometry shader, so the tessellation form (3-point patches).
@@ -460,7 +469,9 @@ std::unique_ptr<plume::RenderPipeline> Build(const PipelineKey &key, const Pipel
     // Names the guest shaders in captures.
     const auto *vs = static_cast<const ShaderCacheEntry *>(key.vertex_shader);
     const auto *ps = static_cast<const ShaderCacheEntry *>(key.pixel_shader);
-    pipeline->setName(fmt::format("vs_{:016x} ps_{:016x}", vs ? vs->hash : 0, ps ? ps->hash : 0));
+    // futari_recomp (2026-11-15): and the host pixel shader (futari_screen_rules.h).
+    pipeline->setName(fmt::format("vs_{:016x} ps_{:016x}{}", vs ? vs->hash : 0, ps ? ps->hash : 0,
+                                  futari_screen::HostPixelShaderName(key.host_pixel_shader)));
     return pipeline;
   }
   return nullptr;

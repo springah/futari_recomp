@@ -338,8 +338,10 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# at the top of the file.\n"
        << "\n"
        << "[Display]\n"
-       << "# Window size as WxH. The game opens windowed at this size; the guest\n"
-       << "# still renders at its native resolution and is scaled to fit.\n"
+       << "# Window size as WxH. The game opens windowed at this size. With the\n"
+       << "# Renut renderer the game draws its frame at the window's size by\n"
+       << "# default; the default renderer renders at the game's own size and\n"
+       << "# scales it to fit.\n"
        << "resolution = " << futari::ini_resolution::kDefaultWidth << "x" << futari::ini_resolution::kDefaultHeight
        << "\n"
        << "fullscreen = false\n"
@@ -1404,8 +1406,12 @@ class FutariApp : public rex::ReXApp {
     const bool with_output = !REXCVAR_GET(futari_renut_capture_output).empty();
     std::lock_guard lock(capture_series_mutex_);
     capture_series_threads_.emplace_back([this, dir, stem, with_output] {
-      rex::ui::RawImage image, output;
-      if (!renut::gpu::CaptureFrame(image, 2000, with_output ? &output : nullptr)) {
+      // Each capture also takes the gameplay image the frame's blit sampled (empty when it drew none, logged by
+      // Renut), written as <stem>_NNN_source_<w>x<h>.ppm under the frame's number; a 16-bit float image also as
+      // <stem>_NNN_source_<w>x<h>.pfm with its exact values.
+      rex::ui::RawImage image, output, source;
+      std::vector<float> source_exact;
+      if (!renut::gpu::CaptureFrame(image, 2000, with_output ? &output : nullptr, &source, &source_exact)) {
         REXLOG_ERROR("Renut capture series: no frame within 2 s");
         return;
       }
@@ -1413,8 +1419,16 @@ class FutariApp : public rex::ReXApp {
         const std::string name = futari::dev::CaptureOutputFileName(stem, n, output.width, output.height);
         return dir / std::u8string(name.begin(), name.end());
       };
+      const auto source_of = [&](uint32_t n) {
+        const std::string name = futari::dev::CaptureSourceFileName(stem, n, source.width, source.height);
+        return dir / std::u8string(name.begin(), name.end());
+      };
+      const auto source_exact_of = [&](uint32_t n) {
+        const std::string name = futari::dev::CaptureSourceFloatFileName(stem, n, source.width, source.height);
+        return dir / std::u8string(name.begin(), name.end());
+      };
       // The number is taken once the size is known: the first one from the next whose files are not there yet.
-      std::filesystem::path file, output_file;
+      std::filesystem::path file, output_file, source_file, source_exact_file;
       {
         std::lock_guard number_lock(capture_series_number_mutex_);
         if (!capture_series_next_) {
@@ -1427,7 +1441,9 @@ class FutariApp : public rex::ReXApp {
         std::error_code ec;
         const std::optional<uint32_t> number = futari::dev::FreeCaptureNumber(*capture_series_next_, [&](uint32_t n) {
           return std::filesystem::exists(file_of(n), ec) ||
-                 (!ec && output.width && std::filesystem::exists(output_of(n), ec));
+                 (!ec && output.width && std::filesystem::exists(output_of(n), ec)) ||
+                 (!ec && source.width && std::filesystem::exists(source_of(n), ec)) ||
+                 (!ec && !source_exact.empty() && std::filesystem::exists(source_exact_of(n), ec));
         });
         if (ec) {
           const std::u8string dir_u8 = dir.u8string();
@@ -1446,6 +1462,8 @@ class FutariApp : public rex::ReXApp {
         }
         file = file_of(*number);
         output_file = output_of(*number);
+        source_file = source_of(*number);
+        source_exact_file = source_exact_of(*number);
       }
       const std::u8string shown_u8 = file.u8string();
       const std::string shown(shown_u8.begin(), shown_u8.end());
@@ -1453,6 +1471,30 @@ class FutariApp : public rex::ReXApp {
         REXLOG_INFO("Renut capture series: {}x{} frame written to {}", image.width, image.height, shown);
       } else {
         REXLOG_ERROR("Renut capture series: could not write {}", shown);
+      }
+      if (source.width) {
+        const std::u8string source_u8 = source_file.u8string();
+        const std::string source_shown(source_u8.begin(), source_u8.end());
+        if (WritePpm(source_file, source)) {
+          REXLOG_INFO("Renut capture series: {}x{} blit source written to {}", source.width, source.height,
+                      source_shown);
+        } else {
+          REXLOG_ERROR("Renut capture series: could not write {}", source_shown);
+        }
+      }
+      if (!source_exact.empty()) {
+        const std::u8string exact_u8 = source_exact_file.u8string();
+        const std::string exact_shown(exact_u8.begin(), exact_u8.end());
+        const std::string pfm = futari::dev::PfmFile(source.width, source.height, source_exact);
+        std::ofstream out(source_exact_file, std::ios::binary);
+        out.write(pfm.data(), std::streamsize(pfm.size()));
+        out.close();
+        if (!pfm.empty() && out) {
+          REXLOG_INFO("Renut capture series: {}x{} blit source values written to {}", source.width, source.height,
+                      exact_shown);
+        } else {
+          REXLOG_ERROR("Renut capture series: could not write {}", exact_shown);
+        }
       }
       if (!with_output) {
         return;

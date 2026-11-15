@@ -60,6 +60,8 @@ set(FUTARI_SOURCES
     src/dev/input_recording_driver.cpp
     # The game's frame at the output size (renut_resolution = output): guest post-patches.
     src/screen_layout.cpp
+    # The game's Smoothing with Sharp bilinear: the gameplay blit's guest override.
+    src/smoothing.cpp
 )
 if(APPLE)
     # The NSOpenPanel picker is Objective-C++ and the project() line names CXX only. OBJC too: with OBJCXX alone

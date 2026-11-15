@@ -244,6 +244,10 @@ HostTexture *GetDepthResolveTextureLocked(u32 texture_va, RenderScale scale,
 // Existing host texture for a guest texture VA, or nullptr.
 HostTexture *FindHostTextureLocked(u32 texture_va);
 
+// futari_recomp (2026-11-15): the colour or depth resolve destination whose data starts at guest page 'base_page'
+// (the last resolve into that page), or nullptr. For a dev capture of what a resolve wrote.
+HostTexture *FindResolveTargetLocked(u32 base_page);
+
 void ReleaseHostTextureLocked(u32 texture_va);
 
 // The game freed the guest memory at physical address 'physical' ('size'

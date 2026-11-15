@@ -55,6 +55,9 @@ void SetGuestSwapHook(void (*hook)(uint32_t device));
 // True when the buffers are that size now; false when the front buffer's larger block could not be allocated (then
 // nothing changed, one warning).
 bool ResizeAutoBuffers(uint32_t device, uint32_t width, uint32_t height);
+// futari_recomp (2026-11-15): futari_screen.h's, declared here too for the app: the game's Smoothing word (0 Off,
+// 1 On, 4 Sharp bilinear). Any thread.
+void SetBlitSmoothing(uint32_t game_mode);
 }  // namespace renut::gpu
 
 namespace banjo::renut_gpu {

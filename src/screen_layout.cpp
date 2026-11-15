@@ -15,6 +15,7 @@
 
 #include "screen_layout.h"
 #include "screen_layout_math.h"
+#include "smoothing.h"
 
 #include <algorithm>
 #include <atomic>
@@ -130,9 +131,9 @@ constexpr uint32_t kBandSpriteOffset = 16;
 std::atomic<uint32_t> g_logo_texture{0};
 std::atomic<uint32_t> g_title_texture{0};
 
-// The display block (the settings object + 1408, also at this global): +8 the gameplay zoom as a float (2v), +60 the
-// screen mode (0 normal, 1 its variant, 2 separate x/y sizes; the zoom row is shown in modes 0 and 1).
-constexpr uint32_t kDisplayBlockPointer = 0x821F8264;
+// The display block (the settings object + 1408, also at kDisplayBlockPointer): +8 the gameplay zoom as a float (2v),
+// +60 the screen mode (0 normal, 1 its variant, 2 separate x/y sizes; the zoom row is shown in modes 0 and 1).
+using futari::smoothing::kDisplayBlockPointer;
 constexpr uint32_t kSettingsDisplayBlock = 1408;
 constexpr uint32_t kDisplayZoom = 8;
 constexpr uint32_t kDisplayScreenMode = 60;
@@ -490,10 +491,11 @@ extern "C" REX_FUNC(sub_82184CC8) {
 }
 
 // The generic draw-from-memory: on the wallpaper's own quad only, cover the frame with the 16:9 art at the game's
-// slide-in offset, then draw. Every other draw passes through.
+// slide-in offset, then draw. Every other draw passes through (the gameplay blit's quad is logged for dev captures).
 REX_EXTERN(__imp__sub_8206BF48);
 extern "C" REX_FUNC(sub_8206BF48) {
   const uint32_t vertices = ctx.r6.u32;
+  futari::smoothing::NoteBlitDraw(base, vertices, ctx.r5.u32);
   if (g_wallpaper_vertices != 0 && vertices == g_wallpaper_vertices && ctx.r5.u32 == kWallpaperVertexCount) {
     const bool wide = REX_LOAD_U32(kWidescreenFlag) != 0;
     const float x0 = std::bit_cast<float>(REX_LOAD_U32(vertices));
@@ -729,11 +731,13 @@ extern "C" REX_FUNC(sub_82069198) {
 }
 
 // The display values from the settings: under output with futari_dev_zoom set, the gameplay size is its value's
-// instead of the save's (the save is not written). Screen mode 2 has no single zoom and keeps the game's.
+// instead of the save's (the save is not written). Screen mode 2 has no single zoom and keeps the game's. With
+// futari_dev_smoothing set, the Smoothing is its value, under every renderer.
 REX_EXTERN(__imp__sub_82187EE0);
 extern "C" REX_FUNC(sub_82187EE0) {
   const uint32_t settings = ctx.r3.u32;
   __imp__sub_82187EE0(ctx, base);
+  futari::smoothing::ApplyDevSmoothing(base, settings + kSettingsDisplayBlock);
   static const std::optional<int32_t> zoom = [] {
     const std::string text = REXCVAR_GET(futari_dev_zoom);
     if (text.empty()) {

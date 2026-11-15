@@ -83,6 +83,10 @@ struct PipelineKey {
   // pass alpha); 0 = read at run time. Like the bools: a key with it not built yet draws with the generic one (0).
   uint32_t alpha_func;
   uint32_t reserved;  // 0 (the key is compared and hashed as bytes)
+  // futari_recomp (2026-11-15): the host pixel shader that replaces the guest's (a game layer's choice per draw):
+  // 0 = the guest's, 1 = sharp_bilinear_ps, 2 = blit_bilinear_ps (futari_screen_rules.h). The pad keeps the key free of implicit padding (compared and hashed as bytes).
+  uint32_t host_pixel_shader;
+  uint32_t pad_host;
 };
 
 // banjo-nx (banjo_gpu_blend_skip): for the key's other fields, 1 when its one target keeps its value for a source alpha

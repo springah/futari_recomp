@@ -1050,6 +1050,12 @@ HostTexture *FindHostTextureLocked(u32 texture_va) {
   return it != g_textures.end() ? it->second.get() : nullptr;
 }
 
+// futari_recomp (2026-11-15): see textures.h.
+HostTexture *FindResolveTargetLocked(u32 base_page) {
+  auto it = g_resolve_targets.find(base_page);
+  return it != g_resolve_targets.end() ? it->second : nullptr;
+}
+
 void ReleaseHostTextureLocked(u32 texture_va) {
   auto it = g_textures.find(texture_va);
   if (it == g_textures.end())

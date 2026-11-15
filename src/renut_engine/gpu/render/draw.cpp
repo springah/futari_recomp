@@ -47,6 +47,7 @@
 #include "renut_engine/gpu/backend/video_internal.h"
 #include "renut_engine/gpu/banjo_renut_tuning.h"
 #include "renut_engine/gpu/futari_rect_timing.h"  // futari_recomp (leg/rectlist)
+#include "renut_engine/gpu/futari_screen.h"  // futari_recomp (2026-11-15)
 #if defined(PLUME_DEKO3D)
 #include <plume_deko3d.h>  // banjo-nx (2026-10-17): Deko3DBindMemExport
 #endif
@@ -3050,9 +3051,11 @@ const u32 *BoolSpecMask(const ShaderRecord *r) {
 
 PipelineKey MakeKey(const GuestDevice &device, const ShaderRecord *vs, const ShaderRecord *ps,
                     const VertexDeclarationRecord *declaration, const Targets &t, u32 primitive,
-                    bool per_instance, const u32 *booleans, u32 alpha_test_func) {
+                    bool per_instance, const u32 *booleans, u32 alpha_test_func,
+                    u32 host_pixel_shader) {  // futari_recomp (2026-11-15): host_pixel_shader
   PipelineKey key;
   std::memset(&key, 0, sizeof(key));
+  key.host_pixel_shader = host_pixel_shader;  // futari_recomp (2026-11-15)
   // banjo-nx (banjo_gpu_bool_spec): the draw's values of the bools its shaders specialise (the same words the shaders
   // read at run time, SharedConstants.booleans).
   if (banjo::renut_gpu::BoolSpecOn()) {
@@ -4618,6 +4621,10 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
   g_handover_targets = nullptr;
 
   const d3d::Device &dev = device.dev();
+  // futari_recomp (2026-11-15): the game layer's host pixel shader for this draw (futari_screen.h), from what chain
+  // reuse compares (the shaders, fetch constants and targets) and its own state, which KeyReuse compares.
+  const u32 host_pixel_shader = BlitHostPixelShaderLocked(ps ? ps->hash : 0, dev.m_Constants.TextureFetch[0],
+                                                          device.U32(d3d::kDeviceOffsetRenderTargets));
   const u8 *bools = reinterpret_cast<const u8 *>(&dev.m_Constants.VertexShaderB[0]);
   // banjo-nx (2026-10-19, render-thread proposal 22): SwapEndian(2, ...) (8in32) inline: eight byte swaps, vectorised.
   for (u32 i = 0; i < 8; ++i) {
@@ -4853,6 +4860,7 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
     const ShaderCacheEntry *vs_entry = nullptr, *ps_entry = nullptr;
     uint64_t layout_hash = 0, surface_epoch = 0;
     u32 primitive = 0, alpha_test_func = 0, color_count = 0;
+    u32 host_pixel_shader = 0;  // futari_recomp (2026-11-15): a game layer's choice, no device byte
     bool per_instance = false;
     int ab_off = 0;
     HostSurface *colors[d3d::kMaxRenderTargets] = {};
@@ -4871,7 +4879,8 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
                 reuse.layout_hash == declaration->layout_hash && reuse.primitive == call.primitive &&
                 reuse.per_instance == geometry.per_instance && reuse.alpha_test_func == sc.alpha_test_func &&
                 reuse.color_count == targets.color_count && reuse.depth == targets.depth &&
-                reuse.surface_epoch == surface_epoch && reuse.ab_off == ab_off;
+                reuse.surface_epoch == surface_epoch && reuse.ab_off == ab_off &&
+                reuse.host_pixel_shader == host_pixel_shader;  // futari_recomp (2026-11-15)
   for (u32 i = 0; reused && i < targets.color_count; ++i)
     reused = reuse.colors[i] == targets.colors[i];
   PipelineKey key;
@@ -4879,7 +4888,7 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
     key = reuse.key;
     if (reuse_verify) {
       const PipelineKey made = MakeKey(device, vs, ps, declaration, targets, call.primitive, geometry.per_instance,
-                                       sc.booleans, sc.alpha_test_func);
+                                       sc.booleans, sc.alpha_test_func, host_pixel_shader);
       if (std::memcmp(&made, &key, sizeof(key)) != 0) {
         static uint32_t logged = 0;
         if (logged++ < 8)
@@ -4890,7 +4899,7 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
     }
   } else {
     key = MakeKey(device, vs, ps, declaration, targets, call.primitive, geometry.per_instance, sc.booleans,
-                  sc.alpha_test_func);
+                  sc.alpha_test_func, host_pixel_shader);
   }
   if (reuse_on) {
     reuse.seq = hint.seq;
@@ -4903,6 +4912,7 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
     reuse.color_count = targets.color_count;
     reuse.per_instance = geometry.per_instance;
     reuse.ab_off = ab_off;
+    reuse.host_pixel_shader = host_pixel_shader;  // futari_recomp (2026-11-15)
     for (u32 i = 0; i < d3d::kMaxRenderTargets; ++i)
       reuse.colors[i] = i < targets.color_count ? targets.colors[i] : nullptr;
     reuse.depth = targets.depth;
@@ -4959,6 +4969,16 @@ bool DrawStateLocked(const u8 *device_state, const DrawCall &call, const ReplayC
   }
   if (reuse_on)
     preuse = {hint.seq, PipelineLookupsLocked(), prebuild_epoch, pipeline};
+  // futari_recomp (2026-11-15): no Sharp bilinear or float bilinear pipeline: the game's own pixel shader (On).
+  if (!pipeline && key.host_pixel_shader) {
+    static bool warned = false;
+    if (!warned) {
+      warned = true;
+      RGPU_WARN("Smoothing: no host pipeline for the blit; it draws with the game's shader (On)");
+    }
+    key.host_pixel_shader = 0;
+    pipeline = GetPipelineLocked(key, {host_vs, host_ps, &declaration->layout});
+  }
   if (!pipeline || !BindTargets(targets))
     return false;
   plume::RenderCommandList *cmd = s.command_list;
@@ -5868,6 +5888,10 @@ void ResolveStateLocked(const u8 *device_state, u32 flags, const ClearRect *sour
       const uint32_t slice = volume ? 0 : dest_slice;
       const uint32_t z = volume ? dest_slice : 0;
       const bool fits = fit(dest, src);
+      // futari_recomp (2026-11-15): which destinations hold the gameplay image (futari_screen.h); an empty rect writes
+      // nothing, a skipped resolve's image is in dest already.
+      if (fits && dest_format)
+        NoteResolveLocked(source_va, *dest_format);
       const uint64_t sig = fits ? ResolveSignature(surface, src, dest_x, dest_y, dest_level, dest_slice) : 0;
       if (fits && banjo::renut_gpu::ResolveSkipOn() && dest->resolve_signature == sig) {
         // banjo-nx (2026-10-19, banjo_renut_resolve_skip): the same resolve of an unchanged source is in dest already.

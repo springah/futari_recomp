@@ -11,8 +11,11 @@
 #include <cmath>  // futari_recomp (2026-11-08): std::lround in PublishPresentedFrame
 #include <condition_variable>
 #include <cstdlib>
+#include <cstring>  // futari_recomp (2026-11-15): std::memcpy of the 16-bit float source
 #include <mutex>
+#include <optional>  // futari_recomp (2026-11-15)
 #include <string>
+#include <vector>
 
 #include <plume_render_interface.h>
 
@@ -31,6 +34,8 @@
 #include "renut_engine/gpu/backend/video_internal.h"
 #include "renut_engine/gpu/banjo_renut_capture.h"
 #include "renut_engine/gpu/backend/presented_frame.h"  // futari_recomp (2026-11-08): the last presented frame's rect
+#include "renut_engine/gpu/futari_screen.h"  // futari_recomp (2026-11-15): the blit's source for the dev capture
+#include "renut_engine/gpu/futari_capture_math.h"  // futari_recomp (2026-11-15): the source capture's fp16 values
 #if defined(PLUME_DEKO3D)
 #include <plume_deko3d.h>  // banjo-nx: banjo_renut_capture_raw's format check
 #endif
@@ -354,6 +359,10 @@ struct FrameCapture {
   CaptureTarget frame_target;   // futari_recomp (2026-11-10): the fields moved into CaptureTarget
   CaptureTarget output_target;  // futari_recomp (2026-11-10)
   uint64_t served_render = 0;
+  // futari_recomp (2026-11-15): the same for the source capture (the image the frame's gameplay blit sampled).
+  std::atomic<uint64_t> source_requested{0};
+  rex::ui::RawImage source_image;  // empty when it was not asked for, no blit was drawn or it failed
+  std::vector<float> source_exact;  // the 16-bit float source's values (CaptureSourceLocked), else empty
 };
 FrameCapture g_capture;
 
@@ -465,9 +474,88 @@ bool CaptureFrameLocked(VideoState &s, const PresentImage &image, rex::ui::RawIm
   return true;
 }
 
+// futari_recomp (2026-11-15): the resolve destination at guest page 'page' read back at its host size (level 0), as
+// R G B X in the order the gameplay blit samples it: its view exchanges red and blue of content stored so
+// (view_swap_red_blue, Create in textures.cpp), and so does the copy here. 8-bit RGBA or BGRA, or 16-bit float RGBA:
+// then 'out' is its 8-bit view and 'exact' its values as float R G B, rows top to bottom (else 'exact' is left empty).
+bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::vector<float> &exact) {
+  HostTexture *t = FindResolveTargetLocked(page);
+  if (!t || !t->texture || !t->alloc_width || !t->alloc_height) {
+    RGPU_WARN("Capture: no resolve destination at page {:X}, no source image", page);
+    return false;
+  }
+  const bool bgra = t->host_format == plume::RenderFormat::B8G8R8A8_UNORM;
+  const bool half = t->host_format == plume::RenderFormat::R16G16B16A16_FLOAT;
+  if (!bgra && !half && t->host_format != plume::RenderFormat::R8G8B8A8_UNORM) {
+    RGPU_WARN("Capture: the source at page {:X} has host format {}, not 8-bit RGBA/BGRA or 16-bit float RGBA; no "
+              "source image",
+              page, int(t->host_format));
+    return false;
+  }
+  const uint32_t w = t->alloc_width, h = t->alloc_height;
+  const uint32_t texel_bytes = half ? 8 : 4;
+  const uint32_t row_texels = (w + 256 / texel_bytes - 1) & ~(256 / texel_bytes - 1);  // rows of 256-byte multiples
+  std::unique_ptr<plume::RenderBuffer> readback =
+      s.device->createBuffer(plume::RenderBufferDesc::ReadbackBuffer(uint64_t(row_texels) * h * texel_bytes));
+  if (!readback || !Video::EnsureCommandListLocked()) {
+    RGPU_WARN("Capture: no readback buffer or command list for the source at page {:X}, no source image", page);
+    return false;
+  }
+  TransitionTextureLocked(t, plume::RenderTextureLayout::COPY_SOURCE);
+  const plume::RenderBox box(0, 0, int32_t(w), int32_t(h));
+  s.command_list->copyTextureRegion(
+      plume::RenderTextureCopyLocation::PlacedFootprint(readback.get(), t->host_format, w, h, 1, row_texels),
+      plume::RenderTextureCopyLocation::Subresource(t->texture.get()), 0, 0, 0, &box);
+  detail::SubmitAndWaitLocked(s);
+  const auto *data = static_cast<const uint8_t *>(readback->map());
+  if (!data) {
+    RGPU_WARN("Capture: the source's readback at page {:X} did not map, no source image", page);
+    return false;
+  }
+  // Red and blue as the blit's view reads them: stored component X (or Z when swapped) of the format's memory order.
+  const bool swap = t->view_swap_red_blue;
+  out.width = w;
+  out.height = h;
+  out.stride = size_t(w) * 4;
+  out.data.resize(size_t(w) * h * 4);
+  if (half) {
+    exact.resize(size_t(w) * h * 3);
+    for (uint32_t y = 0; y < h; ++y) {
+      const uint8_t *row = data + size_t(y) * row_texels * 8;
+      for (uint32_t x = 0; x < w; ++x) {
+        const size_t i = size_t(y) * w + x;
+        for (uint32_t c = 0; c < 3; ++c) {
+          uint16_t value;
+          std::memcpy(&value, row + x * 8 + (swap ? 2 - c : c) * 2, 2);
+          exact[i * 3 + c] = futari_capture::HalfToFloat(value);
+          out.data[i * 4 + c] = futari_capture::UnitToByte(exact[i * 3 + c]);
+        }
+        out.data[i * 4 + 3] = 0xFF;
+      }
+    }
+    readback->unmap();
+    return true;
+  }
+  const uint32_t r = bgra != swap ? 2 : 0, b = 2 - r;
+  for (uint32_t y = 0; y < h; ++y) {
+    const uint8_t *row = data + size_t(y) * row_texels * 4;
+    uint8_t *dest = out.data.data() + size_t(y) * w * 4;
+    for (uint32_t x = 0; x < w; ++x) {
+      dest[x * 4 + 0] = row[x * 4 + r];
+      dest[x * 4 + 1] = row[x * 4 + 1];
+      dest[x * 4 + 2] = row[x * 4 + b];
+      dest[x * 4 + 3] = 0xFF;
+    }
+  }
+  readback->unmap();
+  return true;
+}
+
 // From PresentLocked: one relaxed load when nobody asked.
 void ServeCaptureLocked(VideoState &s, const PresentImage *image) {
   FrameCapture &c = g_capture;
+  // futari_recomp (2026-11-15): taken at every present, so it is always this frame's blit (futari_screen.h).
+  const std::optional<u32> blit_page = TakeBlitSourcePageLocked();
   const uint64_t requested = c.requested.load(std::memory_order_acquire);
   if (requested == c.served_render || !image || !image->texture || image->descriptor == kInvalidDescriptor)
     return;
@@ -481,11 +569,24 @@ void ServeCaptureLocked(VideoState &s, const PresentImage *image) {
   if (c.output_requested.load(std::memory_order_acquire) > c.served_render && out_w && out_h &&
       !CaptureFrameLocked(s, *image, output, c.output_target, out_w, out_h))
     output = {};
+  // futari_recomp (2026-11-15): the source capture of the same frame.
+  rex::ui::RawImage source;
+  std::vector<float> source_exact;
+  if (c.source_requested.load(std::memory_order_acquire) > c.served_render) {
+    if (!blit_page)
+      RGPU_INFO("Capture: no gameplay blit in this frame, no source image");
+    else if (!CaptureSourceLocked(s, *blit_page, source, source_exact)) {
+      source = {};
+      source_exact.clear();
+    }
+  }
   c.served_render = requested;
   {
     std::lock_guard lock(c.mutex);
     c.image = std::move(out);
     c.output_image = std::move(output);
+    c.source_image = std::move(source);  // futari_recomp (2026-11-15)
+    c.source_exact = std::move(source_exact);
     c.ok = ok;
     c.served = requested;
   }
@@ -842,19 +943,26 @@ void Video::PresentOverlayOnly() {
   PresentLocked(s, image.texture ? &image : nullptr);
 }
 
-bool CaptureFrame(rex::ui::RawImage &out, int timeout_ms, rex::ui::RawImage *output) {
+bool CaptureFrame(rex::ui::RawImage &out, int timeout_ms, rex::ui::RawImage *output, rex::ui::RawImage *source,
+                  std::vector<float> *source_exact) {
   FrameCapture &c = g_capture;
   std::unique_lock lock(c.mutex);
   // futari_recomp (2026-11-10): asked before the ticket is, so the Present that serves the ticket sees it (requesters
   // take the ticket under the mutex, one at a time).
   if (output)
     c.output_requested.store(c.requested.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+  if (source)  // futari_recomp (2026-11-15)
+    c.source_requested.store(c.requested.load(std::memory_order_relaxed) + 1, std::memory_order_release);
   const uint64_t ticket = c.requested.fetch_add(1, std::memory_order_acq_rel) + 1;
   if (!c.cv.wait_for(lock, std::chrono::milliseconds(timeout_ms), [&] { return c.served >= ticket; }) || !c.ok)
     return false;
   out = c.image;
   if (output)
     *output = c.output_image;  // futari_recomp (2026-11-10): from the same Present as c.image
+  if (source)
+    *source = c.source_image;  // futari_recomp (2026-11-15)
+  if (source_exact)
+    *source_exact = c.source_exact;
   return true;
 }
 
