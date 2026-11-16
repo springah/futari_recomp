@@ -475,10 +475,11 @@ bool CaptureFrameLocked(VideoState &s, const PresentImage &image, rex::ui::RawIm
 }
 
 // futari_recomp (2026-11-15): the resolve destination at guest page 'page' read back at its host size (level 0), as
-// R G B X in the order the gameplay blit samples it: its view exchanges red and blue of content stored so
-// (view_swap_red_blue, Create in textures.cpp), and so does the copy here. 8-bit RGBA or BGRA, or 16-bit float RGBA:
-// then 'out' is its 8-bit view and 'exact' its values as float R G B, rows top to bottom (else 'exact' is left empty).
-bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::vector<float> &exact) {
+// R G B X as the gameplay blit samples it: through the view its fetch swizzle 'swizzle' gets (the swizzle with X and
+// Z exchanged for content stored so, SwizzleSource; 2026-11-16: before, only the exchange, so R and B came out
+// swapped). 8-bit RGBA or BGRA, or 16-bit float RGBA: then 'out' is its 8-bit view and 'exact' its values as float
+// R G B, rows top to bottom (else 'exact' is left empty).
+bool CaptureSourceLocked(VideoState &s, u32 page, u32 swizzle, rex::ui::RawImage &out, std::vector<float> &exact) {
   HostTexture *t = FindResolveTargetLocked(page);
   if (!t || !t->texture || !t->alloc_width || !t->alloc_height) {
     RGPU_WARN("Capture: no resolve destination at page {:X}, no source image", page);
@@ -512,8 +513,15 @@ bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::v
     RGPU_WARN("Capture: the source's readback at page {:X} did not map, no source image", page);
     return false;
   }
-  // Red and blue as the blit's view reads them: stored component X (or Z when swapped) of the format's memory order.
-  const bool swap = t->view_swap_red_blue;
+  // The stored component the blit's view reads as R, G and B (0-3 in the host format's own order, 4 zero, 5 one).
+  uint32_t source[3];
+  for (uint32_t c = 0; c < 3; ++c)
+    source[c] = SwizzleSource(swizzle, c, t->view_swap_red_blue, t->host_format);
+  static int logged = 0;
+  if (logged++ < 4)
+    RGPU_INFO("Capture: the source at page {:X} sampled through swizzle {:03X} (its view's {:03X}, R/B swap {}): R G B "
+              "= stored {} {} {}",
+              page, swizzle, t->view_swizzle, t->view_swap_red_blue, source[0], source[1], source[2]);
   out.width = w;
   out.height = h;
   out.stride = size_t(w) * 4;
@@ -525,10 +533,14 @@ bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::v
       for (uint32_t x = 0; x < w; ++x) {
         const size_t i = size_t(y) * w + x;
         for (uint32_t c = 0; c < 3; ++c) {
-          uint16_t value;
-          std::memcpy(&value, row + x * 8 + (swap ? 2 - c : c) * 2, 2);
-          exact[i * 3 + c] = capture_math::HalfToFloat(value);
-          out.data[i * 4 + c] = capture_math::UnitToByte(exact[i * 3 + c]);
+          float value = source[c] == 5 ? 1.0f : 0.0f;
+          if (source[c] < 4) {
+            uint16_t half_value;
+            std::memcpy(&half_value, row + x * 8 + source[c] * 2, 2);
+            value = capture_math::HalfToFloat(half_value);
+          }
+          exact[i * 3 + c] = value;
+          out.data[i * 4 + c] = capture_math::UnitToByte(value);
         }
         out.data[i * 4 + 3] = 0xFF;
       }
@@ -536,14 +548,17 @@ bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::v
     readback->unmap();
     return true;
   }
-  const uint32_t r = bgra != swap ? 2 : 0, b = 2 - r;
+  // BGRA keeps X (R) in byte 2 and Z (B) in byte 0.
+  for (uint32_t &c : source) {
+    if (bgra && (c == 0 || c == 2))
+      c ^= 2;
+  }
   for (uint32_t y = 0; y < h; ++y) {
     const uint8_t *row = data + size_t(y) * row_texels * 4;
     uint8_t *dest = out.data.data() + size_t(y) * w * 4;
     for (uint32_t x = 0; x < w; ++x) {
-      dest[x * 4 + 0] = row[x * 4 + r];
-      dest[x * 4 + 1] = row[x * 4 + 1];
-      dest[x * 4 + 2] = row[x * 4 + b];
+      for (uint32_t c = 0; c < 3; ++c)
+        dest[x * 4 + c] = source[c] < 4 ? row[x * 4 + source[c]] : source[c] == 5 ? 0xFF : 0;
       dest[x * 4 + 3] = 0xFF;
     }
   }
@@ -555,7 +570,8 @@ bool CaptureSourceLocked(VideoState &s, u32 page, rex::ui::RawImage &out, std::v
 void ServeCaptureLocked(VideoState &s, const PresentImage *image) {
   FrameCapture &c = g_capture;
   // futari_recomp (2026-11-15): taken at every present, so it is always this frame's blit (graphics_options.h).
-  const std::optional<u32> blit_page = TakeBlitSourcePageLocked();
+  u32 blit_swizzle = 0;
+  const std::optional<u32> blit_page = TakeBlitSourcePageLocked(blit_swizzle);
   const uint64_t requested = c.requested.load(std::memory_order_acquire);
   if (requested == c.served_render || !image || !image->texture || image->descriptor == kInvalidDescriptor)
     return;
@@ -575,7 +591,7 @@ void ServeCaptureLocked(VideoState &s, const PresentImage *image) {
   if (c.source_requested.load(std::memory_order_acquire) > c.served_render) {
     if (!blit_page)
       RGPU_INFO("Capture: no gameplay blit in this frame, no source image");
-    else if (!CaptureSourceLocked(s, *blit_page, source, source_exact)) {
+    else if (!CaptureSourceLocked(s, *blit_page, blit_swizzle, source, source_exact)) {
       source = {};
       source_exact.clear();
     }

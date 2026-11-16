@@ -30,6 +30,7 @@ using renut::gpu::futari_screen::IsGameplayBlit;
 using renut::gpu::futari_screen::IsGameplayTarget;
 using renut::gpu::futari_screen::kBlitPixelShaderHash;
 using renut::gpu::futari_screen::kGameplayResolvePages;
+using renut::gpu::futari_screen::BlitSource;
 using renut::gpu::futari_screen::LastBlitSource;
 // The values the rules pick from (render/host_pixel_shader.h, which futari_screen_rules.h includes).
 using renut::gpu::HostPixelShaderName;
@@ -132,13 +133,14 @@ void GameplayBlitUnderEveryMode() {
 void LastBlitSourceOfTheFrame() {
   LastBlitSource last;
   Check(!last.Take(), "no blit yet: no source");
-  last.Note(0x123);
-  last.Note(0x456);
-  const std::optional<uint32_t> page = last.Take();
-  Check(page && *page == 0x456, "the frame's last blit's page");
+  last.Note(0x123, 0x688);
+  last.Note(0x456, 0xFAC);
+  const std::optional<BlitSource> source = last.Take();
+  Check(source && source->page == 0x456, "the frame's last blit's page");
+  Check(source && source->swizzle == 0xFAC, "with the swizzle that blit sampled it through");
   Check(!last.Take(), "taken once: the next frame starts without a source");
-  last.Note(0);
-  Check(last.Take() == std::optional<uint32_t>(0), "page 0 is a page");
+  last.Note(0, 0);
+  Check(last.Take() == std::optional<BlitSource>(BlitSource{0, 0}), "page 0 is a page");
 }
 
 }  // namespace

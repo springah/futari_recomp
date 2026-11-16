@@ -38,13 +38,14 @@ u32 BlitHostPixelShaderLocked(uint64_t ps_hash, const d3d::TextureFetchConstant 
   // Any other pixel shader (all but the blit's few draws a frame) costs this compare.
   if (ps_hash != futari_screen::kBlitPixelShaderHash)
     return 0;
-  const u32 page = TextureFetch::FromGuest(slot0).BasePage();
+  const TextureFetch fetch = TextureFetch::FromGuest(slot0);
+  const u32 page = fetch.BasePage();
   const d3d::SurfaceDesc *colour0 = SurfaceDescAt(colour0_va);
   const bool gameplay_source = g_gameplay_pages.Contains(page);
   const bool gameplay_target = colour0 && IsGameplayDescriptor(*colour0);
   // Under every Smoothing mode, for the dev capture of the image the blit sampled.
   if (futari_screen::IsGameplayBlit(ps_hash, gameplay_source, gameplay_target))
-    g_blit_source.Note(page);
+    g_blit_source.Note(page, fetch.Swizzle());
   const u32 shader = futari_screen::BlitHostPixelShader(g_blit_smoothing.load(std::memory_order_relaxed), ps_hash,
                                                         gameplay_source, gameplay_target);
   // No shader (failed to build, warned once in video.cpp; deko3d): the game's own, i.e. On.
@@ -54,8 +55,12 @@ u32 BlitHostPixelShaderLocked(uint64_t ps_hash, const d3d::TextureFetchConstant 
   return shader;
 }
 
-std::optional<u32> TakeBlitSourcePageLocked() {
-  return g_blit_source.Take();
+std::optional<u32> TakeBlitSourcePageLocked(u32 &swizzle) {
+  const std::optional<futari_screen::BlitSource> source = g_blit_source.Take();
+  if (!source)
+    return std::nullopt;
+  swizzle = source->swizzle;
+  return source->page;
 }
 
 void SetBlitSmoothing(u32 game_mode) {

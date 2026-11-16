@@ -60,7 +60,8 @@ void NoteResolveLocked(uint32_t source_va, const d3d::TextureFetchConstant &dest
 uint32_t BlitHostPixelShaderLocked(uint64_t ps_hash, const d3d::TextureFetchConstant &slot0, uint32_t colour0_va);
 // The base page of the gameplay resolve the last blit since the previous call sampled (noted by
 // BlitHostPixelShaderLocked, so only meaningful after the blit's call this frame), or nothing when no blit was drawn
-// since. The present calls it once a frame (backend/present.cpp, the dev capture of that image).
-std::optional<uint32_t> TakeBlitSourcePageLocked();
+// since; 'swizzle' gets the swizzle of the fetch constant the blit sampled it through (untouched with nothing). The
+// present calls it once a frame (backend/present.cpp, the dev capture of that image).
+std::optional<uint32_t> TakeBlitSourcePageLocked(uint32_t &swizzle);
 
 } // namespace renut::gpu

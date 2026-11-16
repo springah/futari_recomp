@@ -76,15 +76,23 @@ constexpr uint32_t BlitHostPixelShader(BlitSmoothing smoothing, uint64_t ps_hash
   return smoothing == BlitSmoothing::kSharp ? kHostPixelShaderSharp : kHostPixelShaderBilinear;
 }
 
-// The base page fetch slot 0 of the frame's last gameplay blit sampled, for the dev capture of that image: noted per
-// blit, taken (and so forgotten) once per present.
+// What fetch slot 0 of a gameplay blit sampled: the base page and the fetch constant's swizzle (which may differ from
+// the one the resolve destination's own view was made with).
+struct BlitSource {
+  uint32_t page = 0;
+  uint32_t swizzle = 0;
+  friend bool operator==(const BlitSource &, const BlitSource &) = default;
+};
+
+// The frame's last gameplay blit's source, for the dev capture of that image: noted per blit, taken (and so
+// forgotten) once per present.
 class LastBlitSource {
  public:
-  void Note(uint32_t page) { page_ = page; }
-  std::optional<uint32_t> Take() { return std::exchange(page_, std::nullopt); }
+  void Note(uint32_t page, uint32_t swizzle) { source_ = BlitSource{page, swizzle}; }
+  std::optional<BlitSource> Take() { return std::exchange(source_, std::nullopt); }
 
  private:
-  std::optional<uint32_t> page_;
+  std::optional<BlitSource> source_;
 };
 
 }  // namespace renut::gpu::futari_screen
