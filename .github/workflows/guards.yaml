@@ -187,6 +187,18 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I src tests/smoothing_test.cpp -o smoothing_test
           ./smoothing_test
 
+  indexed-vertices-test:
+    # The scratch layout (vertices, then 16-aligned indices) of Renut's
+    # BeginIndexedVertices hook (src/renut_engine/gpu/d3d/futari_indexed_vertices.h). Pure std.
+    name: indexed vertices test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/indexed_vertices_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/indexed_vertices_test.cpp -o indexed_vertices_test
+          ./indexed_vertices_test
+
   identity:
     name: Commit identity (springah/noreply)
     # Maintainer pushes only. Outside contributors have their own identities and
