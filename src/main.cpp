@@ -820,6 +820,7 @@ class FutariApp : public rex::ReXApp {
 #if FUTARI_RENUT_RENDERER
     env.renderer_fallback = banjo::renut_gpu::FallbackReason();
     env.renut_running = banjo::renut_gpu::Active();
+    env.shaders_built_in = renut::gpu::GameShadersBuiltIn();
 #endif
     env.on_quit = [this] { RequestExit("launcher"); };
     env.save_display_settings = [] { SaveFutariIni(rex::filesystem::GetExecutableFolder()); };

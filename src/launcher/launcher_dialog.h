@@ -46,6 +46,7 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
     bool renut_available = false;      // the build carries the Renut renderer and its translator
     std::string renderer_fallback;     // non-empty: Renut was asked for but the default renderer runs this session (why)
     bool renut_running = false;        // Renut draws this session (its vsync switch is renut_vsync, not the SDK's vsync)
+    bool shaders_built_in = false;     // a developer build: the translated game shaders are in the exe, no package needed
     bool in_game = false;             // opened over the running game: no Play, settings apply at the next start
     std::filesystem::path auto_source; // --futari_setup_source: start on this at once and Play when done
     // UI thread; the dialog closes itself right after calling it. fresh_process: the game data was just extracted
