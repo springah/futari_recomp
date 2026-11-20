@@ -4,7 +4,7 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.10 — 2026-11-20 (Windows, macOS)
 
 - **No more crash after a failed game load.** When the game's executable
   cannot be loaded (a damaged or incomplete `default.xex`), the error box was
@@ -13,6 +13,16 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   process now exits cleanly. The same change makes the process exit at once if
   the game ever ends by itself, as it already did when the window is closed.
   Same fix as in the Zuma and Daytona ports.
+
+- **F4 overlay: the VSync box now means what the F2 one means.** The SDK's box
+  showed the game's own `vsync` setting and changed both that and the window's.
+  With `present_vsync` off by default it read ticked while the window presented
+  at once, and unticking it took the game off its 60 Hz clock. It now reads and
+  sets `present_vsync` alone; `vsync` stays in the cvar list.
+
+- Launcher settings page: a developer build that has the shaders built in no
+  longer says "not prepared yet (Renut would draw nothing)"; it says they are
+  built in. Public builds read as before.
 
 ## v1.5.9 — 2026-11-15 (Windows, macOS)
 
