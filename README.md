@@ -15,8 +15,8 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.11 (Windows, macOS): bundles on the
-[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.11);
+**Latest release:** v1.5.12 (Windows, macOS): bundles on the
+[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.12);
 history in [CHANGELOG.md](CHANGELOG.md), per-OS build and packaging details in
 [PORTS.md](PORTS.md).
 
@@ -105,6 +105,14 @@ and futari-linux's measurements on a Steam Deck
   line to go back.
 - **Needs a Vulkan 1.2 driver.** Renut is Vulkan-only: its Direct3D 12 backend
   has no shaders to draw with.
+- **It draws the game at the window's size** (from v1.5.12, Decidetto's
+  [#10](https://github.com/springah/futari_recomp/pull/10)). The game's frame
+  is the window itself, at any aspect ratio, and follows a resize or F11
+  without a restart. `renut_resolution = 720p` or `1080p` at the top of
+  `futari.ini` goes back to a fixed frame scaled to fit. The game's Picture
+  Setting > Smoothing gains **Sharp** (crisp pixels at non-integer zooms),
+  which only Renut draws; the choice is kept in `futari.ini`
+  (`futari_sharp_smoothing`), not in the game save.
 - **Its shaders come from your game.** Shaders are game data, so no zip carries
   them: the setup screen (or `extract_assets.bat`) translates them from your own
   executables into `vulkan_spirv.bin` beside the exe, in a few seconds, with
@@ -115,7 +123,9 @@ and futari-linux's measurements on a Steam Deck
 - On macOS, Renut draws through MoltenVK (Vulkan over Metal), turned on the same
   way; the setup screen there has the shader step as well (the DirectX Shader
   Compiler ships inside the app, built from source). It renders at the window's
-  1x size like the default renderer, and Apple GPUs have no geometry shaders,
+  1x size like the default renderer (start the app with
+  `--sdl_high_pixel_density=true` for the display's full pixels, at a GPU
+  cost), and Apple GPUs have no geometry shaders,
   so rectangle lists go through tessellation there. The picture matches the
   default renderer, but treat it as experimental on the Mac: heavy scenes can
   drop below 60 fps (41 to 55 fps seen in Black Label on an M3 Max), where the
@@ -319,13 +329,15 @@ thirdparty/plume/, thirdparty/reblue-XenosRecomp/   # Renut's render interface a
 
 ## Known issues
 
-Known limits of v1.5.11:
+Known limits of v1.5.12:
 
 - **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path).
   On macOS it is experimental: the picture is right, but heavy scenes can run
   at 41 to 55 fps where the default renderer holds 60, because Apple GPUs have
   no geometry shaders and the tessellation that stands in for them costs a
   compute pass per draw call under MoltenVK.
+- **Sharp smoothing is Renut's.** The default renderer draws it as Smooth,
+  and the setting is one for all eight Picture presets.
 - **The setup screen translates the shaders in one pass**, where
   `extract_assets.bat` (through `make_shaders.py`) runs two passes around an
   early-alpha rewrite. A few pixel shaders run slower from the setup screen's

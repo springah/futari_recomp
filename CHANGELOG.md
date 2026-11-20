@@ -4,7 +4,14 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.12 — 2026-11-20 (Windows, macOS)
+
+The Renut work in this release is Decidetto's
+([#10](https://github.com/springah/futari_recomp/pull/10)): the frame at the
+window's size, live resize, the layouts, the zoom multiplier and Sharp
+smoothing. The entries on where Sharp is stored, the resized window, the
+`[Display] resolution` unit, `resolution_scale` and macOS high pixel density
+came out of its review.
 
 - **Renut draws the game at the window's own size.** With Renut the game's
   frame used to come from its 3-entry video-mode table (1280x720, 1920x1080 or
