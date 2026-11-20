@@ -56,6 +56,8 @@
 #include "host_shaders/target_readback_cs.spirv.h"
 #include "host_shaders/texture_mip_ps.spirv.h"
 #include "host_shaders/resolve_copy_ps.spirv.h"
+#include "host_shaders/sharp_bilinear_ps.spirv.h"  // futari_recomp (2026-11-15)
+#include "host_shaders/blit_bilinear_ps.spirv.h"   // futari_recomp (2026-11-15)
 #if defined(PLUME_DEKO3D)  // banjo-nx (2026-10-17): the deko3d back end's (tools/deko3d_host_shader.py)
 #include "host_shaders/depth_resolve_ms_ps.deko3d.h"
 #include "host_shaders/depth_resolve_ps.deko3d.h"
@@ -83,6 +85,8 @@
 #include "host_shaders/target_readback_cs.dxil.h"
 #include "host_shaders/texture_mip_ps.dxil.h"
 #include "host_shaders/resolve_copy_ps.dxil.h"
+#include "host_shaders/sharp_bilinear_ps.dxil.h"  // futari_recomp (2026-11-15)
+#include "host_shaders/blit_bilinear_ps.dxil.h"   // futari_recomp (2026-11-15)
 #endif
 
 #include "renut_engine/gpu/futari_rect_timing.h"  // futari_recomp (leg/rectlist)
@@ -1042,6 +1046,18 @@ bool Video::CreateHostDevice() {
   step("texture mip shader");
   s.texture_mip_ps =
       CreateHostShader(s.device.get(), RENUT_HOST_SHADER(texture_mip_ps), "texture_mip_ps");
+  // futari_recomp (2026-11-15): optional: without them Sharp bilinear and On draw as the game's bilinear
+  // (futari_screen.cpp).
+#if !defined(PLUME_DEKO3D)
+  step("sharp bilinear shader");
+  s.sharp_bilinear_ps =
+      CreateHostShader(s.device.get(), RENUT_HOST_SHADER(sharp_bilinear_ps), "sharp_bilinear_ps");
+  if (!s.sharp_bilinear_ps)
+    RGPU_WARN("Sharp bilinear: no shader; Smoothing's Sharp bilinear draws as On");
+  s.blit_bilinear_ps = CreateHostShader(s.device.get(), RENUT_HOST_SHADER(blit_bilinear_ps), "blit_bilinear_ps");
+  if (!s.blit_bilinear_ps)
+    RGPU_WARN("Smoothing On: no float bilinear shader; it draws with the game's shader");
+#endif
   step("pipeline prebuild");
   StartPipelinePrebuild();
   step("ready");

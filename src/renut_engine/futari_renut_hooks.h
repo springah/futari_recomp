@@ -19,6 +19,7 @@ extern "C" void futari_renut_entry_D3DDevice_AcquireThreadOwnership(PPCContext& 
 extern "C" void futari_renut_entry_D3DDevice_AddRef(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_BeginCommandBuffer(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_BeginExport(PPCContext& ctx, uint8_t* base);
+extern "C" void futari_renut_entry_D3DDevice_BeginIndexedVertices(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_BeginTiling(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_BeginVertices(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_BlockOnFence(PPCContext& ctx, uint8_t* base);
@@ -163,6 +164,7 @@ extern "C" void futari_renut_entry_D3DDevice_IsFencePending(PPCContext& ctx, uin
 extern "C" void futari_renut_entry_D3DDevice_Present(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_Release(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_ReleaseThreadOwnership(PPCContext& ctx, uint8_t* base);
+extern "C" void futari_renut_entry_D3DDevice_Reset(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_Resolve(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_RunCommandBuffer(PPCContext& ctx, uint8_t* base);
 extern "C" void futari_renut_entry_D3DDevice_SetClipPlane(PPCContext& ctx, uint8_t* base);
@@ -380,11 +382,22 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     __imp__sub_8209D080(ctx, base); \
   }
 #define FUTARI_RENUT_SITE_D3DConstantBuffer_Unlock  // not in Futari's Direct3D
-#define FUTARI_RENUT_SITE_D3DCubeTexture_GetCubeMapSurface  // not in Futari's Direct3D
+#define FUTARI_RENUT_SITE_D3DCubeTexture_GetCubeMapSurface \
+  REX_EXTERN(__imp__sub_8209D168); \
+  extern "C" REX_FUNC(sub_8209D168) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DCubeTexture_GetCubeMapSurface(ctx, base); return; } \
+    __imp__sub_8209D168(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DDevice_AcquireThreadOwnership  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_AddRef  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_BeginCommandBuffer  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_BeginExport  // not in Futari's Direct3D
+#define FUTARI_RENUT_SITE_D3DDevice_BeginIndexedVertices \
+  REX_EXTERN(__imp__sub_8209DCE0); \
+  extern "C" REX_FUNC(sub_8209DCE0) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DDevice_BeginIndexedVertices(ctx, base); return; } \
+    __imp__sub_8209DCE0(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DDevice_BeginTiling  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DDevice_BeginVertices \
   REX_EXTERN(__imp__sub_8209D800); \
@@ -398,7 +411,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DDevice_BlockOnFence(ctx, base); return; } \
     __imp__sub_820A82F0(ctx, base); \
   }
-#define FUTARI_RENUT_SITE_D3DDevice_BlockUntilIdle  // not in Futari's Direct3D
+#define FUTARI_RENUT_SITE_D3DDevice_BlockUntilIdle \
+  REX_EXTERN(__imp__sub_820A9268); \
+  extern "C" REX_FUNC(sub_820A9268) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DDevice_BlockUntilIdle(ctx, base); return; } \
+    __imp__sub_820A9268(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DDevice_Clear \
   REX_EXTERN(__imp__sub_820A19F0); \
   extern "C" REX_FUNC(sub_820A19F0) { \
@@ -604,6 +622,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     __imp__sub_820A46B8(ctx, base); \
   }
 #define FUTARI_RENUT_SITE_D3DDevice_ReleaseThreadOwnership  // not in Futari's Direct3D
+#define FUTARI_RENUT_SITE_D3DDevice_Reset \
+  REX_EXTERN(__imp__sub_820A4710); \
+  extern "C" REX_FUNC(sub_820A4710) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DDevice_Reset(ctx, base); return; } \
+    __imp__sub_820A4710(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DDevice_Resolve \
   REX_EXTERN(__imp__sub_820A2280); \
   extern "C" REX_FUNC(sub_820A2280) { \
@@ -879,7 +903,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DSurface_UnlockRect(ctx, base); return; } \
     __imp__sub_8209B728(ctx, base); \
   }
-#define FUTARI_RENUT_SITE_D3DTexture_GetSurfaceLevel  // not in Futari's Direct3D
+#define FUTARI_RENUT_SITE_D3DTexture_GetSurfaceLevel \
+  REX_EXTERN(__imp__sub_8209D090); \
+  extern "C" REX_FUNC(sub_8209D090) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DTexture_GetSurfaceLevel(ctx, base); return; } \
+    __imp__sub_8209D090(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DVertexBuffer_Lock  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DVertexBuffer_Unlock  // not in Futari's Direct3D
 #define FUTARI_RENUT_SITE_D3DVertexShader_Bind \
@@ -888,7 +917,12 @@ extern "C" void futari_renut_entry_XGRegisterVertexShader(PPCContext& ctx, uint8
     if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DVertexShader_Bind(ctx, base); return; } \
     __imp__sub_820A05A0(ctx, base); \
   }
-#define FUTARI_RENUT_SITE_D3DVolumeTexture_GetVolumeLevel  // not in Futari's Direct3D
+#define FUTARI_RENUT_SITE_D3DVolumeTexture_GetVolumeLevel \
+  REX_EXTERN(__imp__sub_8209D230); \
+  extern "C" REX_FUNC(sub_8209D230) { \
+    if (::banjo::renut_gpu::Active()) { futari_renut_entry_D3DVolumeTexture_GetVolumeLevel(ctx, base); return; } \
+    __imp__sub_8209D230(ctx, base); \
+  }
 #define FUTARI_RENUT_SITE_D3DVolume_GetDesc \
   REX_EXTERN(__imp__sub_8209D5F8); \
   extern "C" REX_FUNC(sub_8209D5F8) { \

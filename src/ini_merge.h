@@ -15,8 +15,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ini_merge {
@@ -45,20 +47,27 @@ inline std::string LowerTrim(std::string_view value) {
   return out;
 }
 
+// The lines without their CR, and without the UTF-8 BOMs at their start (a file saved by PowerShell 5.1 or some
+// editors, twice over, or pasted together from such files), so a marker or key after a BOM still matches.
 inline std::vector<std::string> SplitLines(std::string_view text) {
+  const auto add = [](std::vector<std::string>& lines, std::string_view line) {
+    while (line.substr(0, 3) == "\xEF\xBB\xBF")
+      line.remove_prefix(3);
+    lines.emplace_back(line);
+  };
   std::vector<std::string> lines;
   size_t start = 0;
   while (start <= text.size()) {
     size_t end = text.find('\n', start);
     if (end == std::string_view::npos) {
       if (start < text.size())
-        lines.emplace_back(text.substr(start));
+        add(lines, text.substr(start));
       break;
     }
     std::string_view line = text.substr(start, end - start);
     if (!line.empty() && line.back() == '\r')
       line.remove_suffix(1);
-    lines.emplace_back(line);
+    add(lines, line);
     start = end + 1;
   }
   return lines;
@@ -70,6 +79,22 @@ inline std::string SectionOf(std::string_view line) {
   if (trimmed.size() >= 2 && trimmed.front() == '[' && trimmed.back() == ']')
     return trimmed.substr(1, trimmed.size() - 2);
   return {};
+}
+
+// The indexes of the managed block's begin and end marker lines; empty when the file has no complete block (only both
+// markers in order count, so a damaged file never loses anything else).
+inline std::optional<std::pair<size_t, size_t>> ManagedBlockRange(const std::vector<std::string>& lines) {
+  const auto begin_it = std::find_if(lines.begin(), lines.end(), [](const std::string& l) {
+    return LowerTrim(l) == LowerTrim(kBlockBegin);
+  });
+  if (begin_it == lines.end())
+    return std::nullopt;
+  const auto end_it = std::find_if(begin_it, lines.end(), [](const std::string& l) {
+    return LowerTrim(l) == LowerTrim(kBlockEnd);
+  });
+  if (end_it == lines.end())
+    return std::nullopt;
+  return std::pair{static_cast<size_t>(begin_it - lines.begin()), static_cast<size_t>(end_it - lines.begin())};
 }
 
 }  // namespace detail
@@ -87,22 +112,12 @@ inline std::string Merge(std::string_view original,
 
   // Drop an existing managed block -- only when both markers are found in
   // order, so a damaged file never loses anything else.
-  {
-    auto begin_it = std::find_if(lines.begin(), lines.end(), [](const std::string& l) {
-      return LowerTrim(l) == LowerTrim(kBlockBegin);
-    });
-    if (begin_it != lines.end()) {
-      auto end_it = std::find_if(begin_it, lines.end(), [](const std::string& l) {
-        return LowerTrim(l) == LowerTrim(kBlockEnd);
-      });
-      if (end_it != lines.end()) {
-        auto after = lines.erase(begin_it, end_it + 1);
-        // Also swallow the blank separator a previous merge wrote after the
-        // block, so repeated saves don't accumulate blank lines.
-        if (after != lines.end() && LowerTrim(*after).empty())
-          lines.erase(after);
-      }
-    }
+  if (const auto block = detail::ManagedBlockRange(lines)) {
+    auto after = lines.erase(lines.begin() + block->first, lines.begin() + block->second + 1);
+    // Also swallow the blank separator a previous merge wrote after the
+    // block, so repeated saves don't accumulate blank lines.
+    if (after != lines.end() && LowerTrim(*after).empty())
+      lines.erase(after);
   }
 
   std::vector<bool> consumed(updates.size(), false);

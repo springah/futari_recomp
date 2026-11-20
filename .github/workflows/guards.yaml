@@ -54,6 +54,151 @@ jobs:
           g++ -std=c++20 -Wall -Wextra -Werror -I src tests/ini_merge_test.cpp -o ini_merge_test
           ./ini_merge_test
 
+  hidden-settings-test:
+    # The resolution settings F4 hides (src/hidden_settings.h) and when a save
+    # keeps one in the managed block: only where the file already had it. Pure std.
+    name: hidden settings test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/hidden_settings_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/hidden_settings_test.cpp -o hidden_settings_test
+          ./hidden_settings_test
+
+  screen-layout-test:
+    # The size rules of the game's output-sized frame (src/screen_layout_math.h):
+    # the clamp and the game's widescreen rule. Pure std, like the ini merge test.
+    name: screen layout test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/screen_layout_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/screen_layout_test.cpp -o screen_layout_test
+          ./screen_layout_test
+
+  ini-resolution-test:
+    # The [Display] resolution a save writes (src/ini_resolution.h): the size as
+    # typed when nothing changed it, a picked size as picked. Pure std.
+    name: ini resolution test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/ini_resolution_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/ini_resolution_test.cpp -o ini_resolution_test
+          ./ini_resolution_test
+
+  edram-tiles-test:
+    # Renut's EDRAM tile count and the rule for surfaces larger than the
+    # console's 2048 tiles (src/renut_engine/gpu/d3d/edram_tiles.h). Pure std.
+    name: edram tiles test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/edram_tiles_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/edram_tiles_test.cpp -o edram_tiles_test
+          ./edram_tiles_test
+
+  capture-series-test:
+    # The names of the F9 frame captures (src/dev/capture_series.h): the
+    # numbering that never overwrites a capture. Pure std.
+    name: capture series test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/capture_series_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/capture_series_test.cpp -o capture_series_test
+          ./capture_series_test
+
+  input-recording-test:
+    # The text format of the dev input record/replay (src/dev/input_recording.h)
+    # and the replay cursor. Pure std.
+    name: input recording test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/input_recording_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/input_recording_test.cpp -o input_recording_test
+          ./input_recording_test
+
+  presented-frame-test:
+    # When Renut's present copies the game's frame pixel for pixel instead of
+    # scaling it (src/renut_engine/gpu/backend/presented_frame.h). Pure std.
+    name: presented frame test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/presented_frame_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/presented_frame_test.cpp -o presented_frame_test
+          ./presented_frame_test
+
+  front-buffer-block-test:
+    # Whether a resized automatic front buffer reuses its data block or needs a
+    # larger one (src/renut_engine/gpu/d3d/front_buffer_block.h). Pure std.
+    name: front buffer block test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/front_buffer_block_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/front_buffer_block_test.cpp -o front_buffer_block_test
+          ./front_buffer_block_test
+
+  sharp-bilinear-test:
+    # The Sharp bilinear filter of the gameplay image against its definition
+    # (nearest prescale, then bilinear) (src/sharp_bilinear_math.h). Pure std.
+    name: sharp bilinear test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/sharp_bilinear_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/sharp_bilinear_test.cpp -o sharp_bilinear_test
+          ./sharp_bilinear_test
+
+  futari-screen-test:
+    # Which targets hold the gameplay image, which resolve destinations do, and
+    # when a draw is the gameplay blit Sharp bilinear redraws
+    # (src/renut_engine/gpu/futari_screen_rules.h). Pure std.
+    name: futari screen test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/futari_screen_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/futari_screen_test.cpp -o futari_screen_test
+          ./futari_screen_test
+
+  smoothing-test:
+    # The game's Smoothing modes: Sharp bilinear drawn as On by the game, and
+    # the dev value that forces a mode (src/smoothing_math.h). Pure std.
+    name: smoothing test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/smoothing_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/smoothing_test.cpp -o smoothing_test
+          ./smoothing_test
+
+  indexed-vertices-test:
+    # The scratch layout (vertices, then 16-aligned indices) of Renut's
+    # BeginIndexedVertices hook (src/renut_engine/gpu/d3d/futari_indexed_vertices.h). Pure std.
+    name: indexed vertices test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and run tests/indexed_vertices_test.cpp
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -I src tests/indexed_vertices_test.cpp -o indexed_vertices_test
+          ./indexed_vertices_test
+
   identity:
     name: Commit identity (springah/noreply)
     # Maintainer pushes only. Outside contributors have their own identities and

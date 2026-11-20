@@ -1,6 +1,7 @@
 assets/
 dlc/
 generated/
+logs/
 # Anchored: the vendored SDK tracks scripts/PSReX/Private/, which an
 # unanchored rule would swallow on a case-insensitive filesystem.
 /private/

@@ -4,6 +4,60 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- **Renut draws the game at the window's own size.** With Renut the game's
+  frame used to come from its 3-entry video-mode table (1280x720, 1920x1080 or
+  1920x960) and was scaled to the window afterwards. A new value of
+  `renut_resolution`, `output`, now the default, gives the game the window's
+  size instead, at any aspect, portrait included: two guest post-patches
+  replace the mode table's result and the game's screen-size floats. Renut
+  renders that frame at scale 1 and presents it 1:1 (point sampled, no second
+  resample), so the game's own gameplay blit is the only resample left. Frames
+  larger than the 10 MiB EDRAM (above about 1920x1200) used to fail Renut's
+  `CreateSurface`; such a surface now gets no EDRAM reservation, since host
+  targets never live there. The fixed presets (`720p`, `1080p`, …) behave as
+  before. No translated game shader changes, so existing `vulkan_spirv.bin`
+  packages keep working.
+- **Live resize, fullscreen and resolution switches without a restart.**
+  Dragging the window, F11, minimise and restore resize the guest's automatic
+  back and front buffers in place at a frame boundary, and switching between
+  `output` and a preset applies at once. Sizes are physical pixels, whatever
+  the Windows scaling.
+- **Layouts at aspect ratios other than 16:9 (Renut, `output`).** The
+  wallpaper and the title picture cover the frame, menus stay readable when
+  the window is narrow, full-screen pictures fill the frame, and the title's
+  exit hint keeps to its corner.
+- **The gameplay zoom shows its multiplier.** Screen > Layout Setting's zoom
+  showed a raw number (80 for 3x); under `output` it shows `3.00x`, with the
+  game's `DbD` mark at whole multipliers, and the label drops its own
+  parenthesised copy. The limit rises with the window size, so the largest
+  whole multiplier that fits is always reachable (6x at 3840x2160), and a new
+  save starts at that multiplier. The stored value is unchanged, so old saves
+  keep their zoom.
+- **Sharp bilinear Smoothing.** Picture Setting > Smoothing now reads Smooth /
+  Sharp / Off. Sharp keeps the art's pixels crisp at non-integer zooms (nearest
+  at the largest whole factor, bilinear for the rest) and is exactly Off at
+  whole zooms; it is the default for new saves on Renut. On Renut, Smooth draws
+  with float bilinear weights. The default renderer draws Sharp as Smooth. At
+  odd window sizes the gameplay quad is moved onto whole pixels, so Sharp and
+  Off land on the same pixel grid.
+- **Fix: Options > Screen no longer crashes Renut.** The page's frame overlay
+  draws through `D3DDevice_BeginIndexedVertices`, which Renut did not hook; the
+  game's own state flush then read Renut's shader record as a guest shader and
+  bugchecked (0xF5). The function is now hooked through the existing
+  `BeginVertices` path, and `Reset`, `BlockUntilIdle` and the texture-level
+  hooks are mapped as well.
+- The F4 overlay no longer lists the resolution settings (`renut_resolution`,
+  `resolution`, the window size, `resolution_scale`); `[Display]` and the
+  game's own menu own them. Reset all keeps the renderer choice.
+- For builders: twelve more std-only unit tests under `tests/`, each a job in
+  the Guards workflow, and dev aids that do nothing unless set: frame captures
+  (`--futari_renut_capture_path`, F9, now with the 1x gameplay source image),
+  input record and replay with window events (`--futari_dev_input_record`,
+  `--futari_dev_input_replay`) and forced settings for test runs
+  (`--futari_dev_frame_size`, `--futari_dev_zoom`, `--futari_dev_smoothing`).
+
 ## v1.5.11 — 2026-11-20 (Windows, macOS)
 
 - **A failed game load no longer hangs on the way out.** v1.5.10 stopped the

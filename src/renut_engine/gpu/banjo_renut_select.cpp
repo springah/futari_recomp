@@ -43,9 +43,10 @@ bool LatchActive() {
   g_active = active ? 1 : -1;
   return active;
 }
-std::string g_fallback_reason;
+std::string g_fallback_reason;  // futari_recomp (2026-11-07): FallBackToDefault's
 }  // namespace detail
 
+// futari_recomp (2026-11-07): see banjo_renut_select.h.
 void FallBackToDefault(const std::string& why) {
   if (detail::g_active != 0) {
     REXLOG_ERROR("Renderer: the fallback to the default renderer came after the choice was made ({}); ignored", why);
@@ -55,7 +56,7 @@ void FallBackToDefault(const std::string& why) {
   detail::g_active = -1;
 }
 
-const std::string& FallbackReason() { return detail::g_fallback_reason; }
+const std::string& FallbackReason() { return detail::g_fallback_reason; }  // futari_recomp (2026-11-07)
 
 }  // namespace banjo::renut_gpu
 

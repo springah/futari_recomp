@@ -39,7 +39,10 @@ void RecordDraw(u32 device_va, const DrawCall &call, u32 up_vertex_bytes, u32 up
 
 // Records a Begin*Vertices draw whose 'bytes' of vertex data the game writes
 // to 'scratch' after the call; copied at the device's next hooked call.
-void RecordDeferredDraw(u32 device_va, const DrawCall &call, const u8 *scratch, u32 bytes);
+// futari_recomp (2026-11-07): BeginIndexedVertices' 'index_bytes' of indices
+// at 'index_scratch' alike (null for BeginVertices).
+void RecordDeferredDraw(u32 device_va, const DrawCall &call, const u8 *scratch, u32 bytes,
+                        const u8 *index_scratch, u32 index_bytes);
 
 void RecordClear(u32 device_va, u32 flags, const ClearRect *rect, const float color[4],
                  float depth, u32 stencil);

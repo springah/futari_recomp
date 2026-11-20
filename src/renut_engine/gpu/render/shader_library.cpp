@@ -103,6 +103,7 @@ void ExportBuiltInSpirvPackage(const std::string &path);
 
 }  // namespace
 
+// futari_recomp (2026-11-07): see shader_library.h.
 bool GameShadersBuiltIn() { return g_spirvCacheCompressedSize != 0; }
 
 namespace {

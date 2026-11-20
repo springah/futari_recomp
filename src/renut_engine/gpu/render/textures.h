@@ -220,6 +220,11 @@ TextureBinding BindTextureLocked(u32 texture_va, const TextureFetch &device_fetc
 uint32_t DepthHandOverSlotLocked(HostTexture &dest, const plume::RenderComponentMapping &mapping, BindEffects *fx);
 void DepthHandOverForgetLocked(HostTexture &dest);
 
+// futari_recomp (2026-11-16): which stored component (0-3 XYZW of 'format', 4 zero, 5 one) a view made for the fetch
+// swizzle 'swizzle' gives as shader component 'component' (0-3), with X and Z exchanged for content stored so
+// ('swap_red_blue', HostTexture::view_swap_red_blue): the mapping every texture view here is made with.
+uint32_t SwizzleSource(u32 swizzle, uint32_t component, bool swap_red_blue, plume::RenderFormat format);
+
 // The guest memory a texture's data spans: pages[0]/sizes[0] its base level,
 // pages[1]/sizes[1] its mip chain (a page is 4 KiB of physical memory; a zero
 // page or size is absent).
@@ -243,6 +248,10 @@ HostTexture *GetDepthResolveTextureLocked(u32 texture_va, RenderScale scale,
 
 // Existing host texture for a guest texture VA, or nullptr.
 HostTexture *FindHostTextureLocked(u32 texture_va);
+
+// futari_recomp (2026-11-15): the colour or depth resolve destination whose data starts at guest page 'base_page'
+// (the last resolve into that page), or nullptr. For a dev capture of what a resolve wrote.
+HostTexture *FindResolveTargetLocked(u32 base_page);
 
 void ReleaseHostTextureLocked(u32 texture_va);
 

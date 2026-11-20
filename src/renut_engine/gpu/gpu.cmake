@@ -335,7 +335,8 @@ function(renut_gpu_setup TARGET)
         ${RENUT_GPU_DIR}/guest/callbacks.cpp
         ${RENUT_GPU_DIR}/guest/command_buffers.cpp
         ${RENUT_GPU_DIR}/guest/guest_records.cpp
-
+        # futari_recomp (2026-11-15): Futari's gameplay image (the game layer, as render/graphics_options.cpp).
+        ${RENUT_GPU_DIR}/futari_screen.cpp
 
         # reNut's overlay and the SDK's menus.
         ${RENUT_GPU_DIR}/overlay/app_integration.cpp
@@ -377,6 +378,8 @@ function(renut_gpu_setup TARGET)
     renut_host_shader(${TARGET} point_sprite_ds ds_6_0)
     renut_host_shader(${TARGET} stream_convert_cs cs_6_0)
     renut_host_shader(${TARGET} target_readback_cs cs_6_0)
+    renut_host_shader(${TARGET} sharp_bilinear_ps ps_6_0)  # futari_recomp (2026-11-15): Sharp bilinear smoothing
+    renut_host_shader(${TARGET} blit_bilinear_ps ps_6_0)  # futari_recomp (2026-11-15): Smoothing On, float bilinear
 
     renut_xenos_shader_cache(${TARGET})
 

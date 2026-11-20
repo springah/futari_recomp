@@ -30,6 +30,7 @@
 #include "renut_engine/gpu/guest/command_buffers.h"
 #include "renut_engine/gpu/d3d/d3d.h"
 #include "renut_engine/gpu/d3d/d3d_native.h"
+#include "renut_engine/gpu/d3d/futari_indexed_vertices.h"  // futari_recomp (2026-11-07)
 #include "renut_engine/gpu/render/draw.h"
 #include "renut_engine/gpu/guest/guest_memory.h"
 #include "renut_engine/gpu/guest/guest_records.h"
@@ -177,14 +178,9 @@ void D3DDevice_DrawVerticesUP_hook(u32 device, u32 primitive, u32 vertex_count, 
     QueueDraw(device, call, vertex_count * stride, 0);
 }
 
-// void D3DDevice_DrawIndexedVerticesUP(D3DDevice*, D3DPRIMITIVETYPE, UINT MinVertexIndex,
-//     UINT NumVertices, UINT IndexCount, const void *pIndexData, D3DFORMAT IndexDataFormat,
-//     const void *pVertexStreamZeroData, UINT VertexStreamZeroStride) [0x82656728]
-void D3DDevice_DrawIndexedVerticesUP_hook(u32 device, u32 primitive, u32 min_vertex,
-                                          u32 num_vertices, u32 index_count, u32 index_data,
-                                          u32 index_format, u32 vertex_data, u32 stride) {
-  if (!Active() || !index_data || !vertex_data)
-    return;
+// futari_recomp (2026-11-07): DrawIndexedVerticesUP's draw, shared with BeginIndexedVertices.
+DrawCall IndexedUpCall(u32 primitive, u32 index_count, u32 index_data, u32 index_format,
+                       u32 vertex_data, u32 stride, u32 vertex_count) {
   DrawCall call;
   call.primitive = primitive;
   call.indexed = true;
@@ -193,13 +189,50 @@ void D3DDevice_DrawIndexedVerticesUP_hook(u32 device, u32 primitive, u32 min_ver
   call.up_indices_32 = (index_format & 4) != 0;  // D3DFMT_INDEX32
   call.up_vertices = GuestPtr<const u8>(vertex_data);
   call.up_stride = stride;
-  call.up_vertex_count = min_vertex + num_vertices;
+  call.up_vertex_count = vertex_count;
+  return call;
+}
+
+// void D3DDevice_DrawIndexedVerticesUP(D3DDevice*, D3DPRIMITIVETYPE, UINT MinVertexIndex,
+//     UINT NumVertices, UINT IndexCount, const void *pIndexData, D3DFORMAT IndexDataFormat,
+//     const void *pVertexStreamZeroData, UINT VertexStreamZeroStride) [0x82656728]
+void D3DDevice_DrawIndexedVerticesUP_hook(u32 device, u32 primitive, u32 min_vertex,
+                                          u32 num_vertices, u32 index_count, u32 index_data,
+                                          u32 index_format, u32 vertex_data, u32 stride) {
+  if (!Active() || !index_data || !vertex_data)
+    return;
+  const DrawCall call = IndexedUpCall(primitive, index_count, index_data, index_format,
+                                      vertex_data, stride, min_vertex + num_vertices);
   const u32 vertex_bytes = call.up_vertex_count * stride;
   const u32 index_bytes = index_count * (call.up_indices_32 ? 4 : 2);
   if (IsRecordingCommandBuffer(device))
     RecordDraw(device, call, vertex_bytes, index_bytes);
   else
     QueueDraw(device, call, vertex_bytes, index_bytes);
+}
+
+// futari_recomp (2026-11-07): BeginVertices' start and end, shared with
+// BeginIndexedVertices. The device's scratch for 'bytes', or 0 when they do
+// not fit; the ring pointer the end restores is saved first.
+u32 BeginScratch(u32 device, u64 bytes) {
+  if (!bytes || bytes > kVerticesScratchSize)
+    return 0;
+  // The inline end: m_pRing = [device + kDeviceOffsetVerticesRingEnd].
+  StoreU32(device + d3d::kDeviceOffsetVerticesRingEnd,
+           LoadU32(device + u32(offsetof(d3d::Device, m_pRing))));
+  return VerticesScratch(device);
+}
+
+// The draw over the scratch, its data copied at the device's next hook.
+// Either way the device's previous Begin*Vertices data leaves the scratch
+// before the game writes this draw's over it.
+void DeferScratchDraw(u32 device, const DrawCall &call, u32 vertex_bytes, u32 index_bytes) {
+  if (IsRecordingCommandBuffer(device))
+    RecordDeferredDraw(device, call, call.up_vertices, vertex_bytes, call.up_indices, index_bytes);
+  else if (Active())
+    QueueDeferredDraw(device, call, call.up_vertices, vertex_bytes, call.up_indices, index_bytes);
+  else
+    FlushDeferredVertices(device);
 }
 
 // void *D3DDevice_BeginVertices(D3DDevice*, D3DPRIMITIVETYPE, UINT VertexCount,
@@ -209,13 +242,7 @@ void D3DDevice_DrawIndexedVerticesUP_hook(u32 device, u32 primitive, u32 min_ver
 // device's next hook (FlushDeferredVertices).
 u32 D3DDevice_BeginVertices_hook(u32 device, u32 primitive, u32 vertex_count, u32 stride) {
   const u64 bytes = u64(vertex_count) * stride;
-  if (!bytes || bytes > kVerticesScratchSize)
-    return 0;
-  // The inline end: m_pRing = [device + kDeviceOffsetVerticesRingEnd].
-  StoreU32(device + d3d::kDeviceOffsetVerticesRingEnd,
-           LoadU32(device + u32(offsetof(d3d::Device, m_pRing))));
-
-  const u32 scratch = VerticesScratch(device);
+  const u32 scratch = BeginScratch(device, bytes);
   if (!scratch)
     return 0;
   DrawCall call;
@@ -224,15 +251,36 @@ u32 D3DDevice_BeginVertices_hook(u32 device, u32 primitive, u32 vertex_count, u3
   call.up_vertices = GuestPtr<const u8>(scratch);
   call.up_stride = stride;
   call.up_vertex_count = vertex_count;
-  // Either way the device's previous Begin*Vertices data leaves the scratch
-  // before the game writes this draw's over it.
-  if (IsRecordingCommandBuffer(device))
-    RecordDeferredDraw(device, call, call.up_vertices, u32(bytes));
-  else if (Active())
-    QueueDeferredDraw(device, call, call.up_vertices, u32(bytes));
-  else
-    FlushDeferredVertices(device);
+  DeferScratchDraw(device, call, u32(bytes), 0);
   return scratch;
+}
+
+// HRESULT D3DDevice_BeginIndexedVertices(D3DDevice*, D3DPRIMITIVETYPE, INT BaseVertexIndex,
+//     UINT NumVertices, UINT IndexCount, D3DFORMAT IndexDataFormat, UINT VertexStreamZeroStride,
+//     void **ppIndexData, void **ppVertexData) [Futari 0x8209DCE0; ppVertexData on the stack]
+// futari_recomp (2026-11-07): replaced like BeginVertices, as the original's
+// state flush bugchecks (0xF5) on Renut's shader records. One scratch, the
+// vertices then the indices (IndexedVerticesScratch); EndIndexedVertices
+// (hooks/state.cpp) restores the ring pointer saved here. As the original,
+// E_OUTOFMEMORY with both pointers null when the data does not fit.
+u32 D3DDevice_BeginIndexedVertices_hook(u32 device, u32 primitive, u32 base_vertex,
+                                        u32 num_vertices, u32 index_count, u32 index_format,
+                                        u32 stride, u32 pp_index, u32 pp_vertex) {
+  const IndexedVerticesLayout layout =
+      IndexedVerticesScratch(num_vertices, stride, index_count, index_format);
+  // A zero count has nothing to draw: failed, so no empty draw is deferred.
+  const u32 scratch =
+      layout.vertex_bytes && layout.index_bytes ? BeginScratch(device, layout.total) : 0;
+  const u32 indices = scratch ? scratch + u32(layout.index_offset) : 0;
+  StoreU32(pp_vertex, scratch);
+  StoreU32(pp_index, indices);
+  if (!scratch)
+    return kE_OUTOFMEMORY;
+  DrawCall call = IndexedUpCall(primitive, index_count, indices, index_format, scratch, stride,
+                                num_vertices);
+  call.base_vertex = i32(base_vertex);  // added to each index, as the GPU's index offset
+  DeferScratchDraw(device, call, u32(layout.vertex_bytes), u32(layout.index_bytes));
+  return 0;
 }
 
 // A clear: the renderer's, recorded or queued, then N&B's device work.
@@ -569,6 +617,7 @@ FUTARI_RENUT_HOOK(D3DDevice_DrawIndexedTessellatedVertices, D3DDevice_DrawIndexe
 FUTARI_RENUT_HOOK(D3DDevice_DrawVerticesUP, D3DDevice_DrawVerticesUP_hook);  // N&B sub_8222E520
 FUTARI_RENUT_HOOK(D3DDevice_DrawIndexedVerticesUP, D3DDevice_DrawIndexedVerticesUP_hook);  // N&B sub_82656728
 FUTARI_RENUT_HOOK(D3DDevice_BeginVertices, D3DDevice_BeginVertices_hook);  // N&B sub_8222CC50
+FUTARI_RENUT_HOOK(D3DDevice_BeginIndexedVertices, D3DDevice_BeginIndexedVertices_hook);  // futari_recomp (2026-11-07)
 FUTARI_RENUT_HOOK(D3DDevice_ClearF, D3DDevice_ClearF_hook);  // N&B sub_822811A0
 FUTARI_RENUT_HOOK(D3DDevice_Clear, D3DDevice_Clear_hook);  // N&B sub_822812C8
 FUTARI_RENUT_HOOK(D3DDevice_Resolve, D3DDevice_Resolve_hook);  // N&B sub_8222D6C8

@@ -183,17 +183,23 @@ bool SingleComponent(plume::RenderFormat format) {
 // fetches its value in every component: the game's depth restore
 // (ps_beb4ddc38d3b2df5) writes the W of a depth resolve fetched with the
 // identity swizzle as its depth, where a host view has 1.
+} // namespace
+
+// futari_recomp (2026-11-16): one component of SwizzleMapping, also for the dev capture of a resolve destination.
+uint32_t SwizzleSource(u32 swizzle, uint32_t component, bool swap_red_blue, plume::RenderFormat format) {
+  uint32_t source = (swizzle >> (component * 3)) & 7;
+  if (SingleComponent(format) && source < 4)
+    source = 0;
+  else if (swap_red_blue && (source == 0 || source == 2))
+    source ^= 2;
+  return source;
+}
+
+namespace {
+
 plume::RenderComponentMapping SwizzleMapping(u32 swizzle, bool swap_red_blue,
                                              plume::RenderFormat format) {
-  const bool single = SingleComponent(format);
-  auto component = [&](uint32_t c) {
-    uint32_t source = (swizzle >> (c * 3)) & 7;
-    if (single && source < 4)
-      source = 0;
-    else if (swap_red_blue && (source == 0 || source == 2))
-      source ^= 2;
-    return ViewSwizzle(source);
-  };
+  auto component = [&](uint32_t c) { return ViewSwizzle(SwizzleSource(swizzle, c, swap_red_blue, format)); };
   return plume::RenderComponentMapping(component(0), component(1), component(2), component(3));
 }
 
@@ -1048,6 +1054,12 @@ void FlushTextureFillsLocked() {
 HostTexture *FindHostTextureLocked(u32 texture_va) {
   auto it = g_textures.find(texture_va);
   return it != g_textures.end() ? it->second.get() : nullptr;
+}
+
+// futari_recomp (2026-11-15): see textures.h.
+HostTexture *FindResolveTargetLocked(u32 base_page) {
+  auto it = g_resolve_targets.find(base_page);
+  return it != g_resolve_targets.end() ? it->second : nullptr;
 }
 
 void ReleaseHostTextureLocked(u32 texture_va) {

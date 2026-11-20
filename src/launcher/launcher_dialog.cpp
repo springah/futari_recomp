@@ -524,8 +524,10 @@ void LauncherDialog::DrawSettings() {
   ImGui::TextUnformatted("Window size");
   ImGui::SameLine();
   std::vector<std::string> labels;
-  labels.push_back("current (" + std::to_string(rex::cvar::Query<int32_t>("window_width")) + " x " +
-                   std::to_string(rex::cvar::Query<int32_t>("window_height")) + ")");
+  // The size in physical pixels, as futari.ini holds it: the picks below are typed sizes too, saved as they are.
+  const auto [typed_w, typed_h] =
+      env_.typed_resolution ? env_.typed_resolution() : std::pair<std::string, std::string>{};
+  labels.push_back(typed_w.empty() ? std::string("current") : "current (" + typed_w + " x " + typed_h + ")");
   for (const auto& r : kResolutions) {
     labels.push_back(r.label);
   }
@@ -803,6 +805,9 @@ void LauncherDialog::SaveSettings() {
     const auto& r = kResolutions[resolution_index_ - 1];
     rex::cvar::SetFlagByName("window_width", std::to_string(r.w));
     rex::cvar::SetFlagByName("window_height", std::to_string(r.h));
+    if (env_.window_size_picked) {
+      env_.window_size_picked();
+    }
   }
   if (env_.save_display_settings) {
     env_.save_display_settings();

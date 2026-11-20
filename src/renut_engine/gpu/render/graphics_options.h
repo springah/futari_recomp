@@ -25,6 +25,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>  // futari_recomp (2026-11-15): TakeBlitSourcePageLocked
 
 #include "renut_engine/gpu/d3d/d3d.h"
 #include "renut_engine/gpu/render/format.h"
@@ -45,5 +46,22 @@ plume::RenderFormat SurfaceColorFormat(const d3d::SurfaceDesc &desc);
 
 // The anisotropy linear minification gets at least (1 = the game's own).
 uint32_t MinAnisotropy();
+
+// futari_recomp (2026-11-15): a game layer's blit policy, defined by it (Futari's: gpu/futari_screen.cpp).
+// A colour resolve from the D3DSurface at 'source_va' into the texture whose header's fetch constant is 'dest_fetch'
+// (CPU address, as the resolve gets it), so the game layer knows which destination pages hold its image.
+void NoteResolveLocked(uint32_t source_va, const d3d::TextureFetchConstant &dest_fetch);
+// The draw's host pixel shader (PipelineKey::host_pixel_shader, render/host_pixel_shader.h). 'ps_hash' is the draw's
+// pixel shader (0 without one), 'slot0' the device's fetch constant 0, 'colour0_va' its render target 0 (0 without
+// one). Once per draw, chain-reused ones included. For the gameplay blit: kHostPixelShaderSharp (sharp_bilinear_ps)
+// while Smoothing is Sharp bilinear, kHostPixelShaderBilinear (blit_bilinear_ps) while On, else (or without that
+// shader) kHostPixelShaderGuest. It also notes, under every Smoothing mode, the page of the gameplay resolve the blit
+// sampled, which TakeBlitSourcePageLocked returns.
+uint32_t BlitHostPixelShaderLocked(uint64_t ps_hash, const d3d::TextureFetchConstant &slot0, uint32_t colour0_va);
+// The base page of the gameplay resolve the last blit since the previous call sampled (noted by
+// BlitHostPixelShaderLocked, so only meaningful after the blit's call this frame), or nothing when no blit was drawn
+// since; 'swizzle' gets the swizzle of the fetch constant the blit sampled it through (untouched with nothing). The
+// present calls it once a frame (backend/present.cpp, the dev capture of that image).
+std::optional<uint32_t> TakeBlitSourcePageLocked(uint32_t &swizzle);
 
 } // namespace renut::gpu

@@ -196,6 +196,11 @@ struct VideoState {
   // futari_recomp (leg/rectlist): its tessellation form (patches of 1), like rectangle_list_hs/ds.
   std::unique_ptr<plume::RenderShader> point_sprite_hs;
   std::unique_ptr<plume::RenderShader> point_sprite_ds;
+  // futari_recomp (2026-11-15): the game blit's pixel shader for Sharp bilinear (futari_screen.h); null when it failed
+  // to build or on deko3d, which leaves the blit on the game's own shader.
+  std::unique_ptr<plume::RenderShader> sharp_bilinear_ps;
+  // The same for Smoothing On (float bilinear, k = 1).
+  std::unique_ptr<plume::RenderShader> blit_bilinear_ps;
 
   // Layout of the recompiled guest shaders (see pipeline.h).
   std::unique_ptr<plume::RenderPipelineLayout> draw_layout;

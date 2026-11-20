@@ -38,6 +38,7 @@ D3DVolume_GetDesc                            8209D5F8  d3d_match 0.94 (next 0.81
 D3DVolume_LockBox                            8209D640  d3d_match 1.00 (next 0.71)
 D3DDevice_EndIndexedVertices                 8209D7F0  checked: the end of BeginVertices (4 instructions, as many calls as BeginVertices)
 D3DDevice_BeginVertices                      8209D800  d3d_match 0.91 (next 0.64)
+D3DDevice_BeginIndexedVertices               8209DCE0  checked: ppVertexData on the stack; NumVertices * Stride vertex bytes, IndexCount indices of IndexFormat bit 2 ? 4 : 2 bytes; ends in EndIndexedVertices 8209D7F0 (+13652 ring)
 D3DVertexShader_Bind                         820A05A0  checked: 22 calls, with the shader creations
 D3DDevice_ClearF                             820A18C8  d3d_match 1.00 (next 0.40)
 D3DDevice_Clear                              820A19F0  d3d_match 0.96 (next 0.28)
@@ -72,3 +73,9 @@ D3DDevice_SetStreamSource                    820991D8  checked: d3d_match 0.88 (
 D3D_AlignTextureDimensions                   8209B860  checked: d3d_match 0.89 (next 0.22)
 D3D_CDevice_BlockOnFence                     820A8220  checked: reads the completion pointer +10896 and the fence tag +10908 as N&B's 0x8228F558
 D3DResource_Destroy                          820A3E98  checked: d3d_match 0.60 (next 0.22); the release path's destroy (44 nested calls)
+# Added by hand (2026-11-07): reachable from the game's present (sub_8216B148) and the D3DX texture loader (sub_820B6770).
+D3DDevice_Reset                              820A4710  checked: SetRingBufferParameters(pp+72), BlockUntilIdle, release (820AB420) and recreate (820AB1D0) the automatic buffers; SetRingBufferParameters' HRESULT, else E_OUTOFMEMORY or 0
+D3DDevice_BlockUntilIdle                     820A9268  checked: (device) only; a 2-word packet, BlockOnFence(+10908 fence tag), then spins on +11012 as N&B's 0x82657488
+D3DTexture_GetSurfaceLevel                   8209D090  checked: (texture, level); a 48-byte header, Common 0x40100004 | texture 0x200000, +24 texture, +28 level << 28
+D3DCubeTexture_GetCubeMapSurface             8209D168  checked: (texture, face, level); a 48-byte header as GetSurfaceLevel, +28 level << 28 | face << 22
+D3DVolumeTexture_GetVolumeLevel              8209D230  checked: (texture, level); a 32-byte header, +28 level << 28

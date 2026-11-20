@@ -150,6 +150,9 @@ constexpr u32 TileRects = 0x3280;          // D3DRECT[TileCount]
 constexpr u32 TileOrigins = 0x3370;        // per tile, x & ~31, y & ~31
 constexpr u32 TilingExtent = 0x342C;       // widest and tallest tile edge
 constexpr u32 CommandBuffer = 0x359C;      // the D3DCommandBuffer being recorded
+// futari_recomp (2026-11-15): InitializePresentationParameters' copy of the D3DPRESENT_PARAMETERS (Futari's layout;
+// N&B's is at 0x34E8): +0 BackBufferWidth, +4 BackBufferHeight.
+constexpr u32 PresentParameters = 0x35B8;
 constexpr u32 SideBuffer = 0x4228;
 constexpr u32 AutoDepthStencil = 0x3AB8;   // InitializePresentationParameters' surfaces
 constexpr u32 AutoFrontBuffer = 0x3ABC;
@@ -184,6 +187,20 @@ u32 CreateSurface(u32 width, u32 height, u32 format, u32 multisample, u32 parame
 // futari-nx: D3DDevice_CreateTexture(Width, Height, Depth, Levels, Usage, D3DFORMAT, Pool, D3DRESOURCETYPE): the new
 // texture, or 0.
 u32 CreateTexture(u32 width, u32 height, u32 depth, u32 levels, u32 usage, u32 format, u32 pool, u32 type);
+// futari_recomp (2026-11-10): a resize in place (the automatic buffers; the GPU must be idle). The surface, made by
+// CreateSurface without parameters, gets the header for the new size with its common and reference words kept; its
+// EDRAM is given back and reserved again as CreateSurface reserves it. False when surface_va is no surface record
+// (then nothing changed).
+bool ResizeSurface(u32 surface_va, u32 width, u32 height);
+// Why ResizeTexture changed nothing.
+enum class TextureResizeFailure : u8 { kNone, kNoTexture, kNoMemory, kMipBlock };
+// The texture, made by CreateTexture(width, height, 1, 1, 0, format, 0, 3) with a base block of 'capacity' bytes,
+// gets the header for the new size with its common and reference words kept; the block is kept when the new size
+// fits, else a new one is allocated first and the old one freed. Returns the block's capacity now, or 0 with the
+// reason in 'failure' (then nothing changed).
+u32 ResizeTexture(u32 texture_va, u32 width, u32 height, u32 format, u32 capacity, TextureResizeFailure &failure);
+// The base block CreateTexture(width, height, 1, 1, 0, format, 0, 3) allocates, in bytes.
+u32 TextureBaseSize(u32 width, u32 height, u32 format);
 // D3DResource_AddRef (a texture level's first reference is one on its texture).
 u32 AddRefResource(u32 resource);
 
