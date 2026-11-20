@@ -4,6 +4,17 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## v1.5.11 — 2026-11-20 (Windows, macOS)
+
+- **A failed game load no longer hangs on the way out.** v1.5.10 stopped the
+  crash after the error box, but about one time in ten the process then stayed
+  behind as a window that had stopped responding: the SDK's shutdown
+  force-ended its audio thread, and when that thread happened to hold a lock
+  the shutdown waited on it forever. A failed load now ends the process
+  directly, as closing the window already does. Checked on Windows with 38
+  failed loads in a row (v1.5.10: 1 hang in 16). Same fix as in the Zuma and
+  Daytona ports.
+
 ## v1.5.10 — 2026-11-20 (Windows, macOS)
 
 - **No more crash after a failed game load.** When the game's executable

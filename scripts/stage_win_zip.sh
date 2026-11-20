@@ -131,7 +131,8 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
             p = os.path.join(dp, f)
             z.write(p, os.path.relpath(p, root).replace(os.sep, '/'))
 h = hashlib.sha256(open(out, 'rb').read()).hexdigest()
-open(out + '.sha256', 'w').write(f"{h}  {os.path.basename(out)}\n")
+# Written as bytes: text mode on Windows would end the line with CRLF, which sha256sum -c on macOS/Linux rejects.
+open(out + '.sha256', 'wb').write(f"{h}  {os.path.basename(out)}\n".encode())
 print(f"  {out}: {os.path.getsize(out) // 1024 // 1024} MiB, sha256 {h}")
 EOF
 echo "[DONE] stage: $STAGE"

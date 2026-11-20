@@ -99,10 +99,30 @@ bool ReXApp::OnInitialize() {
     return true;
   }
 
-  if (!ConstructRuntime(*paths))
+  if (!ConstructRuntime(*paths)) {
+    if (runtime_) {
+      ExitAfterFailedLaunch();
+    }
     return false;
+  }
   LaunchModule();
   return true;
+}
+
+// A launch that fails after the runtime was constructed (no executable in the
+// game folder, an executable that does not load, a module that does not
+// start) used to fall into the normal teardown. That teardown is not safe with
+// a live runtime: AudioSystem::Shutdown force-terminates its worker thread,
+// and when the thread dies holding a kernel lock (seen: the object table
+// mutex, in XThread::Terminate -> ReleaseHandle) the teardown waits on that
+// lock forever. About one failed launch in ten ended as a window that stopped
+// responding. Same answer as OnClosing and a title that ends by itself: the
+// message has been shown, so flush the log and leave; the OS reclaims the
+// rest.
+void ReXApp::ExitAfterFailedLaunch() {
+  REXLOG_INFO("Launch failed; hard-exiting process.");
+  rex::FlushLogging();
+  std::_Exit(EXIT_FAILURE);
 }
 
 bool ReXApp::SetupEnvironment() {
@@ -483,8 +503,7 @@ void ReXApp::LaunchModule() {
     auto main_thread = runtime_->PrepareModuleLaunch();
     if (!main_thread) {
       REXLOG_ERROR("Failed to launch module");
-      app_context().QuitFromUIThread();
-      return;
+      ExitAfterFailedLaunch();
     }
 
     auto* graphics_system = runtime_->graphics_system();
@@ -523,6 +542,9 @@ std::function<void(PathConfig)> ReXApp::MakeResumeCallback() {
     if (shutting_down_.load(std::memory_order_acquire))
       return;
     if (!ConstructRuntime(std::move(paths))) {
+      if (runtime_) {
+        ExitAfterFailedLaunch();
+      }
       app_context().QuitFromUIThread();
       return;
     }
