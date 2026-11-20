@@ -503,8 +503,16 @@ void ReXApp::LaunchModule() {
       main_thread->Wait(0, 0, 0, nullptr);
       OnGuestThreadExit(main_thread.get());
       REXLOG_INFO("Execution complete");
-      if (!shutting_down_.load(std::memory_order_acquire)) {
-        app_context().CallInUIThread([this]() { app_context().QuitFromUIThread(); });
+      if (!shutting_down_.exchange(true, std::memory_order_acq_rel)) {
+        // The title ended on its own (e.g. XamLoaderTerminateTitle from a
+        // "quit to dashboard" menu entry). That ran TerminateTitle, so the
+        // same hazard as in OnClosing applies: a guest thread that went away
+        // holding a host lock (seen: the Windows loader lock) makes subsystem
+        // teardown hang in the first thread join (audio driver close).
+        // Hard-exit as the window-close path does; the OS reclaims the rest.
+        REXLOG_INFO("Title exited; hard-exiting process.");
+        rex::FlushLogging();
+        std::_Exit(0);
       }
     });
   });
@@ -634,8 +642,12 @@ void ReXApp::OnDestroy() {
     window_->RemoveInputListener(this);
     window_->RemoveListener(this);
   }
-  window_.reset();
+  // Runtime first: the input drivers still hold a pointer to the window and
+  // detach from it in their destructors. On a guest-initiated exit the window
+  // is never closed (no OnClosing), so destroying it first left them calling
+  // RemoveInputListener on freed memory (heap corruption, 0xC0000374).
   runtime_.reset();
+  window_.reset();
 }
 
 void ReXApp::SetGuestFrameStats(ui::DebugOverlayDialog::FrameStatsProvider provider) {

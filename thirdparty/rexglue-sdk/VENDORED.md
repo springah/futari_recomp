@@ -3,7 +3,9 @@
 This directory is a **vendored copy** of the ReXGlue SDK, not a submodule. It was
 taken verbatim from `springah/rexglue-sdk` (a fork of
 [rexglue/rexglue-sdk](https://github.com/rexglue/rexglue-sdk)) at tag
-**v0.9.3.1**, commit `040d5bca3de2f2970e9e29b4bf789739a48f5301`.
+**v0.9.3.1**, commit `720bf321e7799fc119fdd1efdce46a9b1b4b85eb` (the fork was
+republished on 2026-11-20 with the same files under new commit hashes; this
+commit was `040d5bc` before).
 
 This port maintains its own SDK from here: fixes land in this tree directly and
 are cherry-picked to/from the fork or upstream when they apply. There is no pin
