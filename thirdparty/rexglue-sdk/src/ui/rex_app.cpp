@@ -99,10 +99,30 @@ bool ReXApp::OnInitialize() {
     return true;
   }
 
-  if (!ConstructRuntime(*paths))
+  if (!ConstructRuntime(*paths)) {
+    if (runtime_) {
+      ExitAfterFailedLaunch();
+    }
     return false;
+  }
   LaunchModule();
   return true;
+}
+
+// A launch that fails after the runtime was constructed (no executable in the
+// game folder, an executable that does not load, a module that does not
+// start) used to fall into the normal teardown. That teardown is not safe with
+// a live runtime: AudioSystem::Shutdown force-terminates its worker thread,
+// and when the thread dies holding a kernel lock (seen: the object table
+// mutex, in XThread::Terminate -> ReleaseHandle) the teardown waits on that
+// lock forever. About one failed launch in ten ended as a window that stopped
+// responding. Same answer as OnClosing and a title that ends by itself: the
+// message has been shown, so flush the log and leave; the OS reclaims the
+// rest.
+void ReXApp::ExitAfterFailedLaunch() {
+  REXLOG_INFO("Launch failed; hard-exiting process.");
+  rex::FlushLogging();
+  std::_Exit(EXIT_FAILURE);
 }
 
 bool ReXApp::SetupEnvironment() {
@@ -483,8 +503,7 @@ void ReXApp::LaunchModule() {
     auto main_thread = runtime_->PrepareModuleLaunch();
     if (!main_thread) {
       REXLOG_ERROR("Failed to launch module");
-      app_context().QuitFromUIThread();
-      return;
+      ExitAfterFailedLaunch();
     }
 
     auto* graphics_system = runtime_->graphics_system();
@@ -503,8 +522,16 @@ void ReXApp::LaunchModule() {
       main_thread->Wait(0, 0, 0, nullptr);
       OnGuestThreadExit(main_thread.get());
       REXLOG_INFO("Execution complete");
-      if (!shutting_down_.load(std::memory_order_acquire)) {
-        app_context().CallInUIThread([this]() { app_context().QuitFromUIThread(); });
+      if (!shutting_down_.exchange(true, std::memory_order_acq_rel)) {
+        // The title ended on its own (e.g. XamLoaderTerminateTitle from a
+        // "quit to dashboard" menu entry). That ran TerminateTitle, so the
+        // same hazard as in OnClosing applies: a guest thread that went away
+        // holding a host lock (seen: the Windows loader lock) makes subsystem
+        // teardown hang in the first thread join (audio driver close).
+        // Hard-exit as the window-close path does; the OS reclaims the rest.
+        REXLOG_INFO("Title exited; hard-exiting process.");
+        rex::FlushLogging();
+        std::_Exit(0);
       }
     });
   });
@@ -515,6 +542,9 @@ std::function<void(PathConfig)> ReXApp::MakeResumeCallback() {
     if (shutting_down_.load(std::memory_order_acquire))
       return;
     if (!ConstructRuntime(std::move(paths))) {
+      if (runtime_) {
+        ExitAfterFailedLaunch();
+      }
       app_context().QuitFromUIThread();
       return;
     }
@@ -634,8 +664,12 @@ void ReXApp::OnDestroy() {
     window_->RemoveInputListener(this);
     window_->RemoveListener(this);
   }
-  window_.reset();
+  // Runtime first: the input drivers still hold a pointer to the window and
+  // detach from it in their destructors. On a guest-initiated exit the window
+  // is never closed (no OnClosing), so destroying it first left them calling
+  // RemoveInputListener on freed memory (heap corruption, 0xC0000374).
   runtime_.reset();
+  window_.reset();
 }
 
 void ReXApp::SetGuestFrameStats(ui::DebugOverlayDialog::FrameStatsProvider provider) {

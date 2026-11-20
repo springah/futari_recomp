@@ -30,14 +30,20 @@ if [ ! -d "$WORK/src" ]; then
   git clone --depth 1 -b "$VERSION" --recurse-submodules --shallow-submodules \
     https://github.com/microsoft/DirectXShaderCompiler.git "$WORK/src"
 fi
-sed -i '' 's/^  cmake_policy(SET CMP0051 OLD)/  # cmake_policy(SET CMP0051 OLD)  futari: CMake 4 refuses OLD/' "$WORK/src/CMakeLists.txt"
+# -i.bak, not -i '': the first form is the one both the system (BSD) sed and a Homebrew GNU sed accept.
+sed -i.bak 's/^  cmake_policy(SET CMP0051 OLD)/  # cmake_policy(SET CMP0051 OLD)  futari: CMake 4 refuses OLD/' "$WORK/src/CMakeLists.txt"
+rm -f "$WORK/src/CMakeLists.txt.bak"
 
+# The dylib ships in the .app, and LLVM's assertion and diagnostic strings record source paths: map the work
+# directory to "." so they do not carry the build machine's directory names (256 such strings up to v1.5.10).
+PATH_MAP="-ffile-prefix-map=$WORK=."
 cmake -S "$WORK/src" -B "$WORK/build" -G Ninja -C "$WORK/src/cmake/caches/PredefinedParams.cmake" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 \
   -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
   -DSPIRV_BUILD_TESTS=OFF -DLLVM_INCLUDE_TESTS=OFF -DCLANG_INCLUDE_TESTS=OFF -DHLSL_INCLUDE_TESTS=OFF \
   -DLLVM_ENABLE_WERROR=OFF -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-  "-DCMAKE_CXX_FLAGS=-Wno-invalid-specialization -Wno-deprecated-declarations -Wno-vla-cxx-extension"
+  "-DCMAKE_C_FLAGS=$PATH_MAP" \
+  "-DCMAKE_CXX_FLAGS=$PATH_MAP -Wno-invalid-specialization -Wno-deprecated-declarations -Wno-vla-cxx-extension"
 ninja -C "$WORK/build" -j"$JOBS" dxc dxcompiler
 
 mkdir -p "$DXC_BIN/bin/arm64" "$DXC_BIN/lib/arm64"

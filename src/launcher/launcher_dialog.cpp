@@ -777,10 +777,14 @@ void LauncherDialog::RefreshStatus() {
   if (package_stale_) {
     package_ok_ = false;
     package_status_ = "Shaders were made by a different build, press Redo the shaders";
+  } else if (package_ok_) {
+    package_status_ = "Renut shaders: ready (" + std::to_string(count) + " shaders, " +
+                      std::to_string(bytes / 1024) + " KB)";
   } else {
-    package_status_ = package_ok_ ? "Renut shaders: ready (" + std::to_string(count) + " shaders, " +
-                                        std::to_string(bytes / 1024) + " KB)"
-                                  : "Renut shaders: not prepared yet (Renut would draw nothing)";
+    // A developer build draws from the shaders in the exe, so a missing package means nothing there (2026-11-20:
+    // it used to say Renut would draw nothing, on a build where Renut draws).
+    package_status_ = env_.shaders_built_in ? "Renut shaders: built into this exe (nothing to prepare)"
+                                            : "Renut shaders: not prepared yet (Renut would draw nothing)";
   }
   dlc_names_.clear();
   std::error_code ec;

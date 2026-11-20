@@ -58,6 +58,45 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   `--futari_dev_input_replay`) and forced settings for test runs
   (`--futari_dev_frame_size`, `--futari_dev_zoom`, `--futari_dev_smoothing`).
 
+## v1.5.11 — 2026-11-20 (Windows, macOS)
+
+- **A failed game load no longer hangs on the way out.** v1.5.10 stopped the
+  crash after the error box, but about one time in ten the process then stayed
+  behind as a window that had stopped responding: the SDK's shutdown
+  force-ended its audio thread, and when that thread happened to hold a lock
+  the shutdown waited on it forever. A failed load now ends the process
+  directly, as closing the window already does. Checked on Windows with 38
+  failed loads in a row (v1.5.10: 1 hang in 16). Same fix as in the Zuma and
+  Daytona ports.
+
+- **macOS: the app no longer records where it was built.** The executable, the
+  runtime, the eight game-mode libraries and the bundled DirectX Shader
+  Compiler carried the full source paths of the build machine (the compiler
+  writes them for log and assertion messages), and the libraries also carried
+  that machine's library directory as a run-path. Source paths now read
+  `./src/...` and the libraries look beside themselves. The Windows build never
+  had them. Nothing changes in how the game runs.
+
+## v1.5.10 — 2026-11-20 (Windows, macOS)
+
+- **No more crash after a failed game load.** When the game's executable
+  cannot be loaded (a damaged or incomplete `default.xex`), the error box was
+  followed by a crash with heap corruption (0xC0000374): on that exit the SDK
+  destroyed the window before the input drivers that still pointed at it. The
+  process now exits cleanly. The same change makes the process exit at once if
+  the game ever ends by itself, as it already did when the window is closed.
+  Same fix as in the Zuma and Daytona ports.
+
+- **F4 overlay: the VSync box now means what the F2 one means.** The SDK's box
+  showed the game's own `vsync` setting and changed both that and the window's.
+  With `present_vsync` off by default it read ticked while the window presented
+  at once, and unticking it took the game off its 60 Hz clock. It now reads and
+  sets `present_vsync` alone; `vsync` stays in the cvar list.
+
+- Launcher settings page: a developer build that has the shaders built in no
+  longer says "not prepared yet (Renut would draw nothing)"; it says they are
+  built in. Public builds read as before.
+
 ## v1.5.9 — 2026-11-15 (Windows, macOS)
 
 - **Windows, default renderer: VSync on no longer slows the game (#8).** With

@@ -284,11 +284,10 @@ void SettingsDialog::DrawDisplaySection() {
     }
   }
 
-  // VSync: one checkbox for both halves. `vsync` paces the guest vblank (read
-  // every frame by the GPU vsync worker); `present_vsync` makes the host wait
-  // for the display's vertical blank instead of presenting immediately with
-  // tearing. Both apply immediately. Players on variable refresh rate displays
-  // can turn only `present_vsync` back off in the cvar list below.
+  // VSync: `vsync` paces the guest vblank (read every frame by the GPU vsync
+  // worker); `present_vsync` makes the host show frames at the display's
+  // vertical blank instead of presenting immediately with tearing. Both apply
+  // immediately. Upstream's box set both halves; see the 2026-11-20 note below.
   // futari_recomp (2026-11-07): `vsync` is registered by the GPU plugin; an app
   // running its own renderer (no plugin) has no such flag, and a box over a
   // missing flag read as off and set nothing. Then the row is left out: that
@@ -299,11 +298,18 @@ void SettingsDialog::DrawDisplaySection() {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("VSync");
     ImGui::TableNextColumn();
-    bool vsync = rex::cvar::Query<bool>("vsync");
+    // futari_recomp (2026-11-20): the box is the host half only, as the app's
+    // own settings screen (F2) has it. It used to show and set the guest half
+    // too, so it read ticked while the host presented at once (`present_vsync`
+    // is off by default), and unticking it took the game off its 60 Hz clock.
+    // `vsync` stays in the cvar list below for whoever wants that.
+    bool vsync = rex::cvar::Query<bool>("present_vsync");
     if (ImGui::Checkbox("##vsync", &vsync)) {
-      rex::cvar::SetFlagByName("vsync", vsync ? "true" : "false");
       rex::cvar::SetFlagByName("present_vsync", vsync ? "true" : "false");
     }
+    if (ImGui::IsItemHovered())
+      ImGui::SetTooltip("Show each frame at the display's refresh (present_vsync).\n"
+                        "The game's own 60 Hz pacing is the separate `vsync` setting.");
   }
 
   ImGui::EndTable();

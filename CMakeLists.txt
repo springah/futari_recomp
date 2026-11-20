@@ -3,7 +3,7 @@
 # SDK boilerplate lives in generated/rexglue.cmake.
 
 cmake_minimum_required(VERSION 3.25)
-project(futari VERSION 1.5.9 LANGUAGES CXX)
+project(futari VERSION 1.5.11 LANGUAGES CXX)
 
 # macOS: the launcher's file picker is Objective-C++ (src/launcher/file_picker_mac.mm) and plume's Apple glue is too
 # (thirdparty/plume/plume_apple.mm). Enabled here, at the root: a language enabled only inside plume's subdirectory
@@ -28,6 +28,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(NOT REXSDK_DIR AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk/CMakeLists.txt")
     set(REXSDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/rexglue-sdk"
         CACHE PATH "Path to rexglue-sdk source tree" FORCE)
+endif()
+
+# Keep the build machine's directory names out of the binaries. Assertions and
+# log calls record source paths; map the tree's root to "." so they read
+# "./src/main.cpp" rather than the full path of whoever built it. Before the
+# SDK is added below, so that its targets get the flag too. Not on Windows: the
+# clang-cl build records none (scanned at v1.5.11), and the flag would only
+# force a full rebuild there.
+if(NOT WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    add_compile_options(
+        "$<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.>")
 endif()
 
 # generated/ is codegen output and is gitignored, so a fresh clone does not have
@@ -86,6 +97,28 @@ else()
 endif()
 
 rexglue_setup_target(futari GPU_PLUGINS xenos)
+
+# Same idea for the run-paths the linker records in the shared libraries: CMake
+# would write the SDK's absolute output directory into every library that links
+# the runtime. They are only ever loaded from beside the executable, so point
+# them there instead.
+if(UNIX)
+    if(APPLE)
+        set(_self_rpath "@loader_path")
+    else()
+        set(_self_rpath "$ORIGIN")
+    endif()
+    foreach(_lib rexruntime rexgpu-xenos
+            futari_reco_normal futari_reco_abnormal futari_palm_normal futari_palm_abnormal
+            futari_hirow_normal futari_hirow_abnormal futari_kiniro_normal futari_kiniro_abnormal)
+        if(TARGET ${_lib})
+            set_target_properties(${_lib} PROPERTIES
+                BUILD_WITH_INSTALL_RPATH ON
+                INSTALL_RPATH "${_self_rpath}"
+                INSTALL_RPATH_USE_LINK_PATH OFF)
+        endif()
+    endforeach()
+endif()
 
 target_compile_definitions(futari PRIVATE FUTARI_VERSION_STRING="${PROJECT_VERSION}")
 # The shader package stamp (src/launcher/shader_pipeline.cpp, vulkan_spirv.stamp): an identifier of the translator

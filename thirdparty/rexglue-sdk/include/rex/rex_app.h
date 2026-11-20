@@ -261,6 +261,10 @@ class ReXApp : public ui::WindowedApp, public ui::WindowListener, public ui::Win
  private:
   std::function<void(PathConfig)> MakeResumeCallback();
 
+  // Ends the process after a launch that failed once the runtime existed. See
+  // the definition for why this does not go through the normal teardown.
+  [[noreturn]] void ExitAfterFailedLaunch();
+
   // Stand up the ImGui overlay stack (drawer, F3/Backtick/F4 binds, dialogs)
   // independently of how the presenter/drawer were obtained. `presenter` may be
   // null (detached mode).
