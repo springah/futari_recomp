@@ -15,6 +15,14 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   failed loads in a row (v1.5.10: 1 hang in 16). Same fix as in the Zuma and
   Daytona ports.
 
+- **macOS: the app no longer records where it was built.** The executable, the
+  runtime, the eight game-mode libraries and the bundled DirectX Shader
+  Compiler carried the full source paths of the build machine (the compiler
+  writes them for log and assertion messages), and the libraries also carried
+  that machine's library directory as a run-path. Source paths now read
+  `./src/...` and the libraries look beside themselves. The Windows build never
+  had them. Nothing changes in how the game runs.
+
 ## v1.5.10 — 2026-11-20 (Windows, macOS)
 
 - **No more crash after a failed game load.** When the game's executable
