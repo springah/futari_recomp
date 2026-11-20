@@ -11,6 +11,12 @@ live in the [README](README.md); version history is in [CHANGELOG.md](CHANGELOG.
 | Steam Deck / Linux (x64) | `linux-amd64-release` preset (any x64 Linux, WSL included) — still builds, no longer shipped | ⏹ handed over to [futari-linux](https://github.com/cerroverb/futari-linux) from v1.5.4 ([#6](https://github.com/springah/futari_recomp/issues/6)); last bundle here v1.5.3 |
 | macOS (arm64) | `mac-arm64-release` preset on an Apple Silicon Mac, bundled by `mac-build/build_app.sh` | ✅ v1.5.11 (MoltenVK) · Renut: Vulkan over MoltenVK, opt-in, EXPERIMENTAL (rectangle lists by tessellation; picture verified in Black Label and stage 1, 41-55 fps in heavy scenes; `scripts/build_dxc_mac.sh` builds the DXC the setup screen's shader step needs; see `docs/NOTES_renut_leg6_macos.md`) |
 
+Not built from this tree at all: **Nintendo Switch** is
+[futari-nx](https://github.com/ChanseyIsTheBest/futari-nx) by ChanseyIsTheBest,
+and **Linux / Steam Deck** is [futari-linux](https://github.com/cerroverb/futari-linux)
+by cerroverb (a fork of futari-nx). Both are separate projects with their own
+releases and issue trackers.
+
 **Windows builds use the `win-amd64-*` presets**, which name clang-cl from
 `C:/Program Files/LLVM` (the SDK's own presets still default to `clang++`, so the
 SDK CLI is configured by hand; `build.ps1` does both). Configure from a VS

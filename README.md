@@ -26,11 +26,23 @@ Renut, beside the unchanged default one: see [Renderers](#renderers). With
 Renut linked, the release binaries are distributed under the GPL-3.0; this
 repository's own files stay BSD 3-Clause (see [Licence](#licence)).
 
+**This project ships Windows and macOS only.** The same game on other
+platforms is served by separate projects, each with its own maintainer:
+
+| Platform | Project | Maintainer |
+|----------|---------|------------|
+| Windows, macOS | this repository | springah |
+| Linux, Steam Deck | [futari-linux](https://github.com/cerroverb/futari-linux) | cerroverb |
+| Nintendo Switch | [futari-nx](https://github.com/ChanseyIsTheBest/futari-nx) | ChanseyIsTheBest |
+
 **Linux and Steam Deck players: use [futari-linux](https://github.com/cerroverb/futari-linux)** instead.
-From v1.5.4 on this project ships Windows and macOS only. futari-linux is a
-native-renderer port of the same game maintained by cerroverb, and on a Steam
-Deck it runs the game at a fraction of the CPU and power this one needs ([#6](https://github.com/springah/futari_recomp/issues/6)). The `linux-amd64` preset stays in the tree for anyone who wants
-to build this version, but it is no longer a supported target.
+It is a native-renderer port of the same game, and on a Steam Deck it runs the
+game at a fraction of the CPU and power this one needs ([#6](https://github.com/springah/futari_recomp/issues/6)).
+The `linux-amd64` preset stays in the tree for anyone who wants to build this
+version, but it has not been a supported target since v1.5.4.
+**Nintendo Switch players: use [futari-nx](https://github.com/ChanseyIsTheBest/futari-nx)**,
+the port futari-linux was forked from, with its own native deko3d renderer.
+Please report Linux and Switch problems to those projects, not here.
 
 **Status:** title, menus, audio, controller, and saves work, and all 8 game modes
 load, run, and mode-switch cleanly. The known limits of the
@@ -45,6 +57,7 @@ Prebuilt bundles for Windows and macOS are attached to the
 contain the game's own program code, recompiled, and are **for people who own
 the game only** (see [Legal](#legal)); they contain no game data. Linux and
 Steam Deck: [futari-linux](https://github.com/cerroverb/futari-linux).
+Nintendo Switch: [futari-nx](https://github.com/ChanseyIsTheBest/futari-nx).
 
 - **Install:** unzip anywhere and double-click `futari.exe` (macOS:
   `Futari-<version>.app`). With no game data in place the setup screen asks for
