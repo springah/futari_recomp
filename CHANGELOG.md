@@ -67,6 +67,15 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   (`renut_resolution`, `resolution`, the window size); `[Display]` and the
   game's own menu own them. The default renderer's `resolution_scale` stays
   listed, since nothing else exposes it. Reset all keeps the renderer choice.
+- **macOS, Renut: `--sdl_high_pixel_density=true` works.** With that option
+  (off by default, as before) the window's Metal layer is 2x, but the
+  swapchain was sized in points, so every present was answered as a mismatch
+  and the swapchain was rebuilt every frame (about 60 times a second, in
+  v1.5.11 and earlier too). The swapchain now takes its size from the layer
+  itself: the game draws at the display's own pixels (a 3600x2072 frame in an
+  1800x1036-point window on a 14-inch MacBook Pro) and the swapchain is made
+  once. Without the option nothing changes. The full-pixel frame costs GPU
+  time: the mode menu ran at about 43 fps here against 56 without the option.
 - For builders: twelve more std-only unit tests under `tests/`, each a job in
   the Guards workflow, and dev aids that do nothing unless set: frame captures
   (`--futari_renut_capture_path`, F9, now with the 1x gameplay source image),

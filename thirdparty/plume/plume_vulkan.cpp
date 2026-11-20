@@ -2574,7 +2574,8 @@ namespace plume {
         assert(desc.renderWindow.window != 0);
         assert(desc.renderWindow.view != 0);
         // Creates a wrapper around the window for storing and fetching sizes.
-        this->windowWrapper = std::make_unique<CocoaWindow>(desc.renderWindow.window);
+        // futari_recomp (2026-11-20): with the surface's layer, so the size is in the layer's pixels (plume_apple.h).
+        this->windowWrapper = std::make_unique<CocoaWindow>(desc.renderWindow.window, desc.renderWindow.view);
         
         VkMetalSurfaceCreateInfoEXT surfaceCreateInfo = {};
         surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;

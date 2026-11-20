@@ -10,6 +10,7 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #import <IOKit/IOKitLib.h>
+#import <QuartzCore/QuartzCore.h>
 
 static uint32_t plumeGetEntryProperty(io_registry_entry_t entry, CFStringRef propertyName) {
     uint32_t value = 0;
@@ -46,7 +47,15 @@ namespace plume {
         return RenderDeviceVendor::UNKNOWN;
     }
 
-    CGFloat getScaleFactor(NSWindow *nsWindow) {
+    // futari_recomp (2026-11-20): the layer's own scale when the surface's layer is known. The embedder's window
+    // decides whether that layer is 1x or 2x (the SDK's sdl_high_pixel_density); a swapchain sized by any other rule
+    // differs from the surface, MoltenVK answers every present with VK_SUBOPTIMAL_KHR, which the Apple path counts as
+    // a failure, and the swapchain is rebuilt every frame. Main thread only, like the callers' other AppKit reads.
+    CGFloat getScaleFactor(NSWindow *nsWindow, void *layerHandle) {
+        if (layerHandle != nullptr) {
+            const CGFloat scale = [(__bridge CALayer *)layerHandle contentsScale];
+            return scale > 0.0 ? scale : 1.0;
+        }
 #ifdef PLUME_APPLE_RETINA_ENABLED
         return [nsWindow backingScaleFactor];
 #else
@@ -56,14 +65,14 @@ namespace plume {
 
     // MARK: - CocoaWindow
 
-    CocoaWindow::CocoaWindow(void* window)
-        : windowHandle(window), cachedRefreshRate(0) {
+    CocoaWindow::CocoaWindow(void* window, void* layer)
+        : windowHandle(window), layerHandle(layer), cachedRefreshRate(0) {
         cachedAttributes = {0, 0, 0, 0};
 
         if ([NSThread isMainThread]) {
             NSWindow *nsWindow = (__bridge NSWindow *)windowHandle;
             NSRect contentFrame = [[nsWindow contentView] frame];
-            CGFloat scaleFactor = getScaleFactor(nsWindow);
+            CGFloat scaleFactor = getScaleFactor(nsWindow, layerHandle);
 
             cachedAttributes.x = (int)round(contentFrame.origin.x);
             cachedAttributes.y = (int)round(contentFrame.origin.y);
@@ -86,7 +95,7 @@ namespace plume {
         auto updateBlock = ^{
             NSWindow *nsWindow = (__bridge NSWindow *)windowHandle;
             NSRect contentFrame = [[nsWindow contentView] frame];
-            CGFloat scaleFactor = getScaleFactor(nsWindow);
+            CGFloat scaleFactor = getScaleFactor(nsWindow, layerHandle);
 
             std::lock_guard<std::mutex> lock(attributesMutex);
             cachedAttributes.x = (int)round(contentFrame.origin.x);
@@ -122,7 +131,7 @@ namespace plume {
         if ([NSThread isMainThread]) {
             NSWindow *nsWindow = (__bridge NSWindow *)windowHandle;
             NSRect contentFrame = [[nsWindow contentView] frame];
-            CGFloat scaleFactor = getScaleFactor(nsWindow);
+            CGFloat scaleFactor = getScaleFactor(nsWindow, layerHandle);
 
             {
                 std::lock_guard<std::mutex> lock(attributesMutex);

@@ -163,6 +163,8 @@ set(FUTARI_LINUX_RELEASE_SHADERS ${FUTARI_RENUT_RELEASE_SHADERS})
 # Retina display), but the SDK window's SDL Metal layer is 1x (no SDL_WINDOW_HIGH_PIXEL_DENSITY unless
 # sdl_high_pixel_density), so MoltenVK answered VK_SUBOPTIMAL_KHR to every present and plume's Apple path, which counts
 # SUBOPTIMAL as a failure, rebuilt the swapchain every frame (2,700 rebuilds in 45 s). Points, as the layer is.
+# Since 2026-11-20 plume's Vulkan swapchain takes its scale from the surface's own layer (plume_apple.h), 1x or 2x as
+# the SDK window made it, so this switch no longer decides the Vulkan path; it stays OFF for plume's other users.
 if(APPLE)
     set(PLUME_APPLE_RETINA_ENABLED OFF CACHE BOOL "plume: size Apple swapchains in backing pixels (futari: OFF, the SDK layer is 1x)" FORCE)
 endif()

@@ -64,6 +64,11 @@ committed.
   plume's Apple path counts as failure. Fixed with `PLUME_APPLE_RETINA_ENABLED OFF` (swapchain at the layer's
   size, 4 creations a run). The output is therefore 1x, upscaled by the compositor, the same as the xenos path
   without `sdl_high_pixel_density`. A Retina swapchain would need the layer's `contentsScale` set to match.
+  **2026-11-20:** with `--sdl_high_pixel_density=true` the same loop came back from the other side (layer 2x,
+  swapchain in points; 1,662 rebuilds in 28 s in the v1.5.11 app). plume's `CocoaWindow` now gets the surface's
+  CAMetalLayer and counts the window in that layer's pixels (`contentsScale`), so the swapchain has the surface's
+  extent either way: 1800x1036 without the option, 3600x2072 with it, 4 swapchain log lines a run in both. Seen on
+  an M3 Max, built-in display, windowed; fullscreen and a live resize with the option on were not tried.
 - **No geometry shaders** (Apple GPUs): rectangle lists were drawn as one triangle each, so every in-game screen was a
   staircase of half-quads. **Fixed on `leg/rectlist` by tessellation** (section below). Point sprites are still single
   pixels.
