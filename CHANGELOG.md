@@ -4,6 +4,16 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- **No more crash after a failed game load.** When the game's executable
+  cannot be loaded (a damaged or incomplete `default.xex`), the error box was
+  followed by a crash with heap corruption (0xC0000374): on that exit the SDK
+  destroyed the window before the input drivers that still pointed at it. The
+  process now exits cleanly. The same change makes the process exit at once if
+  the game ever ends by itself, as it already did when the window is closed.
+  Same fix as in the Zuma and Daytona ports.
+
 ## v1.5.9 — 2026-11-15 (Windows, macOS)
 
 - **Windows, default renderer: VSync on no longer slows the game (#8).** With
