@@ -64,9 +64,10 @@ const std::string kFreshIni =
     "fullscreen = false\n";
 
 void HiddenSettingsAreTheFour() {
-  for (const char* name : {"renut_resolution", "resolution", "window_width", "window_height", "resolution_scale"})
+  for (const char* name : {"renut_resolution", "resolution", "window_width", "window_height"})
     Check(IsHiddenSetting(name), "a resolution setting is hidden", std::string(name) + "\n");
-  for (const char* name : {"renut_vsync", "fullscreen", "video_mode_width", "", "Resolution"})
+  // The default renderer's internal scale stays in F4: nothing else exposes it.
+  for (const char* name : {"renut_vsync", "fullscreen", "video_mode_width", "", "Resolution", "resolution_scale"})
     Check(!IsHiddenSetting(name), "any other setting is shown", std::string(name) + "\n");
 }
 
@@ -178,9 +179,64 @@ void BlockLineKeptWhenNotSerialised() {
   std::string got;
   for (const auto& [key, line] : lines)
     got += key + ": " + line + "\n";
-  Check(got == "renut_resolution: renut_resolution = 1080p\nresolution_scale: resolution_scale = 2\n",
-        "each hidden key once, first line, in the hidden list's order", got);
+  Check(got == "renut_resolution: renut_resolution = 1080p\n",
+        "each hidden key once, first line; resolution_scale is not a hidden key", got);
   Check(futari::hidden_settings::HiddenBlockLines(kFreshIni).empty(), "no block: no lines", kFreshIni);
+}
+
+// resolution_scale lives in the default renderer's plugin: listed in F4, saved from its value where the session has
+// it, and kept from the file's own line where the session (Renut) does not register it.
+void PluginSettingKeptWhenNotRegistered() {
+  using futari::hidden_settings::AbsentPluginBlockLines;
+  using futari::hidden_settings::IsPluginSetting;
+  Check(IsPluginSetting("resolution_scale"), "resolution_scale is a plugin setting", "resolution_scale\n");
+  Check(!IsPluginSetting("renut_resolution") && !IsPluginSetting(""), "nothing else is", "renut_resolution\n");
+  const std::string ini = "# --- overlay settings (saved in-game by F4; managed block, hand edits here are lost) ---\n"
+                          "futari_renderer = renut\n"
+                          "resolution_scale = 2\n"
+                          "# --- end overlay settings ---\n"
+                          "[Display]\nresolution = 1920x1080\n";
+  const auto absent = [](std::string_view) { return false; };
+  const auto present = [](std::string_view) { return true; };
+  const auto kept = AbsentPluginBlockLines(ini, absent);
+  Check(kept.size() == 1 && kept[0].first == "resolution_scale" && kept[0].second == "resolution_scale = 2",
+        "not registered (Renut runs): the file's line is kept", kept.empty() ? "nothing\n" : kept[0].second + "\n");
+  Check(AbsentPluginBlockLines(ini, present).empty(),
+        "registered (default renderer): saved from its value, no line kept from the file", ini);
+  Check(AbsentPluginBlockLines(kFreshIni, absent).empty(), "no block: nothing to keep", kFreshIni);
+  Check(AbsentPluginBlockLines(kReleasedIni, absent).empty(), "a block without the key: nothing added", kReleasedIni);
+}
+
+// One setting changed outside F4 (Sharp smoothing, from the game's own menu): only its block line is set or removed.
+void OneBlockLineSetOrRemoved() {
+  using futari::hidden_settings::WithBlockLine;
+  const std::string key = "futari_sharp_smoothing";
+  const std::string on = WithBlockLine(kReleasedIni, key, "true");
+  Check(Count(on, "futari_sharp_smoothing = true\n") == 1, "the line is added to the block once", on);
+  Check(Count(on, "futari_renderer = renut\n") == 1 && Count(on, "renut_resolution = 1080p\n") == 1,
+        "the block's other lines stay", on);
+  Check(Count(on, "[Display]\nresolution = 1920x1080\n") == 1, "the sections stay", on);
+  Check(on.find("futari_sharp_smoothing") < on.find("# --- end overlay settings ---"), "inside the block", on);
+  Check(WithBlockLine(on, key, "true") == on, "setting it again changes nothing", on);
+  const std::string off = WithBlockLine(on, key, std::nullopt);
+  Check(Count(off, "futari_sharp_smoothing") == 0, "removed again", off);
+  Check(off == kReleasedIni, "and the file is as it was", off);
+  Check(WithBlockLine(kReleasedIni, key, std::nullopt) == kReleasedIni, "removing an absent line changes nothing",
+        kReleasedIni);
+  const std::string fresh = WithBlockLine(kFreshIni, key, "true");
+  Check(Count(fresh, "futari_sharp_smoothing = true\n") == 1, "a file without a block gets one", fresh);
+  Check(fresh.find("futari_sharp_smoothing") < fresh.find("[Display]"), "before the first section", fresh);
+  Check(Count(fresh, "resolution = 1920x1080\n") == 1 && Count(fresh, "fullscreen = false\n") == 1,
+        "the fresh file's lines stay", fresh);
+  Check(WithBlockLine(fresh, key, std::nullopt) == WithBlockLine(kFreshIni, key, std::nullopt),
+        "removing the only line leaves no block", WithBlockLine(fresh, key, std::nullopt));
+  const std::string spaced = WithBlockLine(
+      "# --- overlay settings (saved in-game by F4; managed block, hand edits here are lost) ---\n"
+      "  Futari_Sharp_Smoothing=false\n"
+      "# --- end overlay settings ---\n",
+      key, "true");
+  Check(Count(spaced, "moothing") == 1 && Count(spaced, "futari_sharp_smoothing = true\n") == 1,
+        "an existing line, however it is spelled, is replaced", spaced);
 }
 
 // A file saved with a UTF-8 BOM: the block right after it still counts.
@@ -219,6 +275,8 @@ void RendererSurvivesResetAll() {
 
 int main() {
   HiddenSettingsAreTheFour();
+  PluginSettingKeptWhenNotRegistered();
+  OneBlockLineSetOrRemoved();
   HiddenKeyKeptWhenInOldBlock();
   HiddenKeyDroppedWhenOnlyFromCommandLine();
   HiddenKeyOutsideBlockNotDuplicated();

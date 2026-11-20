@@ -11,6 +11,7 @@
 #include "generated/default/futari_init.h"
 
 #include "hidden_settings.h"
+#include "smoothing.h"
 #include "ini_merge.h"
 #include "ini_resolution.h"
 #include "screen_layout.h"
@@ -274,6 +275,8 @@ std::atomic<bool> g_window_size_picked{false};
 // over a [Display] resolution line the boot rejected (RepairedResolution).
 std::atomic<int32_t> g_boot_window_width{0};
 std::atomic<int32_t> g_boot_window_height{0};
+// The main window as a save finds it (UI thread; set once the app exists): nothing while it is fullscreen or absent.
+std::optional<futari::ini_resolution::LiveWindow> (*g_live_window)() = nullptr;
 
 constexpr uint32_t kMediumDpi = 96;
 
@@ -338,7 +341,8 @@ void WriteDefaultIni(const std::filesystem::path& path) {
        << "# at the top of the file.\n"
        << "\n"
        << "[Display]\n"
-       << "# Window size as WxH. The game opens windowed at this size. With the\n"
+       << "# Window size as WxH, in physical pixels (not multiplied by the Windows\n"
+       << "# display scaling). The game opens windowed at this size. With the\n"
        << "# Renut renderer the game draws its frame at the window's size by\n"
        << "# default; the default renderer renders at the game's own size and\n"
        << "# scales it to fit.\n"
@@ -531,6 +535,16 @@ void LoadFutariIni(const std::filesystem::path& exe_dir, rex::PathConfig& paths)
   }
 }
 
+// Whether this session registers the cvar at all (the default renderer's plugin cvars are absent while Renut runs).
+bool CvarRegistered(std::string_view name) {
+  for (const auto& entry : rex::cvar::GetRegistry()) {
+    if (entry.name == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::string GetCvarByName(std::string_view name) {
   for (const auto& entry : rex::cvar::GetRegistry()) {
     if (entry.name == name && entry.getter) {
@@ -544,11 +558,14 @@ std::string GetCvarByName(std::string_view name) {
 // size as typed while nothing changed window_width/height since boot. A size set since (an F2 pick) is a
 // typed frame size too and goes out as it is: the next boot converts it like any typed value, so the frame is exactly
 // the size picked (multiplying it by the Windows scale would turn a 1920x1080 pick at 150% into a 2880x1620 frame).
+// A window the player resized since boot goes out at its live size (2026-11-20), so the next start opens at it and
+// the launcher's "current (W x H)" shows it.
 std::pair<std::string, std::string> TypedResolution() {
   return futari::ini_resolution::SavedResolution(
       GetCvarByName("window_width"), GetCvarByName("window_height"), g_window_size_picked.load(),
       {g_ini_resolution.width, g_ini_resolution.height, g_ini_resolution.logical_width,
-       g_ini_resolution.logical_height});
+       g_ini_resolution.logical_height},
+      g_live_window ? g_live_window() : std::nullopt);
 }
 
 // "60.000000" -> "60", "0.500000" -> "0.5"; integers pass through unchanged.
@@ -570,7 +587,33 @@ std::string TidyNumber(std::string text) {
 // edits are updated in place (comments intact, [Storage] untouched), and any
 // other overlay-modified cvars go into a delimited top-level block that the
 // SDK's LoadConfig reads back on the next launch.
+// One writer of futari.ini at a time: F4 and F2 save on the UI thread, the Picture page's Sharp setting on a guest one.
+std::mutex g_ini_write_mutex;
+
+// Writes futari.ini via a sibling temp file + rename so a crash mid-write cannot leave a truncated futari.ini (the
+// exact failure mode the save path used to have). The caller holds g_ini_write_mutex.
+bool WriteIniFile(const std::filesystem::path& exe_dir, const std::string& content) {
+  const std::filesystem::path ini_path = exe_dir / "futari.ini";
+  const std::filesystem::path tmp_path = exe_dir / "futari.ini.tmp";
+  {
+    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+      REXLOG_ERROR("Settings save: cannot open {}", tmp_path.string());
+      return false;
+    }
+    out << content;
+  }
+  std::error_code ec;
+  std::filesystem::rename(tmp_path, ini_path, ec);
+  if (ec) {
+    REXLOG_ERROR("Settings save: rename to {} failed: {}", ini_path.string(), ec.message());
+    return false;
+  }
+  return true;
+}
+
 void SaveFutariIni(const std::filesystem::path& exe_dir) {
+  const std::lock_guard<std::mutex> lock(g_ini_write_mutex);
   const std::filesystem::path ini_path = exe_dir / "futari.ini";
   WriteDefaultIni(ini_path);  // ensure the sectioned skeleton exists
 
@@ -669,28 +712,44 @@ void SaveFutariIni(const std::filesystem::path& exe_dir) {
         raw_block += '\n';
       }
     }
+    // A default-renderer plugin setting (resolution_scale) that this session does not register, i.e. Renut runs: the
+    // file's own line stays, so a save made here does not drop what a default-renderer session saved (2026-11-20).
+    for (const auto& [key, plugin_line] : futari::hidden_settings::AbsentPluginBlockLines(original, &CvarRegistered)) {
+      (void)key;
+      raw_block += plugin_line;
+      raw_block += '\n';
+    }
   }
 
   const std::string merged = ini_merge::Merge(original, updates, raw_block);
 
-  // Write via a sibling temp file + rename so a crash mid-write cannot leave a
-  // truncated futari.ini (the exact failure mode this save path used to have).
-  const std::filesystem::path tmp_path = exe_dir / "futari.ini.tmp";
+  if (WriteIniFile(exe_dir, merged)) {
+    REXLOG_INFO("Settings saved to {}", ini_path.string());
+  }
+}
+
+// Picture Setting > Smoothing changed futari_sharp_smoothing (src/smoothing.cpp, on a guest thread): that one line
+// goes into futari.ini's managed block at once (or leaves it: off is the default), so the choice lasts without an F4
+// save and nothing else the overlay changed this session is saved with it.
+void SaveSharpSmoothing(bool sharp) {
+  const std::filesystem::path exe_dir = rex::filesystem::GetExecutableFolder();
+  const std::lock_guard<std::mutex> lock(g_ini_write_mutex);
+  const std::filesystem::path ini_path = exe_dir / "futari.ini";
+  WriteDefaultIni(ini_path);
+  std::string original;
   {
-    std::ofstream out(tmp_path, std::ios::binary | std::ios::trunc);
-    if (!out) {
-      REXLOG_ERROR("Settings save: cannot open {}", tmp_path.string());
-      return;
+    std::ifstream in(ini_path, std::ios::binary);
+    if (in) {
+      std::ostringstream buf;
+      buf << in.rdbuf();
+      original = buf.str();
     }
-    out << merged;
   }
-  std::error_code ec;
-  std::filesystem::rename(tmp_path, ini_path, ec);
-  if (ec) {
-    REXLOG_ERROR("Settings save: rename to {} failed: {}", ini_path.string(), ec.message());
-    return;
+  const std::string merged = futari::hidden_settings::WithBlockLine(
+      original, "futari_sharp_smoothing", sharp ? std::optional<std::string_view>("true") : std::nullopt);
+  if (merged != original && WriteIniFile(exe_dir, merged)) {
+    REXLOG_INFO("Sharp smoothing {} saved to {}", sharp ? "on" : "off", ini_path.string());
   }
-  REXLOG_INFO("Settings saved to {}", ini_path.string());
 }
 
 // Title-screen exit (PC quality-of-life).
@@ -872,7 +931,8 @@ class FutariApp : public rex::ReXApp {
   void OnConfigureFonts(ImFontAtlas* atlas) override {
     futari::launcher::LauncherDialog::AddFonts(atlas);
     rex::ui::SetSettingsOverlayFontPicker(&futari::launcher::LauncherDialog::PickFont);
-    // F4 lists no resolution setting: [Display] resolution and F2 set the window size (2026-11-10).
+    // F4 lists no window or frame size setting: [Display] resolution and F2 set the window size (2026-11-10). The
+    // default renderer's resolution_scale stays listed (2026-11-20).
     rex::ui::SetSettingsOverlayHiddenCvars(&futari::hidden_settings::IsHiddenSetting);
     // "Reset all to defaults" keeps the renderer choice, so a save after it keeps futari_renderer = renut (2026-11-11).
     rex::ui::SetSettingsOverlayResetProofCvars(&futari::hidden_settings::IsResetProofSetting);
@@ -881,6 +941,8 @@ class FutariApp : public rex::ReXApp {
   void OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) override {
     (void)drawer;
     instance_ = this;
+    g_live_window = &FutariApp::LiveWindow;
+    futari::smoothing::SetSharpSaver(&SaveSharpSmoothing);
     rex::ui::RegisterBind(
         "bind_title_exit", "Escape", "Exit the game from the title screen", [this] {
           // Leave Escape to an open overlay (it may be using it itself).
@@ -1567,8 +1629,14 @@ class FutariApp : public rex::ReXApp {
       wnd->SetTitle("Mushihimesama Futari v" FUTARI_VERSION_STRING " " REXGLUE_BUILD_TITLE);
       FitWindowToTypedSize(*wnd);
       if (!wnd->IsFullscreen()) {
+#ifdef __APPLE__
+        // Points there, the unit the typed size is in (LiveWindow compares against these).
+        g_boot_window_width = int32_t(wnd->GetActualLogicalWidth());
+        g_boot_window_height = int32_t(wnd->GetActualLogicalHeight());
+#else
         g_boot_window_width = int32_t(wnd->GetActualPhysicalWidth());
         g_boot_window_height = int32_t(wnd->GetActualPhysicalHeight());
+#endif
       }
       LogDpiAwareness(*wnd);
     }
@@ -1722,6 +1790,24 @@ class FutariApp : public rex::ReXApp {
   }
 
   static inline FutariApp* instance_ = nullptr;
+
+  // UI thread: the window's client size while it is windowed, in the units [Display] resolution is typed in
+  // (physical pixels; points on macOS, where the typed size is one), with the size it booted at.
+  static std::optional<futari::ini_resolution::LiveWindow> LiveWindow() {
+    FutariApp* app = instance_;
+    rex::ui::Window* wnd = app ? app->window() : nullptr;
+    if (!wnd || wnd->IsFullscreen()) {
+      return std::nullopt;
+    }
+#ifdef __APPLE__
+    const int32_t width = int32_t(wnd->GetActualLogicalWidth());
+    const int32_t height = int32_t(wnd->GetActualLogicalHeight());
+#else
+    const int32_t width = int32_t(wnd->GetActualPhysicalWidth());
+    const int32_t height = int32_t(wnd->GetActualPhysicalHeight());
+#endif
+    return futari::ini_resolution::LiveWindow{width, height, g_boot_window_width.load(), g_boot_window_height.load()};
+  }
 
   static void InstallBundledDlc() {
     const auto dlc_dir = rex::filesystem::GetExecutableFolder() / "dlc";

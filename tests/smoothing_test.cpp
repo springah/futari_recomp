@@ -17,18 +17,18 @@
 namespace {
 
 using futari::smoothing::BlitDrawMode;
+using futari::smoothing::EffectiveSmoothing;
+using futari::smoothing::SmoothingChoice;
 using futari::smoothing::FindSmoothingLabels;
 using futari::smoothing::kSmoothingOff;
 using futari::smoothing::kSmoothingOn;
 using futari::smoothing::kSmoothingSharp;
 using futari::smoothing::ParseDevSmoothing;
-using futari::smoothing::ResetSmoothing;
 using futari::smoothing::SmoothingFallbackIndex;
 using futari::smoothing::SmoothingIndex;
 using futari::smoothing::SmoothingLabel;
 using futari::smoothing::SmoothingLabelSet;
 using futari::smoothing::SmoothingStore;
-using futari::smoothing::SmoothingWord;
 
 int g_failed = 0;
 int g_checks = 0;
@@ -73,31 +73,71 @@ void ParseDevSmoothingValue() {
   CheckDevSmoothing("4294967300", std::nullopt, "past 32 bits is nothing");
 }
 
-// The menu item's indices: Smooth 0, Sharp 1, Off 2, each the index of its word and back.
-void SmoothingIndexRoundTrip() {
-  Check(SmoothingIndex(kSmoothingOn) == 0, "On shows as Smooth (index 0)");
-  Check(SmoothingIndex(kSmoothingSharp) == 1, "Sharp shows as index 1");
-  Check(SmoothingIndex(kSmoothingOff) == 2, "Off shows as index 2");
-  Check(SmoothingWord(0) == kSmoothingOn, "index 0 stores On");
-  Check(SmoothingWord(1) == kSmoothingSharp, "index 1 stores Sharp");
-  Check(SmoothingWord(2) == kSmoothingOff, "index 2 stores Off");
-  for (uint32_t index = 0; index < 3; ++index) {
-    Check(SmoothingIndex(SmoothingWord(index)) == index, "index -> word -> the same index");
-  }
+// The menu item's indices: Smooth 0, Sharp 1, Off 2. On shows as Sharp only while our setting is on.
+void SmoothingIndexFromWordAndSetting() {
+  Check(SmoothingIndex(kSmoothingOn, false) == 0, "On, setting off: Smooth (index 0)");
+  Check(SmoothingIndex(kSmoothingOn, true) == 1, "On, setting on: Sharp (index 1)");
+  Check(SmoothingIndex(kSmoothingOff, false) == 2, "Off shows as index 2");
+  Check(SmoothingIndex(kSmoothingOff, true) == 2, "Off shows as index 2 whatever the setting");
+  Check(SmoothingIndex(kSmoothingSharp, false) == 1, "a stored 4 shows as Sharp, setting off");
+  Check(SmoothingIndex(kSmoothingSharp, true) == 1, "a stored 4 shows as Sharp, setting on");
 }
 
-// The handler's store: the stored word stays while it already shows as the index (the store the game makes without
-// input when the cursor first reaches the row after a load), else the index's own word.
+// The mode gameplay draws with: Sharp for On while the setting is on, and for a stored 4.
+void EffectiveMode() {
+  Check(EffectiveSmoothing(kSmoothingOn, true) == kSmoothingSharp, "On + setting: Sharp");
+  Check(EffectiveSmoothing(kSmoothingOn, false) == kSmoothingOn, "On without the setting: On");
+  Check(EffectiveSmoothing(kSmoothingOff, true) == kSmoothingOff, "Off stays Off with the setting on");
+  Check(EffectiveSmoothing(kSmoothingOff, false) == kSmoothingOff, "Off stays Off");
+  Check(EffectiveSmoothing(kSmoothingSharp, false) == kSmoothingSharp, "a stored 4 is Sharp without the setting");
+  Check(EffectiveSmoothing(2, true) == 2, "the game's mode 2 is never Sharp");
+  Check(EffectiveSmoothing(3, true) == 3, "the game's mode 3 is never Sharp");
+  Check(EffectiveSmoothing(7, true) == 7, "an unknown word stays");
+}
+
+// The handler's store: nothing changes while the stored word already shows as the index (the store the game makes
+// without input when the cursor first reaches the row after a load); a change stores the game's own On or Off, never
+// 4, and Smooth / Sharp set our setting.
 void SmoothingStoreKeeps() {
-  Check(SmoothingStore(0, 2) == 2, "first-frame store keeps a stored 2");
-  Check(SmoothingStore(0, 3) == 3, "first-frame store keeps a stored 3");
-  Check(SmoothingStore(0, kSmoothingOn) == kSmoothingOn, "first-frame store keeps On");
-  Check(SmoothingStore(1, kSmoothingSharp) == kSmoothingSharp, "first-frame store keeps Sharp");
-  Check(SmoothingStore(2, kSmoothingOff) == kSmoothingOff, "first-frame store keeps Off");
-  Check(SmoothingStore(2, 7) == 7, "first-frame store keeps an unknown word shown as Off");
-  Check(SmoothingStore(1, 2) == kSmoothingSharp, "moving from a stored 2 to Sharp stores 4");
-  Check(SmoothingStore(2, 3) == kSmoothingOff, "moving from a stored 3 to Off stores 0");
-  Check(SmoothingStore(0, kSmoothingSharp) == kSmoothingOn, "moving from Sharp to Smooth stores 1");
+  const SmoothingChoice kept_on{kSmoothingOn, std::nullopt};
+  Check(SmoothingStore(0, 2, false) == SmoothingChoice{2, std::nullopt}, "first-frame store keeps a stored 2");
+  Check(SmoothingStore(0, 3, true) == SmoothingChoice{3, std::nullopt},
+        "first-frame store keeps a stored 3 and leaves the setting on");
+  Check(SmoothingStore(0, kSmoothingOn, false) == kept_on, "first-frame store keeps On shown as Smooth");
+  Check(SmoothingStore(1, kSmoothingOn, true) == kept_on, "first-frame store keeps On shown as Sharp");
+  Check(SmoothingStore(2, kSmoothingOff, true) == SmoothingChoice{kSmoothingOff, std::nullopt},
+        "first-frame store keeps Off");
+  Check(SmoothingStore(2, 7, false) == SmoothingChoice{7, std::nullopt},
+        "first-frame store keeps an unknown word shown as Off");
+  Check(SmoothingStore(1, kSmoothingOn, false) == SmoothingChoice{kSmoothingOn, true},
+        "Smooth to Sharp: the word stays On, the setting goes on");
+  Check(SmoothingStore(0, kSmoothingOn, true) == SmoothingChoice{kSmoothingOn, false},
+        "Sharp to Smooth: the word stays On, the setting goes off");
+  Check(SmoothingStore(2, kSmoothingOn, true) == SmoothingChoice{kSmoothingOff, std::nullopt},
+        "Sharp to Off: Off, the setting is left for the way back");
+  Check(SmoothingStore(1, kSmoothingOff, false) == SmoothingChoice{kSmoothingOn, true}, "Off to Sharp: On + setting");
+  Check(SmoothingStore(1, kSmoothingOff, true) == SmoothingChoice{kSmoothingOn, true},
+        "Off to Sharp with the setting already on");
+  Check(SmoothingStore(0, kSmoothingOff, true) == SmoothingChoice{kSmoothingOn, false}, "Off to Smooth: On, setting off");
+  Check(SmoothingStore(1, 2, false) == SmoothingChoice{kSmoothingOn, true}, "a stored 2 to Sharp stores On + setting");
+  Check(SmoothingStore(2, 3, false) == SmoothingChoice{kSmoothingOff, std::nullopt}, "a stored 3 to Off stores 0");
+  // A save from a build that stored 4: rewritten to On with the setting on as soon as its page shows it.
+  Check(SmoothingStore(1, kSmoothingSharp, false) == SmoothingChoice{kSmoothingOn, true},
+        "a stored 4, first-frame store: On + setting");
+  Check(SmoothingStore(0, kSmoothingSharp, true) == SmoothingChoice{kSmoothingOn, false},
+        "a stored 4 to Smooth: On, setting off");
+  Check(SmoothingStore(2, kSmoothingSharp, true) == SmoothingChoice{kSmoothingOff, std::nullopt},
+        "a stored 4 to Off: Off");
+  for (uint32_t index = 0; index < 3; ++index) {
+    for (uint32_t stored : {0u, 1u, 2u, 3u, 4u, 5u, 0xFFFFFFFFu}) {
+      for (bool sharp : {false, true}) {
+        const SmoothingChoice choice = SmoothingStore(index, stored, sharp);
+        const bool kept = choice.word == stored && !choice.sharp;
+        Check(kept || choice.word == kSmoothingOn || choice.word == kSmoothingOff,
+              "a changed word is the game's own On or Off, never 4");
+      }
+    }
+  }
 }
 
 // The game's row step for a list item: right +1, left -1, a value outside the labels reverts (clamps); 2 is the last
@@ -107,30 +147,44 @@ uint32_t GameStep(uint32_t index, int delta) {
   return next < 0 || next > 2 ? index : static_cast<uint32_t>(next);
 }
 
+// One press on the row: the shown index steps, the store follows, and the next load shows the result.
+struct Row {
+  uint32_t word;
+  bool sharp;
+};
+
+Row Press(Row row, int delta) {
+  const uint32_t index = GameStep(SmoothingIndex(row.word, row.sharp), delta);
+  const SmoothingChoice choice = SmoothingStore(index, row.word, row.sharp);
+  return {choice.word, choice.sharp.value_or(row.sharp)};
+}
+
 // Right goes Smooth -> Sharp -> Off, left the reverse; left at Smooth and right at Off stay.
 void SmoothingRightStepOrder() {
-  Check(SmoothingWord(GameStep(SmoothingIndex(kSmoothingOn), 1)) == kSmoothingSharp, "right from Smooth is Sharp");
-  Check(SmoothingWord(GameStep(SmoothingIndex(kSmoothingSharp), 1)) == kSmoothingOff, "right from Sharp is Off");
-  Check(SmoothingWord(GameStep(SmoothingIndex(kSmoothingOff), 1)) == kSmoothingOff, "right at Off stays Off");
-  Check(SmoothingWord(GameStep(SmoothingIndex(kSmoothingOff), -1)) == kSmoothingSharp, "left from Off is Sharp");
-  Check(SmoothingWord(GameStep(SmoothingIndex(kSmoothingSharp), -1)) == kSmoothingOn, "left from Sharp is Smooth");
-  Check(SmoothingWord(GameStep(SmoothingIndex(kSmoothingOn), -1)) == kSmoothingOn, "left at Smooth stays Smooth");
+  Row row{kSmoothingOn, false};
+  Check(SmoothingIndex(row.word, row.sharp) == 0, "starts at Smooth");
+  row = Press(row, 1);
+  Check(row.word == kSmoothingOn && row.sharp && SmoothingIndex(row.word, row.sharp) == 1, "right from Smooth is Sharp");
+  row = Press(row, 1);
+  Check(row.word == kSmoothingOff && SmoothingIndex(row.word, row.sharp) == 2, "right from Sharp is Off");
+  row = Press(row, 1);
+  Check(row.word == kSmoothingOff && SmoothingIndex(row.word, row.sharp) == 2, "right at Off stays Off");
+  row = Press(row, -1);
+  Check(row.word == kSmoothingOn && row.sharp && SmoothingIndex(row.word, row.sharp) == 1, "left from Off is Sharp");
+  row = Press(row, -1);
+  Check(row.word == kSmoothingOn && !row.sharp && SmoothingIndex(row.word, row.sharp) == 0, "left from Sharp is Smooth");
+  row = Press(row, -1);
+  Check(row.word == kSmoothingOn && !row.sharp, "left at Smooth stays Smooth");
 }
 
-// The game's unused linear modes show as Smooth; any other word shows as Off.
+// The game's unused linear modes show as Smooth whatever the setting; any other word shows as Off.
 void SmoothingUnknownWords() {
-  Check(SmoothingIndex(2) == 0, "2 shows as Smooth");
-  Check(SmoothingIndex(3) == 0, "3 shows as Smooth");
-  Check(SmoothingIndex(5) == 2, "5 shows as Off");
-  Check(SmoothingIndex(0xFFFFFFFFu) == 2, "0xFFFFFFFF shows as Off");
-  Check(SmoothingWord(3) == kSmoothingOff, "index 3 stores Off");
-  Check(SmoothingWord(0xFFFFFFFFu) == kSmoothingOff, "index 0xFFFFFFFF stores Off");
-}
-
-// The game's Smoothing default: Sharp with Renut, On (Smooth) otherwise.
-void ResetSmoothingPerRenderer() {
-  Check(ResetSmoothing(true) == kSmoothingSharp, "Renut resets to Sharp");
-  Check(ResetSmoothing(false) == kSmoothingOn, "other renderers reset to On");
+  Check(SmoothingIndex(2, false) == 0, "2 shows as Smooth");
+  Check(SmoothingIndex(3, false) == 0, "3 shows as Smooth");
+  Check(SmoothingIndex(2, true) == 0, "2 shows as Smooth with the setting on");
+  Check(SmoothingIndex(3, true) == 0, "3 shows as Smooth with the setting on");
+  Check(SmoothingIndex(5, false) == 2, "5 shows as Off");
+  Check(SmoothingIndex(0xFFFFFFFFu, true) == 2, "0xFFFFFFFF shows as Off");
 }
 
 // The labels fit the game's short-string buffer (15 bytes) and use only ASCII; Off keeps the game's own string.
@@ -211,11 +265,11 @@ void SmoothingFallbackBelowTheCount() {
 int main() {
   SharpDrawsAsOn();
   ParseDevSmoothingValue();
-  SmoothingIndexRoundTrip();
+  SmoothingIndexFromWordAndSetting();
+  EffectiveMode();
   SmoothingStoreKeeps();
   SmoothingRightStepOrder();
   SmoothingUnknownWords();
-  ResetSmoothingPerRenderer();
   SmoothingLabels();
   SmoothingLabelsFoundOnLoad();
   SmoothingThreeForeignLabels();

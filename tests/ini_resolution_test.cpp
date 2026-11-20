@@ -147,8 +147,55 @@ void DamagedLineRepaired() {
 
 }  // namespace
 
+// A window the player resized: a save writes its live size, so the next start opens at it.
+void ResizedWindowSaved() {
+  using futari::ini_resolution::LiveWindow;
+  using futari::ini_resolution::ResizedWindow;
+  const auto saved = [](bool picked, const BootResolution& boot, const std::optional<LiveWindow>& live) {
+    const auto [w, h] = SavedResolution(std::to_string(boot.logical_width ? boot.logical_width : 1280),
+                                        std::to_string(boot.logical_height ? boot.logical_height : 720), picked, boot,
+                                        live);
+    return w.empty() ? std::string("nothing") : w + "x" + h;
+  };
+  // Booted at the typed 1920x1080 (150%: cvars 1280x720), still that size: the typed size, as before.
+  Check(saved(false, kAt150, LiveWindow{1920, 1080, 1920, 1080}) == "1920x1080", "not resized: the typed size",
+        saved(false, kAt150, LiveWindow{1920, 1080, 1920, 1080}));
+  Check(saved(false, kAt150, std::nullopt) == "1920x1080", "fullscreen at the save (no live window): the typed size",
+        saved(false, kAt150, std::nullopt));
+  // Dragged to 1600x900: that size goes out, in physical pixels, not the logical cvar size.
+  Check(saved(false, kAt150, LiveWindow{1600, 900, 1920, 1080}) == "1600x900", "resized: the live size",
+        saved(false, kAt150, LiveWindow{1600, 900, 1920, 1080}));
+  Check(saved(false, kAt150, LiveWindow{1920, 1081, 1920, 1080}) == "1920x1081", "one axis is enough",
+        saved(false, kAt150, LiveWindow{1920, 1081, 1920, 1080}));
+  // Minimised (no client size): nothing changes.
+  Check(saved(false, kAt150, LiveWindow{0, 0, 1920, 1080}) == "1920x1080", "minimised: the typed size",
+        saved(false, kAt150, LiveWindow{0, 0, 1920, 1080}));
+  Check(saved(false, kAt150, LiveWindow{1600, 0, 1920, 1080}) == "1920x1080", "a zero height: the typed size",
+        saved(false, kAt150, LiveWindow{1600, 0, 1920, 1080}));
+  // A fullscreen boot, windowed since: compared with the typed size.
+  Check(saved(false, kAt150, LiveWindow{1920, 1080, 0, 0}) == "1920x1080", "fullscreen boot, window at the typed size",
+        saved(false, kAt150, LiveWindow{1920, 1080, 0, 0}));
+  Check(saved(false, kAt150, LiveWindow{1500, 1300, 0, 0}) == "1500x1300", "fullscreen boot, then resized",
+        saved(false, kAt150, LiveWindow{1500, 1300, 0, 0}));
+  // A size picked on F2 since boot wins over a drag: it is the choice for the next start.
+  {
+    const auto [w, h] = SavedResolution("2560", "1440", true, kAt150, LiveWindow{1600, 900, 1920, 1080});
+    Check(w == "2560" && h == "1440", "a pick wins over a resize", w + "x" + h);
+  }
+  // No readable [Display] resolution and a fullscreen boot: nothing to compare with, so nothing from the window.
+  Check(!ResizedWindow(LiveWindow{1600, 900, 0, 0}, BootResolution{}), "no reference size: not counted as resized",
+        "1600x900");
+  Check(!ResizedWindow(std::nullopt, kAt150), "no window: not resized", "nothing");
+  // Absent cvars save nothing, resized or not.
+  {
+    const auto [w, h] = SavedResolution("", "", false, kAt150, LiveWindow{1600, 900, 1920, 1080});
+    Check(w.empty() && h.empty(), "absent cvars: nothing, even when resized", w + "x" + h);
+  }
+}
+
 int main() {
   Unchanged();
+  ResizedWindowSaved();
   PickEqualToTheBootLogicalSize();
   OtherPicks();
   NoBootLine();

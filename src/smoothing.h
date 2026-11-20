@@ -19,4 +19,8 @@ void NoteBlitDraw(uint8_t* base, uint32_t vertices, uint32_t count);
 // VS matrix (c10..c13: 4 rows of 4 big-endian f32, clip x first, then clip y); 0 for every other draw.
 uint32_t BlitDrawMatrix(uint32_t vertices, uint32_t count);
 
+// Our Sharp setting (futari_sharp_smoothing) changed from the game's Picture page: `saver` gets the new value so the
+// app can store it in futari.ini at once. Set once at startup; called on a guest thread.
+void SetSharpSaver(void (*saver)(bool sharp));
+
 }  // namespace futari::smoothing

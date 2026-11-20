@@ -24,6 +24,12 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
   back and front buffers in place at a frame boundary, and switching between
   `output` and a preset applies at once. Sizes are physical pixels, whatever
   the Windows scaling.
+- **`[Display] resolution` is now a size in physical pixels, on both
+  renderers.** It used to be scaled by the Windows display scaling: at 150 % a
+  `resolution = 1920x1080` line opened a window 2880x1620 pixels large, and it
+  now opens one of exactly 1920x1080 pixels. At 100 % scaling nothing changes.
+  This is the one change here that default-renderer players see: if the window
+  is smaller than it was after updating, raise the line (or pick a size on F2).
 - **Layouts at aspect ratios other than 16:9 (Renut, `output`).** The
   wallpaper and the title picture cover the frame, menus stay readable when
   the window is narrow, full-screen pictures fill the frame, and the title's
@@ -38,19 +44,29 @@ download share). Ports can sit on different versions — see [PORTS.md](PORTS.md
 - **Sharp bilinear Smoothing.** Picture Setting > Smoothing now reads Smooth /
   Sharp / Off. Sharp keeps the art's pixels crisp at non-integer zooms (nearest
   at the largest whole factor, bilinear for the rest) and is exactly Off at
-  whole zooms; it is the default for new saves on Renut. On Renut, Smooth draws
-  with float bilinear weights. The default renderer draws Sharp as Smooth. At
-  odd window sizes the gameplay quad is moved onto whole pixels, so Sharp and
-  Off land on the same pixel grid.
+  whole zooms. On Renut, Smooth draws with float bilinear weights. The default
+  renderer draws Sharp as Smooth. At odd window sizes the gameplay quad is
+  moved onto whole pixels, so Sharp and Off land on the same pixel grid.
+  Sharp is this port's own, so it is not written into the game save: the save
+  keeps the game's On, and `futari_sharp_smoothing` in `futari.ini` (written
+  the moment the menu changes it) says that On draws Sharp. A save therefore
+  stays safe to open in v1.5.11 and older, futari-linux and futari-nx, whose
+  two-label Smoothing list cannot show a third value. The setting is one for
+  all eight Picture presets, and it is off until you pick Sharp.
+- **A window you resized keeps its size.** Drag the window to a new size and
+  save (F4 "Save to config", or F2): `[Display] resolution` gets the window's
+  size, and F2's "current (W x H)" shows it. A size picked on F2 since the
+  start still wins. It matters more now that Renut's frame is the window.
 - **Fix: Options > Screen no longer crashes Renut.** The page's frame overlay
   draws through `D3DDevice_BeginIndexedVertices`, which Renut did not hook; the
   game's own state flush then read Renut's shader record as a guest shader and
   bugchecked (0xF5). The function is now hooked through the existing
   `BeginVertices` path, and `Reset`, `BlockUntilIdle` and the texture-level
   hooks are mapped as well.
-- The F4 overlay no longer lists the resolution settings (`renut_resolution`,
-  `resolution`, the window size, `resolution_scale`); `[Display]` and the
-  game's own menu own them. Reset all keeps the renderer choice.
+- The F4 overlay no longer lists the window and frame size settings
+  (`renut_resolution`, `resolution`, the window size); `[Display]` and the
+  game's own menu own them. The default renderer's `resolution_scale` stays
+  listed, since nothing else exposes it. Reset all keeps the renderer choice.
 - For builders: twelve more std-only unit tests under `tests/`, each a job in
   the Guards workflow, and dev aids that do nothing unless set: frame captures
   (`--futari_renut_capture_path`, F9, now with the 1x gameplay source image),

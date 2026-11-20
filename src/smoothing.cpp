@@ -1,6 +1,7 @@
-// The game's Smoothing with a third value, Sharp bilinear (4). The gameplay blit sub_82183C68 reads the mode once
-// and skips its filter code for any value above 3, so for Sharp it runs as On (the linear filter and the On shader
-// pair, the same draw on every renderer); on Renut the renderer is told the mode first and redraws that blit sharp
+// The game's Smoothing with a third choice, Sharp bilinear. The save keeps the game's own words (Off 0, On 1); Sharp
+// is On plus our setting futari_sharp_smoothing, stored in futari.ini, so a save never holds a word the game's own
+// Picture page cannot show (smoothing_math.h). For Sharp the gameplay blit sub_82183C68 runs as On (the linear filter
+// and the On shader pair, the same draw on every renderer); on Renut the renderer is told the mode first and redraws that blit sharp
 // (and On's with float bilinear, finer than the sampler's weights), on the default renderer it stays On. Dev aids for the capture runs: futari_dev_smoothing forces a mode without touching
 // the save, and the blit's quad is logged once per change. The Picture page's Smoothing item reads Smooth / Sharp /
 // Off: it holds a menu index, translated from the word on load and back to it on change.
@@ -31,10 +32,16 @@
 REXCVAR_DEFINE_STRING(futari_dev_smoothing, "", "Futari",
                       "Dev: the gameplay Smoothing, 0 Off, 1 On or 4 Sharp bilinear (empty: the save's)")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// Sharp bilinear: ours, not the game's, so it lives here and not in the game save. Picture Setting > Smoothing sets it
+// (Smooth off, Sharp on) and writes it to futari.ini at once; it applies while the game's Smoothing is On.
+REXCVAR_DEFINE_BOOL(futari_sharp_smoothing, false, "Futari",
+                    "Renut: draw the game's Smoothing On as Sharp bilinear (set by Picture Setting > Smoothing)");
 
 namespace {
 
 using futari::smoothing::BlitDrawMode;
+using futari::smoothing::EffectiveSmoothing;
+using futari::smoothing::SmoothingChoice;
 using futari::smoothing::FindSmoothingLabels;
 using futari::smoothing::kDisplayBlockPointer;
 using futari::smoothing::ParseDevSmoothing;
@@ -50,8 +57,6 @@ constexpr uint32_t kDisplaySmoothing = 68;
 constexpr uint32_t kPicturePresetIndex = 28;
 constexpr uint32_t kPicturePresets = 1056;
 constexpr uint32_t kPicturePresetSize = 44;
-// sub_82185E80's flag for the Picture preset's defaults.
-constexpr uint32_t kPictureDefaultsFlag = 0x4;
 // The Picture page: its item vector (first, last), the cursor row and the settings object.
 constexpr uint32_t kPageItemsFirst = 324;
 constexpr uint32_t kPageItemsLast = 328;
@@ -93,8 +98,22 @@ thread_local uint32_t g_blit_entry_sp = 0;
 // The quad last logged (raw words), per guest thread that draws the blit.
 thread_local std::optional<BlitQuad> g_logged_quad;
 
-// The Smoothing word Renut was last told (it starts with the game's shader, as for Off).
+// The Smoothing mode Renut was last told (it starts with the game's shader, as for Off).
 std::atomic<uint32_t> g_told_mode{futari::smoothing::kSmoothingOff};
+
+// Stores our Sharp setting when the Picture page changes it (SetSharpSaver).
+void (*g_sharp_saver)(bool) = nullptr;
+
+void SetSharp(bool sharp) {
+  if (REXCVAR_GET(futari_sharp_smoothing) == sharp) {
+    return;
+  }
+  REXCVAR_SET(futari_sharp_smoothing, sharp);
+  REXLOG_INFO("Smoothing: Sharp bilinear {} (futari_sharp_smoothing)", sharp ? "on" : "off");
+  if (g_sharp_saver) {
+    g_sharp_saver(sharp);
+  }
+}
 
 const std::optional<uint32_t>& DevSmoothing() {
   static const std::optional<uint32_t> value = [] {
@@ -207,7 +226,7 @@ void LoadSmoothingItem(PPCContext& ctx, uint8_t* base, uint32_t item) {
     }
   }
   if (labels == SmoothingLabelSet::kOurs) {
-    REX_STORE_U32(item + kItemValue, SmoothingIndex(word));
+    REX_STORE_U32(item + kItemValue, SmoothingIndex(word, REXCVAR_GET(futari_sharp_smoothing)));
     return;
   }
   REX_STORE_U32(item + kItemValue, SmoothingFallbackIndex(word, count));
@@ -221,6 +240,8 @@ void LoadSmoothingItem(PPCContext& ctx, uint8_t* base, uint32_t item) {
 }  // namespace
 
 namespace futari::smoothing {
+
+void SetSharpSaver(void (*saver)(bool sharp)) { g_sharp_saver = saver; }
 
 void ApplyDevSmoothing(uint8_t* base, uint32_t display_block) {
   const std::optional<uint32_t>& mode = DevSmoothing();
@@ -261,15 +282,18 @@ uint32_t BlitDrawMatrix(uint32_t vertices, uint32_t count) {
 
 }  // namespace futari::smoothing
 
-// The gameplay blit (r4 = its quad): Sharp runs as On, restored after unless the game changed it meanwhile.
+// The gameplay blit (r4 = its quad). Renut is told the mode gameplay draws with: Sharp for On while our setting is on.
+// A stored 4 (the dev value, or a save from a build that stored it) runs as On, restored after unless the game changed
+// it meanwhile.
 REX_EXTERN(__imp__sub_82183C68);
 extern "C" REX_FUNC(sub_82183C68) {
   const uint32_t block = REX_LOAD_U32(kDisplayBlockPointer);
   const uint32_t mode = block != 0 ? REX_LOAD_U32(block + kDisplaySmoothing) : 0;
 #if FUTARI_RENUT_RENDERER
   if (block != 0 && banjo::renut_gpu::Active()) {
-    if (g_told_mode.exchange(mode, std::memory_order_relaxed) != mode) {
-      renut::gpu::SetBlitSmoothing(mode);
+    const uint32_t effective = EffectiveSmoothing(mode, REXCVAR_GET(futari_sharp_smoothing));
+    if (g_told_mode.exchange(effective, std::memory_order_relaxed) != effective) {
+      renut::gpu::SetBlitSmoothing(effective);
     }
   }
 #endif
@@ -288,38 +312,6 @@ extern "C" REX_FUNC(sub_82183C68) {
   }
 }
 
-// Settings defaults (r3 = settings, r4 = the target or 0 for r3, r5 = flags). Flag 0x4 writes the current Picture
-// preset's words with Smoothing = 1; with Renut the default is Sharp bilinear instead. A loaded save never comes here.
-REX_EXTERN(__imp__sub_82185E80);
-extern "C" REX_FUNC(sub_82185E80) {
-  const uint32_t settings = ctx.r3.u32;
-  const uint32_t target_arg = ctx.r4.u32;
-  const uint32_t flags = ctx.r5.u32;
-  __imp__sub_82185E80(ctx, base);
-#if FUTARI_RENUT_RENDERER
-  if ((flags & kPictureDefaultsFlag) == 0 || !banjo::renut_gpu::Active()) {
-    return;
-  }
-  const uint32_t target = target_arg != 0 ? target_arg : settings;
-  // The original clamped the preset index to 0..7 and stored it back; clamped again so no caller can move the write.
-  const uint32_t index = std::min(REX_LOAD_U32(target + kPicturePresetIndex), kPicturePresetLast);
-  const uint32_t word = target + kPicturePresets + kPicturePresetSize * index;
-  if (REX_LOAD_U32(word) != futari::smoothing::kSmoothingOn) {
-    return;
-  }
-  REX_STORE_U32(word, futari::smoothing::ResetSmoothing(true));
-  static bool logged = false;
-  if (!logged) {
-    logged = true;
-    REXLOG_INFO("Smoothing default: Sharp bilinear with Renut");
-  }
-#else
-  (void)settings;
-  (void)target_arg;
-  (void)flags;
-#endif
-}
-
 // Picture page item load (r3 = the page): the game puts the stored word into the Smoothing item's value; the item
 // gets the labels Smooth / Sharp / Off (its third label pushed once; a reload already has it) and the word's index.
 REX_EXTERN(__imp__sub_8219D840);
@@ -333,8 +325,9 @@ extern "C" REX_FUNC(sub_8219D840) {
 }
 
 // Picture page change (r3 = the page, r4 = {new value, old value}, the high word stored for the cursor item): for the
-// relabelled Smoothing item the new value is a menu index, turned into its word here, the stored word kept while it
-// already shows as that index (the game stores the row once without input after each load).
+// relabelled Smoothing item the new value is a menu index, turned into its word here (and our Sharp setting with it),
+// both kept while the stored word already shows as that index (the game stores the row once without input after
+// each load).
 REX_EXTERN(__imp__sub_8219F980);
 extern "C" REX_FUNC(sub_8219F980) {
   const uint32_t page = ctx.r3.u32;
@@ -349,8 +342,12 @@ extern "C" REX_FUNC(sub_8219F980) {
     const int32_t index = static_cast<int32_t>(REX_LOAD_U32(settings + kPicturePresetIndex));
     const uint32_t preset = static_cast<uint32_t>(std::clamp<int32_t>(index, 0, kPicturePresetLast));
     const uint32_t stored = REX_LOAD_U32(settings + kPicturePresets + kPicturePresetSize * preset);
-    const uint32_t value = SmoothingStore(static_cast<uint32_t>(ctx.r4.u64 >> 32), stored);
-    ctx.r4.u64 = (uint64_t(value) << 32) | ctx.r4.u32;
+    const SmoothingChoice choice =
+        SmoothingStore(static_cast<uint32_t>(ctx.r4.u64 >> 32), stored, REXCVAR_GET(futari_sharp_smoothing));
+    if (choice.sharp) {
+      SetSharp(*choice.sharp);
+    }
+    ctx.r4.u64 = (uint64_t(choice.word) << 32) | ctx.r4.u32;
   }
   __imp__sub_8219F980(ctx, base);
 }

@@ -11,7 +11,12 @@
 
 namespace futari::smoothing {
 
-// The game's own values, and the new Sharp bilinear: the game's blit skips its filter code for any value above 3.
+// The game's own values, and Sharp bilinear: the game's blit skips its filter code for any value above 3. Sharp is the
+// mode the renderer is told and the dev value. It is not what a save holds (2026-11-20): the game's own Picture page
+// range-checks the stored word against its two labels, and a build without this menu (v1.5.11 and older, futari-linux,
+// futari-nx) only logs that trap and then reads a label past the end. So the save keeps the game's On, and our own
+// setting, futari_sharp_smoothing, says that On draws Sharp. A save from a build that stored 4 still reads as Sharp,
+// and becomes On the first time its Picture page shows it.
 inline constexpr uint32_t kSmoothingOff = 0;
 inline constexpr uint32_t kSmoothingOn = 1;
 inline constexpr uint32_t kSmoothingSharp = 4;
@@ -36,12 +41,19 @@ inline std::optional<uint32_t> ParseDevSmoothing(std::string_view text) {
   return value;
 }
 
+// The mode gameplay draws with, from the stored word and our Sharp setting: Sharp for On while the setting is on (and
+// for a stored 4), else the word. The game's unused linear modes 2 and 3 are never Sharp.
+constexpr uint32_t EffectiveSmoothing(uint32_t word, bool sharp) {
+  return word == kSmoothingSharp || (sharp && word == kSmoothingOn) ? kSmoothingSharp : word;
+}
+
 // The Picture page's Smoothing item holds a menu index, not the word: Smooth 0, Sharp 1, Off 2, so the game's row
-// step (right +1, ends clamp) goes Smooth -> Sharp -> Off. The game's unused linear modes 2 and 3 show as Smooth,
-// any other unknown word as Off.
-constexpr uint32_t SmoothingIndex(uint32_t word) {
+// step (right +1, ends clamp) goes Smooth -> Sharp -> Off. On shows as Sharp while our setting is on, else as Smooth;
+// the game's unused linear modes 2 and 3 show as Smooth, a stored 4 as Sharp, any other word as Off.
+constexpr uint32_t SmoothingIndex(uint32_t word, bool sharp) {
   switch (word) {
     case kSmoothingOn:
+      return sharp ? 1 : 0;
     case 2:
     case 3:
       return 0;
@@ -52,26 +64,33 @@ constexpr uint32_t SmoothingIndex(uint32_t word) {
   }
 }
 
-// The word an index stores: 0 On, 1 Sharp, anything else Off.
-constexpr uint32_t SmoothingWord(uint32_t index) {
+// What the page stores for an index: the save's word and, where the choice says so, our Sharp setting (empty leaves it).
+struct SmoothingChoice {
+  uint32_t word = kSmoothingOff;
+  std::optional<bool> sharp;
+  constexpr bool operator==(const SmoothingChoice&) const = default;
+};
+
+// Nothing changes while the stored word already shows as that index (the game stores the row once without input after
+// each load, which must not turn a 2 or 3 into 1, nor touch the setting). Otherwise Smooth and Sharp store the game's
+// On with the setting off or on, and Off stores Off and leaves the setting. A stored 4 shown as Sharp is the one word
+// that is rewritten without a change of index: it becomes On with the setting on.
+constexpr SmoothingChoice SmoothingStore(uint32_t index, uint32_t stored, bool sharp) {
+  if (stored == kSmoothingSharp && index == 1) {
+    return {kSmoothingOn, true};
+  }
+  if (SmoothingIndex(stored, sharp) == index) {
+    return {stored, std::nullopt};
+  }
   switch (index) {
     case 0:
-      return kSmoothingOn;
+      return {kSmoothingOn, false};
     case 1:
-      return kSmoothingSharp;
+      return {kSmoothingOn, true};
     default:
-      return kSmoothingOff;
+      return {kSmoothingOff, std::nullopt};
   }
 }
-
-// The word the page stores for an index: the stored word when it already shows as that index (the game stores the
-// row once without input after each load, which must not turn a 2 or 3 into 1), else the index's own word.
-constexpr uint32_t SmoothingStore(uint32_t index, uint32_t stored) {
-  return SmoothingIndex(stored) == index ? stored : SmoothingWord(index);
-}
-
-// The default Smoothing word: Sharp with Renut, the game's On elsewhere (where Sharp would draw as On anyway).
-constexpr uint32_t ResetSmoothing(bool renut) { return renut ? kSmoothingSharp : kSmoothingOn; }
 
 // The item's label for an index: ASCII, at most 15 bytes (it is written into the game's short-string buffer).
 // Off has none: it keeps the game's own "Off".

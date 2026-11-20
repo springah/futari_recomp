@@ -61,18 +61,53 @@ inline std::optional<std::pair<int32_t, int32_t>> ParseResolution(std::string_vi
   return std::pair{*width, *height};
 }
 
+// The window as a save finds it, in the units [Display] resolution is typed in: its client size while it is windowed
+// and visible, and the size it booted at (0 when unknown: a fullscreen boot).
+struct LiveWindow {
+  int32_t width = 0;
+  int32_t height = 0;
+  int32_t booted_width = 0;
+  int32_t booted_height = 0;
+};
+
+// The size a save writes because the player resized the window (2026-11-20; it used to be lost at the next start,
+// which matters now that Renut's frame is the window's size): the live size when it differs from the size the window
+// booted at, or from the typed size when the boot was fullscreen. Nothing when the window is not windowed (no `live`),
+// has no size (minimised) or still has its boot size.
+constexpr std::optional<std::pair<int32_t, int32_t>> ResizedWindow(const std::optional<LiveWindow>& live,
+                                                                   const BootResolution& boot) {
+  if (!live || live->width <= 0 || live->height <= 0) {
+    return std::nullopt;
+  }
+  const bool booted = live->booted_width > 0 && live->booted_height > 0;
+  const int32_t was_width = booted ? live->booted_width : boot.width;
+  const int32_t was_height = booted ? live->booted_height : boot.height;
+  if (was_width <= 0 || was_height <= 0 || (live->width == was_width && live->height == was_height)) {
+    return std::nullopt;
+  }
+  return std::pair{live->width, live->height};
+}
+
 // The resolution to save (width, height; empty when the window_width/height cvars are absent), from those cvars' text.
 // A size the launcher wrote since boot (picked) is a typed frame size and goes out as it is, even when it equals the
 // boot logical size. Otherwise the cvars still at the boot logical size mean nothing changed them: the size as typed
 // goes out. Any other value is taken as typed too. A width or height the next boot would ignore (0, the cvars' default:
 // a hand-set window_width = 0, or an ini whose [Display] resolution the boot rejected; a negative or malformed one)
 // saves nothing like an absent one. F4's "Reset all to defaults" leaves these hidden cvars alone.
+// A window the player resized (ResizedWindow) goes out at its live size, unless a size was picked on F2 since boot:
+// the pick is for the next start and is the later, deliberate choice.
 inline std::pair<std::string, std::string> SavedResolution(std::string_view window_width, std::string_view window_height,
-                                                           bool picked, const BootResolution& boot) {
+                                                           bool picked, const BootResolution& boot,
+                                                           const std::optional<LiveWindow>& live = std::nullopt) {
   const auto width = ParseSize(window_width);
   const auto height = ParseSize(window_height);
   if (!width || !height) {
     return {};
+  }
+  if (!picked) {
+    if (const auto resized = ResizedWindow(live, boot)) {
+      return {std::to_string(resized->first), std::to_string(resized->second)};
+    }
   }
   if (!picked && boot.width && *width == boot.logical_width && *height == boot.logical_height) {
     return {std::to_string(boot.width), std::to_string(boot.height)};
