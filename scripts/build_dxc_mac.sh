@@ -30,7 +30,9 @@ if [ ! -d "$WORK/src" ]; then
   git clone --depth 1 -b "$VERSION" --recurse-submodules --shallow-submodules \
     https://github.com/microsoft/DirectXShaderCompiler.git "$WORK/src"
 fi
-sed -i '' 's/^  cmake_policy(SET CMP0051 OLD)/  # cmake_policy(SET CMP0051 OLD)  futari: CMake 4 refuses OLD/' "$WORK/src/CMakeLists.txt"
+# -i.bak, not -i '': the first form is the one both the system (BSD) sed and a Homebrew GNU sed accept.
+sed -i.bak 's/^  cmake_policy(SET CMP0051 OLD)/  # cmake_policy(SET CMP0051 OLD)  futari: CMake 4 refuses OLD/' "$WORK/src/CMakeLists.txt"
+rm -f "$WORK/src/CMakeLists.txt.bak"
 
 # The dylib ships in the .app, and LLVM's assertion and diagnostic strings record source paths: map the work
 # directory to "." so they do not carry the build machine's directory names (256 such strings up to v1.5.10).
