@@ -200,22 +200,27 @@ jobs:
           ./indexed_vertices_test
 
   identity:
-    name: Commit identity (springah/noreply)
-    # Maintainer pushes only. Outside contributors have their own identities and
-    # must not be failed for it -- this guard exists to catch a local git config
-    # slip leaking a real address into a public repo, not to gate contributions.
-    if: github.event_name == 'push' && github.repository_owner == 'springah'
+    name: Commit identity (GitHub noreply addresses)
+    # Pushes to the project's own repository only, whoever owns it: a fork is a
+    # contributor's own space, and their identity there is their business. This
+    # guard exists to catch a local git config slip leaking a real e-mail
+    # address into a public repo, not to gate contributions. So it accepts any
+    # GitHub noreply address (every maintainer has one: Settings > Emails >
+    # "Keep my email addresses private") and the address GitHub itself commits
+    # with for merges and edits made on the website.
+    if: github.event_name == 'push' && !github.event.repository.fork
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Reject non-springah author/committer on pushed commits
+      - name: Reject a non-noreply author/committer address on pushed commits
         env:
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
         run: |
-          ok="321120+springah@users.noreply.github.com"
+          # <id>+<login>@users.noreply.github.com, the older <login>@users.noreply.github.com, or GitHub's own.
+          ok_re='^([0-9]+\+)?[A-Za-z0-9-]+(\[bot\])?@users\.noreply\.github\.com$|^noreply@github\.com$'
           # New-branch pushes report an all-zero "before"; fall back to HEAD only.
           if [ -z "${BEFORE//0/}" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             range="-1 $AFTER"
@@ -225,8 +230,8 @@ jobs:
           fail=0
           while read -r sha ae ce; do
             [ -n "$sha" ] || continue
-            if [ "$ae" != "$ok" ]; then echo "::error::$sha author '$ae' != $ok"; fail=1; fi
-            if [ "$ce" != "$ok" ]; then echo "::error::$sha committer '$ce' != $ok"; fail=1; fi
+            if ! [[ "$ae" =~ $ok_re ]]; then echo "::error::$sha author '$ae' is not a GitHub noreply address"; fail=1; fi
+            if ! [[ "$ce" =~ $ok_re ]]; then echo "::error::$sha committer '$ce' is not a GitHub noreply address"; fail=1; fi
           done <<< "$(git log --format='%H %ae %ce' $range)"
           [ "$fail" -eq 0 ] && echo "identity OK"
           exit $fail

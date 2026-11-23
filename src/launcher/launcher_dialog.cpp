@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -156,6 +157,14 @@ bool WriteRendererLine(const std::filesystem::path& ini_path, bool renut, std::s
       return false;
     }
     out << merged;
+    out.close();
+    if (!out) {
+      // A full disk: the short file must not replace the good one.
+      std::error_code rm;
+      std::filesystem::remove(tmp, rm);
+      error = "cannot write " + Utf8(tmp) + " (disk full?)";
+      return false;
+    }
   }
   std::error_code ec;
   std::filesystem::rename(tmp, ini_path, ec);
@@ -173,8 +182,7 @@ LauncherDialog::LauncherDialog(rex::ui::ImGuiDrawer* drawer, Env env, Mode mode)
   if (mode == Mode::kSetup && env_.auto_source.empty()) {
     // --futari_setup over a game that is already in place: the Done page (Play / Settings / Quit), not the
     // "this build contains no game data" page (seen 2026-11-04 on macOS).
-    std::error_code ec;
-    if (std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec)) {
+    if (GameInPlace(env_.assets_dir)) {
       page_ = Page::kDone;
     }
   }
@@ -213,8 +221,7 @@ void LauncherDialog::OnDraw(ImGuiIO& io) {
   if (!stale_redo_started_ && mode_ == Mode::kSetup && env_.auto_source.empty() &&
       (page_ == Page::kSetup || page_ == Page::kDone) && package_stale_ && env_.renut_available &&
       !worker_.joinable()) {
-    std::error_code ec;
-    if (std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec)) {
+    if (GameInPlace(env_.assets_dir)) {
       stale_redo_started_ = true;
       REXLOG_WARN("Launcher: the Renut shaders were made by a different build; redoing them");
       after_work_ = Page::kDone;
@@ -324,8 +331,15 @@ void LauncherDialog::DrawFooterNote() {
 }
 
 void LauncherDialog::DrawSetup() {
-  WrappedText("This build contains no game data. It runs from your own copy of Mushihimesama Futari Ver 1.5 "
-              "(Xbox 360). Pick what you have:");
+  if (ExtractionUnfinished(env_.assets_dir)) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.45f, 1.0f));
+    WrappedText("The last extraction did not finish, so the game data in place is incomplete. Pick your copy "
+                "again:");
+    ImGui::PopStyleColor();
+  } else {
+    WrappedText("This build contains no game data. It runs from your own copy of Mushihimesama Futari Ver 1.5 "
+                "(Xbox 360). Pick what you have:");
+  }
   ImGui::Spacing();
   const bool busy = picker_.pending();
   ImGui::BeginDisabled(busy);
@@ -445,8 +459,7 @@ void LauncherDialog::DrawDone() {
   }
   ImGui::Spacing();
   ImGui::Separator();
-  std::error_code ec;
-  const bool have_game = std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec);
+  const bool have_game = GameInPlace(env_.assets_dir);
   const bool can_play = have_game && !env_.in_game && env_.on_play;
   if (can_play) {
     FocusHere();
@@ -476,8 +489,7 @@ void LauncherDialog::DrawDone() {
 }
 
 void LauncherDialog::DrawSettings() {
-  std::error_code ec;
-  const bool have_game = std::filesystem::is_regular_file(env_.assets_dir / "default.xex", ec);
+  const bool have_game = GameInPlace(env_.assets_dir);
   if (env_.renut_available) {
     ImGui::TextUnformatted("Renderer");
     ImGui::SameLine();
@@ -667,15 +679,39 @@ void LauncherDialog::StartExtraction(const std::filesystem::path& source) {
   stale_redo_started_ = stale_redo_started_ || shaders;
   Progress* progress = progress_.get();
   worker_ = std::thread([this, source, shaders, progress] {
-    extract_result_ = ExtractGame(source, env_.assets_dir, env_.dlc_dir, *progress);
+    // Nothing may leave the thread as an exception (that ends the process): a damaged source can still make the
+    // filesystem calls or an allocation throw. What was written stays marked unfinished (GameInPlace).
+    try {
+      extract_result_ = ExtractGame(source, env_.assets_dir, env_.dlc_dir, *progress);
+    } catch (const std::exception& e) {
+      extract_result_ = {};
+      extract_result_.message = std::string("the extraction stopped on an error: ") + e.what();
+    } catch (...) {
+      extract_result_ = {};
+      extract_result_.message = "the extraction stopped on an unknown error";
+    }
     if (extract_result_.status == ExtractResult::Status::kOk && shaders && !progress->cancel.load()) {
       ran_shaders_ = true;
       progress->Log("");
       progress->Log("Preparing the Renut renderer's shaders (vulkan_spirv.bin)...");
-      shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir, env_.user_data_dir}, *progress);
+      shader_result_ = RunShaderPackage(*progress);
     }
     worker_done_.store(true);
   });
+}
+
+ShaderResult LauncherDialog::RunShaderPackage(Progress& progress) {
+  try {
+    return MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir, env_.user_data_dir}, progress);
+  } catch (const std::exception& e) {
+    ShaderResult failed;
+    failed.message = std::string("stopped on an error: ") + e.what();
+    return failed;
+  } catch (...) {
+    ShaderResult failed;
+    failed.message = "stopped on an unknown error";
+    return failed;
+  }
 }
 
 void LauncherDialog::StartShaders() {
@@ -693,7 +729,7 @@ void LauncherDialog::StartShaders() {
   GoTo(Page::kWorking);
   Progress* progress = progress_.get();
   worker_ = std::thread([this, progress] {
-    shader_result_ = MakeShaderPackage({env_.exe, env_.exe_dir, env_.assets_dir, env_.user_data_dir}, *progress);
+    shader_result_ = RunShaderPackage(*progress);
     worker_done_.store(true);
   });
 }

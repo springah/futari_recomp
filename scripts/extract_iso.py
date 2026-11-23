@@ -328,8 +328,36 @@ def find_volume_descriptor(f):
     return None
 
 
+# Limits for a directory table read off a disc image, which may be damaged: the
+# game's own tables are a few kilobytes and three levels deep. Past these the
+# image is corrupt; without them a table that names itself as its own
+# subdirectory recurses until Python gives up, and a size field of 0xFFFFFFFF
+# reads 4 GiB. src/launcher/game_source.cpp carries the same two numbers.
+MAX_DIRECTORY_BYTES = 16 << 20
+MAX_DIRECTORY_DEPTH = 32
+
+# The marker of an extraction that is under way or did not finish. It goes into
+# the assets folder before the first game file and comes out only when
+# everything is whole; the exe (GameInPlace in src/launcher/game_source.cpp)
+# shows its setup screen again while it is there instead of starting the game.
+INCOMPLETE_MARKER = "futari_extract_incomplete"
+
+
+def mark_incomplete(out_dir: Path):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / INCOMPLETE_MARKER).write_text(
+        "An extraction into this folder was started and did not finish: the game data here is incomplete.\n"
+        "Run the setup again (start the game, or extract_assets.bat); it removes this file when it succeeds.\n")
+
+
+def game_in_place(out_dir: Path) -> bool:
+    return (out_dir / "default.xex").is_file() and not (out_dir / INCOMPLETE_MARKER).exists()
+
+
 def read_directory(f, fs_base, sector, size):
     """Parse a flat XDVDFS directory table and return list of entry dicts."""
+    if size > MAX_DIRECTORY_BYTES:
+        return []  # extract_tree reports it
     f.seek(fs_base + sector * SECTOR_SIZE)
     data = f.read(size)
     entries = []
@@ -371,17 +399,38 @@ def read_directory(f, fs_base, sector, size):
 PROBLEMS = []
 
 
+_DEVICE_NAMES = {"CON", "PRN", "AUX", "NUL"} | {f"{d}{n}" for d in ("COM", "LPT") for n in "123456789"}
+
+
 def safe_name(name: str) -> bool:
-    """Reject entry names that would write outside the output directory."""
-    return not (
-        name in ("", ".", "..")
-        or "/" in name
-        or "\\" in name
-        or ":" in name
-    )
+    """Reject entry names that would write outside the output directory, and
+    the ones Windows would not store as the file they name: control and
+    reserved characters, a trailing dot or space, and the device names (a file
+    called NUL opens the null device and would count as extracted)."""
+    if name in ("", ".", "..") or name[-1] in ". ":
+        return False
+    if any(ord(c) < 0x20 or c in '/\\:<>"|?*' for c in name):
+        return False
+    return name.split(".")[0].upper() not in _DEVICE_NAMES
 
 
-def extract_tree(f, fs_base, sector, size, dest: Path, rel=""):
+def extract_tree(f, fs_base, sector, size, dest: Path, rel="", depth=0, walked=None):
+    if size == 0:
+        return  # an empty directory (its folder is already made)
+    walked = set() if walked is None else walked
+    why = None
+    if size > MAX_DIRECTORY_BYTES:
+        why = f"a directory table of {size:,} bytes (corrupt image)"
+    elif depth > MAX_DIRECTORY_DEPTH:
+        why = f"directories nested more than {MAX_DIRECTORY_DEPTH} deep (corrupt image)"
+    elif sector in walked:
+        why = "a directory table that is listed twice (corrupt image)"
+    if why:
+        where = rel or "the root directory"
+        PROBLEMS.append(f"{where}: {why}, skipped")
+        print(f"  SKIPPED    {where}  ({why})")
+        return
+    walked.add(sector)
     entries = read_directory(f, fs_base, sector, size)
     for e in entries:
         rel_path  = f"{rel}/{e['name']}" if rel else e["name"]
@@ -392,7 +441,7 @@ def extract_tree(f, fs_base, sector, size, dest: Path, rel=""):
         item_path = dest / e["name"]
         if e["is_dir"]:
             item_path.mkdir(parents=True, exist_ok=True)
-            extract_tree(f, fs_base, e["start_sector"], e["size"], item_path, rel_path)
+            extract_tree(f, fs_base, e["start_sector"], e["size"], item_path, rel_path, depth + 1, walked)
         else:
             item_path.parent.mkdir(parents=True, exist_ok=True)
             f.seek(fs_base + e["start_sector"] * SECTOR_SIZE)
@@ -467,7 +516,7 @@ def copy_loose_dump(src: Path, out_dir: Path, dlc_packages):
     if src == out_dir:
         print(f"{src} is already the assets folder; nothing to copy.")
         return
-    if out_dir.is_relative_to(src):
+    if src in out_dir.parents:  # not Path.is_relative_to: that needs Python 3.9
         # The game files sit loose beside the exe (or above it): copying the folder into its own assets/ would
         # drag the port, its logs and a nested assets/ along. Only the game's own files, then.
         print(f"{src} contains the assets folder; copying only the game files (default.xex, media, ...)")
@@ -549,7 +598,7 @@ def main():
         god_header, iso_path, dlc, loose_dir = classify_source(src)
     else:
         candidates = list(Path(".").glob("*.iso")) + list(Path("game").glob("*.iso"))
-        if not candidates and (Path(args.out) / "default.xex").is_file():
+        if not candidates and game_in_place(Path(args.out)):
             # Nothing dragged on, but assets/ is already populated (the "just put
             # them in assets" route): only the shader translation is left to do.
             print(f"{args.out}/ already holds the game (default.xex found); nothing to extract.")
@@ -571,6 +620,9 @@ def main():
     disc = None
 
     if loose_dir is not None:
+        # Picking the assets folder itself copies nothing, so it starts nothing that could be left half done.
+        if loose_dir.resolve() != out_dir.resolve():
+            mark_incomplete(out_dir)
         copy_loose_dump(loose_dir, out_dir, dlc)
 
     if god_header is not None:
@@ -608,6 +660,8 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"  Root dir: sector {root_sector}, size {root_size} bytes")
         print(f"Extracting to {out_dir}/")
+        # From here on files land in the assets folder: until the last check below passes, it is not a game.
+        mark_incomplete(out_dir)
         extract_tree(disc, fs_base, root_sector, root_size, out_dir)
         disc.close()
 
@@ -631,7 +685,7 @@ def main():
         sys.exit(1)
 
     if disc is None and loose_dir is None:
-        if (out_dir / "default.xex").is_file():
+        if game_in_place(out_dir):
             print(f"\nDLC installed. ({out_dir}/ already holds the game; left alone.)")
             return
         print("\nDLC installed, but that path holds no game: drag your disc .iso or your "
@@ -652,6 +706,10 @@ def main():
         if xex != target:
             shutil.copy2(xex, target)
         print(f"\ndefault.xex -> {target}")
+        # Complete: no problems above, default.xex in place.
+        marker = out_dir / INCOMPLETE_MARKER
+        if marker.exists():
+            marker.unlink()
         rc = translate_shaders(out_dir)
         if rc:
             print(SHADERS_FAILED)

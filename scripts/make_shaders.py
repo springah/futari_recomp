@@ -22,7 +22,8 @@ header and the early-alpha pass, no executable):
      does: XenosRecomp (hedge-dev's Xbox 360 shader translator, Renut's build of it) is built into the exe, and writes
      the shaders as the SPIR-V package the renderer reads.
   3. The work folder (game data) is deleted.
-Needs nothing but Python 3. On macOS the executable is Contents/MacOS/futari inside the app, the compiler is
+Needs nothing but Python 3; with numpy installed as well (pip install numpy) the early-alpha pass can do its work,
+without it that pass changes nothing and says so (the package then equals the setup screen's). On macOS the executable is Contents/MacOS/futari inside the app, the compiler is
 Contents/lib/libdxcompiler.dylib and the other tool files are in Contents/Resources/renut_tools (the exe's own F2
 "Prepare the shaders" uses the same files, in one pass without the early-alpha rewrite; this script runs both passes).
 """

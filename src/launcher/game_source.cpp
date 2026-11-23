@@ -7,7 +7,10 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <cctype>
+#include <fstream>
 #include <memory>
+#include <set>
 #include <system_error>
 
 #include <rex/filesystem.h>
@@ -424,7 +427,17 @@ struct DirEntry {
   bool is_dir = false;
 };
 
+// Limits for a directory table read off a disc image, which may be damaged: the game's own tables are a few
+// kilobytes and three levels deep. Past these the image is corrupt, and without them a table that names itself as its
+// own subdirectory recurses until the stack is gone, and a size field of 0xFFFFFFFF asks for 4 GiB.
+// scripts/extract_iso.py carries the same two numbers.
+constexpr uint32_t kMaxDirectoryBytes = 16u << 20;
+constexpr int kMaxDirectoryDepth = 32;
+
 std::vector<DirEntry> ReadDirectory(Disc& disc, uint64_t fs_base, uint32_t sector, uint32_t size) {
+  if (size > kMaxDirectoryBytes) {
+    return {};  // the callers report it (DirectoryProblem below)
+  }
   std::vector<uint8_t> data(size);
   const size_t got = disc.ReadAt(fs_base + uint64_t(sector) * kSectorSize, data.data(), size);
   data.resize(got);
@@ -452,10 +465,30 @@ std::vector<DirEntry> ReadDirectory(Disc& disc, uint64_t fs_base, uint32_t secto
   return entries;
 }
 
-// Rejects entry names that would write outside the output directory.
+// Rejects entry names that would write outside the output directory, and the ones Windows would not store as the
+// file they name: control and reserved characters, a trailing dot or space, and the device names (a file called NUL
+// opens the null device, takes every byte and would count as extracted).
 bool SafeName(const std::string& name) {
-  return !(name.empty() || name == "." || name == ".." || name.find('/') != std::string::npos ||
-           name.find('\\') != std::string::npos || name.find(':') != std::string::npos);
+  if (name.empty() || name == "." || name == ".." || name.back() == '.' || name.back() == ' ') {
+    return false;
+  }
+  for (const char c : name) {
+    if (static_cast<unsigned char>(c) < 0x20 || std::strchr("/\\:<>\"|?*", c)) {
+      return false;
+    }
+  }
+  std::string stem = name.substr(0, name.find('.'));
+  for (char& c : stem) {
+    c = char(std::toupper(static_cast<unsigned char>(c)));
+  }
+  if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL") {
+    return false;
+  }
+  if (stem.size() == 4 && (stem.compare(0, 3, "COM") == 0 || stem.compare(0, 3, "LPT") == 0) && stem[3] >= '1' &&
+      stem[3] <= '9') {
+    return false;
+  }
+  return true;
 }
 
 struct Extractor {
@@ -465,16 +498,48 @@ struct Extractor {
   std::vector<std::string>& problems;
   size_t files = 0;
   uint64_t total_bytes = 0, done_bytes = 0;
+  std::set<uint32_t> walked;  // the directory tables Tree has entered, by sector: a second visit is a loop
 
-  uint64_t Measure(uint32_t sector, uint32_t size) {
+  // Why a directory table is not walked; empty when it may be.
+  static std::string DirectoryProblem(uint32_t size, int depth) {
+    if (size > kMaxDirectoryBytes) {
+      return "a directory table of " + Thousands(size) + " bytes (corrupt image)";
+    }
+    if (depth > kMaxDirectoryDepth) {
+      return "directories nested more than " + std::to_string(kMaxDirectoryDepth) + " deep (corrupt image)";
+    }
+    return {};
+  }
+
+  // The size of everything Tree will write, for the progress bar. Silent about a damaged table: Tree reports it.
+  uint64_t Measure(uint32_t sector, uint32_t size, std::set<uint32_t>& seen, int depth = 0) {
+    // size 0: an empty directory, with nothing to read (several may share one sector number, so not in `seen`).
+    if (size == 0 || progress.cancel.load() || !DirectoryProblem(size, depth).empty() ||
+        !seen.insert(sector).second) {
+      return 0;
+    }
     uint64_t bytes = 0;
     for (const auto& e : ReadDirectory(disc, fs_base, sector, size)) {
-      bytes += e.is_dir ? Measure(e.start_sector, e.size) : e.size;
+      bytes += e.is_dir ? Measure(e.start_sector, e.size, seen, depth + 1) : e.size;
     }
     return bytes;
   }
 
-  void Tree(uint32_t sector, uint32_t size, const std::filesystem::path& dest, const std::string& rel) {
+  void Tree(uint32_t sector, uint32_t size, const std::filesystem::path& dest, const std::string& rel,
+            int depth = 0) {
+    if (size == 0) {
+      return;  // an empty directory (its folder is already made); see Measure
+    }
+    std::string why = DirectoryProblem(size, depth);
+    if (why.empty() && !walked.insert(sector).second) {
+      why = "a directory table that is listed twice (corrupt image)";
+    }
+    if (!why.empty()) {
+      const std::string where = rel.empty() ? std::string("the root directory") : rel;
+      problems.push_back(where + ": " + why + ", skipped");
+      progress.Log("  SKIPPED    " + where + "  (" + why + ")");
+      return;
+    }
     std::error_code ec;
     std::vector<uint8_t> buffer(1 << 16);
     for (const auto& e : ReadDirectory(disc, fs_base, sector, size)) {
@@ -490,7 +555,7 @@ struct Extractor {
       const std::filesystem::path item = dest / e.name;
       if (e.is_dir) {
         std::filesystem::create_directories(item, ec);
-        Tree(e.start_sector, e.size, item, rel_path);
+        Tree(e.start_sector, e.size, item, rel_path, depth + 1);
         continue;
       }
       std::filesystem::create_directories(item.parent_path(), ec);
@@ -642,7 +707,12 @@ size_t CopyLooseDump(const std::filesystem::path& src_in, const std::filesystem:
         files += CopyTree(item, out / name, {}, progress, problems);
       } else if (std::filesystem::is_regular_file(item, ec)) {
         std::filesystem::copy_file(item, out / name, std::filesystem::copy_options::overwrite_existing, ec);
-        ++files;
+        if (ec) {
+          problems.push_back(std::string(name) + ": " + ec.message());
+          ec.clear();
+        } else {
+          ++files;
+        }
       }
     }
     return files;
@@ -671,6 +741,32 @@ std::vector<std::string> Progress::Snapshot(float& fraction_out) {
   std::lock_guard<std::mutex> lock(mutex);
   fraction_out = fraction;
   return lines;
+}
+
+namespace {
+
+// The marker of an extraction that is under way or did not finish; see GameInPlace in the header.
+constexpr char kIncompleteMarker[] = "futari_extract_incomplete";
+
+void MarkIncomplete(const std::filesystem::path& assets_dir) {
+  std::error_code ec;
+  std::filesystem::create_directories(assets_dir, ec);
+  std::ofstream(assets_dir / kIncompleteMarker, std::ios::binary | std::ios::trunc)
+      << "An extraction into this folder was started and did not finish: the game data here is incomplete.\n"
+         "Run the setup again (start the game, or extract_assets.bat); it removes this file when it succeeds.\n";
+}
+
+}  // namespace
+
+bool GameInPlace(const std::filesystem::path& assets_dir) {
+  std::error_code ec;
+  return std::filesystem::is_regular_file(assets_dir / "default.xex", ec) &&
+         !std::filesystem::exists(assets_dir / kIncompleteMarker, ec);
+}
+
+bool ExtractionUnfinished(const std::filesystem::path& assets_dir) {
+  std::error_code ec;
+  return std::filesystem::exists(assets_dir / kIncompleteMarker, ec);
 }
 
 bool IsLooseDump(const std::filesystem::path& dir) {
@@ -764,6 +860,10 @@ ExtractResult ExtractGame(const std::filesystem::path& source, const std::filesy
   std::unique_ptr<Disc> disc;
   std::unique_ptr<GodDisc> god;
   if (info.kind == SourceKind::kLooseFolder) {
+    // Picking the assets folder itself copies nothing, so it starts nothing that could be left half done.
+    if (std::filesystem::weakly_canonical(info.loose, ec) != std::filesystem::weakly_canonical(assets_dir, ec)) {
+      MarkIncomplete(assets_dir);
+    }
     result.files = CopyLooseDump(info.loose, assets_dir, info.dlc, progress, result.problems);
   } else if (info.kind == SourceKind::kConsoleInstall) {
     progress.Log("Opening console disc install: " + Utf8(info.god_header));
@@ -823,7 +923,12 @@ ExtractResult ExtractGame(const std::filesystem::path& source, const std::filesy
     progress.Log("  Root dir: sector " + std::to_string(root_sector) + ", size " + std::to_string(root_size) + " bytes");
     progress.Log("Extracting to " + Utf8(assets_dir) + "/");
     Extractor ex{d, fs_base, progress, result.problems};
-    ex.total_bytes = ex.Measure(root_sector, root_size);
+    {
+      std::set<uint32_t> seen;
+      ex.total_bytes = ex.Measure(root_sector, root_size, seen);
+    }
+    // From here on files land in assets/: until the last check below passes, the folder is not a game.
+    MarkIncomplete(assets_dir);
     ex.Tree(root_sector, root_size, assets_dir, "");
     result.files = ex.files;
   }
@@ -851,7 +956,7 @@ ExtractResult ExtractGame(const std::filesystem::path& source, const std::filesy
   }
 
   if (info.kind == SourceKind::kDlcOnly) {
-    if (std::filesystem::is_regular_file(assets_dir / "default.xex", ec)) {
+    if (GameInPlace(assets_dir)) {
       result.status = ExtractResult::Status::kOk;
       result.message = "DLC installed (the game data was already in place).";
       return result;
@@ -876,6 +981,7 @@ ExtractResult ExtractGame(const std::filesystem::path& source, const std::filesy
     return result;
   }
   progress.Log("default.xex -> " + Utf8(xex));
+  std::filesystem::remove(assets_dir / kIncompleteMarker, ec);  // complete: no problems, default.xex in place
   result.status = ExtractResult::Status::kOk;
   result.message = "Game data in place: " + std::to_string(result.files) + " files in " + Utf8(assets_dir) + "/" +
                    (result.dlc_installed ? ", " + std::to_string(result.dlc_installed) + " DLC package(s) in " +

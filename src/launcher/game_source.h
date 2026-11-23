@@ -57,6 +57,15 @@ SourceInfo ClassifySource(const std::filesystem::path& path);
 
 bool IsLooseDump(const std::filesystem::path& dir);
 
+// Is there a game to start in `assets_dir`? default.xex is there AND no extraction was left unfinished. ExtractGame
+// puts a marker file (futari_extract_incomplete) into assets/ before it writes the first game file and removes it
+// only when everything came out whole, so a cancelled, failed or crashed extraction is asked for again at the next
+// start instead of being played from. scripts/extract_iso.py keeps the same marker. Use this, never a bare test for
+// default.xex.
+bool GameInPlace(const std::filesystem::path& assets_dir);
+// The marker alone: something was extracted here and did not finish (for the message on the setup screen).
+bool ExtractionUnfinished(const std::filesystem::path& assets_dir);
+
 struct ExtractResult {
   enum class Status { kOk, kFailed, kDlcOnly, kCancelled };
   Status status = Status::kFailed;
@@ -68,7 +77,7 @@ struct ExtractResult {
 
 // The whole job: classify, verify, extract or copy, install the DLC, make sure assets/default.xex is in place.
 // Worker thread. `assets_dir` is the game data root (the exe's assets/ unless --game_data_root), `dlc_dir` the
-// exe's dlc/. Cancelling leaves whatever was written (the next run overwrites it).
+// exe's dlc/. Cancelling leaves whatever was written (the next run overwrites it) and the marker GameInPlace reads.
 ExtractResult ExtractGame(const std::filesystem::path& source, const std::filesystem::path& assets_dir,
                           const std::filesystem::path& dlc_dir, Progress& progress);
 

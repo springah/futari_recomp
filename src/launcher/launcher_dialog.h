@@ -95,6 +95,7 @@ class LauncherDialog final : public rex::ui::ImGuiDialog {
   void UseSource(const std::filesystem::path& source);
   void StartExtraction(const std::filesystem::path& source);
   void StartShaders();
+  ShaderResult RunShaderPackage(Progress& progress);  // worker thread: MakeShaderPackage, no exception escapes
   void PollWorker();
   void PollPicker();
   void FinishPlay();

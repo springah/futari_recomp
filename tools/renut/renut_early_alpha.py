@@ -204,6 +204,11 @@ def main():
     trials = int(args[args.index('--trials') + 1]) if '--trials' in args else 24
     jobs = int(args[args.index('--jobs') + 1]) if '--jobs' in args else max(1, (os.cpu_count() or 2) // 2)
     paths = sorted(glob.glob(os.path.join(folder, 'ps_*.hlsl')))
+    if ea.np is None:
+        # Without numpy early_alpha.py cannot check a rewrite, so it makes none: every shader comes back
+        # "unsupported" and this pass changes nothing. Say so, or the only trace is the count below.
+        print('renut_early_alpha.py: numpy is not installed, so the early-alpha pass changes nothing (the picture is '
+              'the same; a few pixel shaders run slower). To get it: pip install numpy', file=sys.stderr)
     if jobs > 1:
         import multiprocessing
         with multiprocessing.Pool(jobs) as pool:

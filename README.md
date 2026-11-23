@@ -178,8 +178,10 @@ console, and lists checksums to verify the result.
 Needs CMake 3.25+, Ninja, **LLVM/clang-cl** 20+ (at `C:\Program Files\LLVM`),
 **Visual Studio 2022 Build Tools** with the Desktop C++ workload (clang-cl targets
 the MSVC ABI, so it needs those headers and libs — plus `rc.exe` from the bundled
-Windows SDK), Python 3.8+ with the `xxhash` module (`pip install xxhash`; the
-shader dump below needs it), and git + bash.
+Windows SDK), Python 3.8+ with the `xxhash` and `numpy` modules
+(`pip install xxhash numpy`; the shader dump below needs xxhash, and without
+numpy the shader build's early-alpha pass silently changes nothing), and
+git + bash.
 
 **Quick start (Windows):** [`build.ps1`](build.ps1) does all of the below in one
 go. It installs whatever is missing from that list via winget, enters the Visual
@@ -292,7 +294,7 @@ distribution's clang 20+ plus the Vulkan headers and loader.
 cmake --preset mac-arm64 -S thirdparty/rexglue-sdk   -DCMAKE_C_COMPILER=/opt/homebrew/opt/llvm/bin/clang   -DCMAKE_CXX_COMPILER=/opt/homebrew/opt/llvm/bin/clang++   # Linux: your clang/clang++
 cmake --build thirdparty/rexglue-sdk/out/build/mac-arm64 --config Release --target rexglue
 
-# 3.–4. as above (pip3 install xxhash first)
+# 3.–4. as above (pip3 install xxhash numpy first)
 python3 scripts/extract_iso.py "Mushihimesama Futari Ver 1.5.iso" --out assets/
 bash scripts/regen.sh
 bash scripts/renut_shader_dump.sh
@@ -350,7 +352,9 @@ Known limits of v1.5.12:
   `extract_assets.bat` (through `make_shaders.py`) runs two passes around an
   early-alpha rewrite. A few pixel shaders run slower from the setup screen's
   package; the picture is the same. Run the batch file with nothing dragged on
-  to get the optimised package.
+  to get the optimised package (that pass needs Python's numpy module:
+  `pip install numpy`; without it the batch file's package is the same as the
+  setup screen's, and it says so).
 
 Two recompiler issues from earlier versions, both fixed: the shell's one
 inexpressible branch (a pointer-scan false positive split `sub_82081658` at

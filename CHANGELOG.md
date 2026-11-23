@@ -4,6 +4,42 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+From a read-through of the port's own code on 2026-11-23, before handing it on
+([#11](https://github.com/springah/futari_recomp/issues/11)).
+
+- **A damaged disc image no longer ends the program during setup.** The
+  directory walk had no limits: a table that lists itself as its own
+  subdirectory recursed until the stack was gone, and a size field of
+  0xFFFFFFFF asked for 4 GiB. Tables are now capped at 16 MiB and 32 levels,
+  one that is listed twice is refused, and nothing leaves the setup's worker
+  thread as an exception. Entry names Windows would not store as the file they
+  name (NUL, CON, a trailing dot, `?`, `*` and the like) are refused as unsafe.
+  `extract_iso.py` has the same limits and the same name check.
+- **An extraction that did not finish is asked for again.** A cancelled or
+  failed extraction left `default.xex` behind, and every later start took that
+  for an installed game. The extractor now puts a marker file,
+  `futari_extract_incomplete`, into `assets/` before the first game file and
+  removes it only when everything came out whole; while it is there the setup
+  screen comes back and says why. `extract_iso.py` keeps the same marker.
+- **A full disk cannot cut `futari.ini` short.** Both places that write it
+  (the F4 / title save and the F2 settings screen) replaced the file with
+  their temporary copy without checking that the copy had been written.
+- **A failed shader dump ends with exit code 2.** `--futari_renut_dump_shaders`
+  set the code and never used it; the process always ended with 0.
+- **`stage_win_zip.sh`** finds a Python that runs (`python3`, `python`,
+  `py -3`, or `PYTHON=`), refuses a version that is not the tree's and the
+  exe's, and refuses a build-tree `futari.ini` with a path of the machine or a
+  renderer line in it.
+- **The commit identity check** in CI accepts any GitHub noreply address and
+  runs on the project's own repository whoever owns it, so a second
+  maintainer can push here.
+- **numpy** is named where it is needed (README, RUN.txt, `make_shaders.py`),
+  `build.ps1` installs it with xxhash, and the early-alpha pass says so when
+  it is missing instead of silently changing nothing. `extract_iso.py` no
+  longer needs Python 3.9.
+
 ## v1.5.12 — 2026-11-20 (Windows, macOS)
 
 The Renut work in this release is Decidetto's

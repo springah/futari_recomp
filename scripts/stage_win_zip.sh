@@ -27,6 +27,25 @@ STAGE="$ROOT/out/_stage/$NAME"
 ZIP="$ROOT/out/$NAME-v$VER.zip"
 
 [ -f "$BUILD_DIR/futari.exe" ] || { echo "no $BUILD_DIR/futari.exe"; exit 1; }
+# Python for the zip step, found before anything is staged: a python.org install on Windows has python.exe and py.exe
+# but no python3, and the Store's python3 is a stub that prints a hint and fails. PYTHON=<command> overrides.
+PY=""
+for cand in "${PYTHON:-}" python3 python "py -3"; do
+  # shellcheck disable=SC2086  # "py -3" is a command with an argument
+  if [ -n "$cand" ] && $cand -c 'import zipfile' >/dev/null 2>&1; then PY="$cand"; break; fi
+done
+[ -n "$PY" ] || { echo "no working Python 3 found (tried \$PYTHON, python3, python, py -3)"; exit 1; }
+# The version on the command line names the zip; it must be the version of the tree and of the exe being zipped
+# (a suffix such as -rc1 is allowed). A stale build tree would otherwise ship the previous exe under the new name.
+TREE_VER="$(sed -n 's/^project(futari VERSION \([0-9][0-9.]*\).*/\1/p' "$ROOT/CMakeLists.txt")"
+[ -n "$TREE_VER" ] || { echo "cannot read the version from $ROOT/CMakeLists.txt"; exit 1; }
+case "$VER" in
+  "$TREE_VER"|"$TREE_VER"-*) ;;
+  *) echo "REFUSED: asked for $VER, but CMakeLists.txt says $TREE_VER"; exit 1 ;;
+esac
+EXE_VER="$(grep -a -o -E 'Mushihimesama Futari v[0-9][0-9.]*' "$BUILD_DIR/futari.exe" | sed 's/.* v//' | sort -u | head -1 || true)"
+[ "$EXE_VER" = "$TREE_VER" ] ||
+  { echo "REFUSED: $BUILD_DIR/futari.exe is v${EXE_VER:-?}, the tree is v$TREE_VER: rebuild it first"; exit 1; }
 # The boot checks below end with taskkill //IM futari.exe, which would also end a game someone is playing.
 if tasklist //FI "IMAGENAME eq futari.exe" 2>/dev/null | grep -qi 'futari.exe'; then
   echo "REFUSED: a futari.exe is running; close it first (the boot checks kill every futari.exe)"; exit 1
@@ -47,7 +66,18 @@ ls "$STAGE"/renut_tools/*.exe >/dev/null 2>&1 && { echo "REFUSED: an executable 
 cp "$ROOT/extract_assets.bat" "$ROOT/scripts/extract_iso.py" "$ROOT/scripts/make_shaders.py" "$STAGE/"
 cp "$ROOT/dist/RUN.txt" "$ROOT/dist/gamecontrollerdb.txt" "$ROOT/THIRD-PARTY-NOTICES.txt" "$STAGE/"
 cp "$ROOT/dist/dlc-README.txt" "$STAGE/dlc/README.txt"
-# futari.ini: the exe writes its defaults on first run; the build tree's copy is that file.
+# futari.ini: the exe writes its defaults on first run; the build tree's copy is that file, unless someone has
+# played from the build tree since. So: it must exist, and it must not carry a path of this machine or a renderer
+# choice (the zip ships on the default renderer). Any other changed setting is printed for the person cutting the
+# release to read: delete the build tree's futari.ini and start the exe once to get the defaults back.
+[ -f "$BUILD_DIR/futari.ini" ] ||
+  { echo "no $BUILD_DIR/futari.ini: start $BUILD_DIR/futari.exe once (it writes the default file), then re-run"; exit 1; }
+ini_bad=$(grep -n -E '^[[:space:]]*[A-Za-z_]+[[:space:]]*=.*([A-Za-z]:[\\/]|/Users/|/home/)|^[[:space:]]*futari_renderer[[:space:]]*=' "$BUILD_DIR/futari.ini" || true)
+if [ -n "$ini_bad" ]; then
+  echo "REFUSED: $BUILD_DIR/futari.ini carries a path of this machine or a renderer choice:"; echo "$ini_bad"; exit 1
+fi
+echo "  futari.ini as shipped (settings lines only; check they are the defaults):"
+grep -v -E '^[[:space:]]*(#|;|$)' "$BUILD_DIR/futari.ini" | tr -d '\r' | sed 's/^/    /'
 cp "$BUILD_DIR/futari.ini" "$STAGE/"
 
 cores=$(ls "$STAGE"/futari_*.dll | wc -l)
@@ -121,7 +151,8 @@ bad=$(cd "$STAGE" && find . \( -name '*.xex' -o -name '*.bin' -o -name '*.stamp'
 if [ -n "$bad" ]; then echo "REFUSED: run output in the stage after the boot checks:"; echo "$bad"; exit 1; fi
 
 rm -f "$ZIP"
-python3 - "$ROOT/out/_stage" "$NAME" "$ZIP" <<'EOF'
+# shellcheck disable=SC2086  # $PY may be "py -3"
+$PY - "$ROOT/out/_stage" "$NAME" "$ZIP" <<'EOF'
 import os, sys, zipfile, hashlib
 root, name, out = sys.argv[1:]
 with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:

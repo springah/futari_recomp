@@ -39,8 +39,22 @@ bash scripts/stage_win_zip.sh 1.5.12    # stages, checks, zips, writes the .sha2
 
 `stage_win_zip.sh` refuses a tree without that option, a `renut_tools/` holding
 an executable, and anything of the game in the stage, and boot-checks the staged
-exe on both renderers (it needs `ASSETS=<a game data folder>` for that, never
-copied into the stage).
+exe (it needs `ASSETS=<a game data folder>` for that, never copied into the
+stage). It also refuses a version that is not the one in `CMakeLists.txt` and
+in the built exe, and a build-tree `futari.ini` that carries a path of your
+machine or a renderer choice; it prints that file's settings so you can see
+they are the defaults (delete the build tree's `futari.ini` and start the exe
+once to get them back). Three things it needs that are easy to miss:
+
+- **Python 3** for the zip step: `python3`, `python` or `py -3`, whichever
+  runs; `PYTHON=<command>` picks one.
+- **`RENUT_PKG=<folder>`** to prove Renut itself comes up. Without it the
+  script only proves that the exe falls back to the default renderer when
+  there is no shader package, and prints `Renut-up SKIPPED`. The folder must
+  hold `vulkan_spirv.bin` and `vulkan_spirv.stamp` made by this very build:
+  start the built exe on a test install, press F2 and "Prepare the shaders".
+- **No `futari.exe` running**: the boot checks end every `futari.exe` on the
+  machine, so the script refuses to start while one is open.
 
 ## SDK
 

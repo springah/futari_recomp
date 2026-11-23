@@ -18,7 +18,7 @@
       6. runs scripts\regen.sh to generate the recompiled C++, then
          scripts\renut_shader_dump.sh, which dumps the game's own shader
          containers for the Renut renderer's shader cache (installs the
-         Python xxhash module if it is missing);
+         Python xxhash and numpy modules if they are missing);
       7. configures with the win-amd64-<Config> preset and builds the exe plus
          the 8 module DLLs.
 
@@ -395,10 +395,14 @@ Invoke-Checked $bash @('--noprofile', '--norc', 'scripts/regen.sh')
 # dump is game data and stays in out\ (ignored). Without this step a fresh clone stopped at configure
 # (found 2026-11-04 in a read-only review; never run on Windows yet, see docs\NOTES_v1.5.5_cut.md).
 Step 'Dumping the game shaders for the Renut renderer (scripts\renut_shader_dump.sh)'
-& $pyExe @($pyPre + @('-c', 'import xxhash')) 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Note 'Python module xxhash is missing; installing it for this user.'
-    Invoke-Checked $pyExe ($pyPre + @('-m', 'pip', 'install', '--user', '--quiet', 'xxhash'))
+# xxhash: the dump itself. numpy: the shader build's early-alpha pass (tools\renut\early_alpha.py); without it
+# that pass rewrites nothing and the build still succeeds, a few pixel shaders slower.
+foreach ($module in @('xxhash', 'numpy')) {
+    & $pyExe @($pyPre + @('-c', "import $module")) 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Note "Python module $module is missing; installing it for this user."
+        Invoke-Checked $pyExe ($pyPre + @('-m', 'pip', 'install', '--user', '--quiet', $module))
+    }
 }
 $env:PYTHON = $pyExe
 $env:PYTHON_ARGS = ($pyPre -join ' ')

@@ -53,7 +53,8 @@ RENDERER (Renut)
   F2 and "Redo the shaders" (or double-click extract_assets.bat there with
   nothing dragged on, which does the same with Python and also runs the
   early-alpha optimisation pass on a few pixel shaders; the picture is the
-  same either way).
+  same either way. That pass needs Python's numpy module, "pip install
+  numpy"; without it the batch file says so and skips the pass).
   To play with Renut, pick it on the settings screen (F2) and save, which
   writes this line at the top of futari.ini (above the first [section]); or
   add it by hand, or start the exe with --futari_renderer=renut:

@@ -38,6 +38,7 @@
 // The launcher (src/launcher, 2026-11-03): the first-run setup screen when assets/default.xex is missing (the
 // player's own disc image, console install or extracted folder goes into assets/ and dlc/, the Renut shaders are
 // translated, then the game starts), and the settings screen (F2 in the game). No Python, no batch file.
+#include "launcher/game_source.h"
 #include "launcher/launcher_dialog.h"
 #include "launcher/shader_pipeline.h"
 #include "dev/capture_series.h"
@@ -602,6 +603,14 @@ bool WriteIniFile(const std::filesystem::path& exe_dir, const std::string& conte
       return false;
     }
     out << content;
+    out.close();
+    if (!out) {
+      // A full disk: the short temp file must not replace the good futari.ini.
+      REXLOG_ERROR("Settings save: writing {} failed (disk full?); futari.ini is left as it was", tmp_path.string());
+      std::error_code rm;
+      std::filesystem::remove(tmp_path, rm);
+      return false;
+    }
   }
   std::error_code ec;
   std::filesystem::rename(tmp_path, ini_path, ec);
@@ -1015,8 +1024,9 @@ class FutariApp : public rex::ReXApp {
       }
     }
     const std::string auto_source = REXCVAR_GET(futari_setup_source);
-    std::error_code ec;
-    const bool have_game = std::filesystem::is_regular_file(defaults.game_data_root / "default.xex", ec);
+    // GameInPlace, not a bare test for default.xex: an extraction that was cancelled or failed leaves default.xex
+    // behind, and must come back here instead of being played from.
+    const bool have_game = futari::launcher::GameInPlace(defaults.game_data_root);
     if (have_game && !REXCVAR_GET(futari_setup) && auto_source.empty()) {
       return defaults;
     }
@@ -1026,7 +1036,11 @@ class FutariApp : public rex::ReXApp {
       return defaults;
     }
     REXLOG_INFO("Launcher: setup screen ({})",
-                have_game ? "asked for" : "no default.xex in " + rex::path_to_utf8(defaults.game_data_root));
+                have_game ? "asked for"
+                          : (futari::launcher::ExtractionUnfinished(defaults.game_data_root)
+                                 ? "an unfinished extraction in "
+                                 : "no default.xex in ") +
+                                rex::path_to_utf8(defaults.game_data_root));
     auto env = MakeLauncherEnv(defaults.game_data_root);
     env.auto_source = rex::to_path(auto_source);
     const auto opened = std::chrono::steady_clock::now();
@@ -1164,10 +1178,17 @@ class FutariApp : public rex::ReXApp {
     for (const auto& note : result.notes) {
       REXLOG_INFO("Shader dump: {}", note);
     }
-    renut_dump_exit_code_ = ok ? 0 : 2;
+    if (!ok) {
+      // A failed dump must end with a code its callers can see (the launcher's shader step and make_shaders.py both
+      // test it). RequestExit cannot carry one: the SDK's close path always ends the process with 0. So, as the
+      // stamp and translate tool modes above: flush and leave.
+      std::fprintf(stderr, "Shader dump FAILED: %s\n", error.c_str());
+      rex::FlushLogging();
+      std::fflush(nullptr);
+      std::_Exit(2);
+    }
     RequestExit("shader dump done");
   }
-  int renut_dump_exit_code_ = -1;
 #endif
 
   void OnPreSetup(rex::RuntimeConfig& config) override {
