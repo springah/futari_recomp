@@ -13,6 +13,14 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 > written largely with LLM assistance. Hobby project — verify before relying on
 > it, expect rough edges, no warranty.
 
+> 📣 **Looking for a new maintainer.** This port is a hobby, and I would like
+> to hand the Windows and macOS work on to someone who wants to carry it. The
+> port is in working order (v1.5.12 on both), and the build and release steps
+> are written down in [PORTS.md](PORTS.md). If you would like to take it over,
+> as a maintainer here or in a fork of your own, please
+> [open an issue](https://github.com/springah/futari_recomp/issues/new) and
+> say so. Pull requests stay welcome in the meantime.
+
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
 **Latest release:** v1.5.12 (Windows, macOS): bundles on the
@@ -31,7 +39,7 @@ platforms is served by separate projects, each with its own maintainer:
 
 | Platform | Project | Maintainer |
 |----------|---------|------------|
-| Windows, macOS | this repository | springah |
+| Windows, macOS | this repository | springah (new maintainer wanted) |
 | Linux, Steam Deck | [futari-linux](https://github.com/cerroverb/futari-linux) | cerroverb |
 | Nintendo Switch | [futari-nx](https://github.com/ChanseyIsTheBest/futari-nx) | ChanseyIsTheBest |
 
