@@ -17,9 +17,9 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 > to hand the Windows and macOS work on to someone who wants to carry it. The
 > port is in working order (v1.5.12 on both), and the build and release steps
 > are written down in [PORTS.md](PORTS.md). If you would like to take it over,
-> as a maintainer here or in a fork of your own, please
-> [open an issue](https://github.com/springah/futari_recomp/issues/new) and
-> say so. Pull requests stay welcome in the meantime.
+> as a maintainer here or in a fork of your own, please reply on
+> [#11](https://github.com/springah/futari_recomp/issues/11). Pull requests
+> stay welcome in the meantime.
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
