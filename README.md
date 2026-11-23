@@ -15,7 +15,7 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 > 📣 **Looking for a new maintainer.** This port is a hobby, and I would like
 > to hand the Windows and macOS work on to someone who wants to carry it. The
-> port is in working order (v1.5.12 on both), and the build and release steps
+> port is in working order (v1.5.13 on both), and the build and release steps
 > are written down in [PORTS.md](PORTS.md). If you would like to take it over,
 > as a maintainer here or in a fork of your own, please reply on
 > [#11](https://github.com/springah/futari_recomp/issues/11). Pull requests
@@ -23,8 +23,8 @@ PC execution, built on the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk)
 
 ![Mushihimesama Futari title screen](screenshots/title.png)
 
-**Latest release:** v1.5.12 (Windows, macOS): bundles on the
-[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.12);
+**Latest release:** v1.5.13 (Windows, macOS): bundles on the
+[GitHub release](https://github.com/springah/futari_recomp/releases/tag/v1.5.13);
 history in [CHANGELOG.md](CHANGELOG.md), per-OS build and packaging details in
 [PORTS.md](PORTS.md).
 
@@ -339,7 +339,7 @@ thirdparty/plume/, thirdparty/reblue-XenosRecomp/   # Renut's render interface a
 
 ## Known issues
 
-Known limits of v1.5.12:
+Known limits of v1.5.13:
 
 - **Renut is Vulkan-only** (needs a Vulkan 1.2 driver; no Direct3D 12 path).
   On macOS it is experimental: the picture is right, but heavy scenes can run

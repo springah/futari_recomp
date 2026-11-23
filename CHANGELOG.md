@@ -4,10 +4,11 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
-## Unreleased
+## v1.5.13 — 2026-11-23 (Windows, macOS)
 
-From a read-through of the port's own code on 2026-11-23, before handing it on
-([#11](https://github.com/springah/futari_recomp/issues/11)).
+Fixes from a read-through of the port's own code, before handing it on
+([#11](https://github.com/springah/futari_recomp/issues/11)). Nothing changes
+in the game itself or in either renderer.
 
 - **A damaged disc image no longer ends the program during setup.** The
   directory walk had no limits: a table that lists itself as its own
