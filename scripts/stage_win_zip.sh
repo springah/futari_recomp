@@ -80,6 +80,14 @@ echo "  futari.ini as shipped (settings lines only; check they are the defaults)
 grep -v -E '^[[:space:]]*(#|;|$)' "$BUILD_DIR/futari.ini" | tr -d '\r' | sed 's/^/    /'
 cp "$BUILD_DIR/futari.ini" "$STAGE/"
 
+# No path of the build machine in the binaries. Assertions and log calls record source paths, and without the prefix
+# map in CMakeLists.txt every public zip up to v1.5.13 carried the builder's user folder. A hit here means the build
+# tree predates that flag or the flag did not reach a target: reconfigure and rebuild everything, then re-run.
+path_bad=$(cd "$STAGE" && LC_ALL=C grep -a -l -i -E '[A-Za-z]:[\\/]+Users[\\/]|/Users/[^/]+/|/home/[^/]+/' ./*.exe ./*.dll renut_tools/*.dll || true)
+if [ -n "$path_bad" ]; then
+  echo "REFUSED: a path of this machine (a user folder) is recorded in:"; echo "$path_bad"; exit 1
+fi
+
 cores=$(ls "$STAGE"/futari_*.dll | wc -l)
 [ "$cores" -eq 8 ] || { echo "REFUSED: $cores core DLLs, need 8 (build every target)"; exit 1; }
 

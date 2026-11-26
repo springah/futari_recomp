@@ -4,6 +4,19 @@ Versions are per-repo; each release is a tag with a GitHub Release, and from
 v1.5.3 on the per-OS zips are attached to it (earlier zips went to a private
 download share). Ports can sit on different versions — see [PORTS.md](PORTS.md).
 
+## Unreleased
+
+- **Windows: the binaries no longer record where they were built.** The
+  v1.5.11 entry below says the Windows build never carried the build machine's
+  source paths. It did: every public Windows zip up to v1.5.13 has the
+  builder's user folder in `futari.exe`, `rexruntime.dll`, `rexgpu-xenos.dll`
+  and the eight game-mode DLLs (180 strings in v1.5.13). `CMakeLists.txt` now
+  passes the path map to clang-cl as well (through `/clang:`, since clang-cl
+  ignores the bare flag), and `scripts/stage_win_zip.sh` refuses a stage whose
+  binaries still record a user folder. Takes effect with the next Windows
+  build. Nothing changes in how the game runs.
+- `tests/screen_layout_test.cpp` compiles under `-Werror` with GCC 13 as well.
+
 ## v1.5.13 — 2026-11-23 (Windows, macOS)
 
 Fixes from a read-through of the port's own code, before handing it on
@@ -144,7 +157,7 @@ came out of its review.
   writes them for log and assertion messages), and the libraries also carried
   that machine's library directory as a run-path. Source paths now read
   `./src/...` and the libraries look beside themselves. The Windows build never
-  had them. Nothing changes in how the game runs.
+  had them (wrong, as it turned out: see the entry after v1.5.13). Nothing changes in how the game runs.
 
 ## v1.5.10 — 2026-11-20 (Windows, macOS)
 

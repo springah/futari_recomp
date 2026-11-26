@@ -33,12 +33,22 @@ endif()
 # Keep the build machine's directory names out of the binaries. Assertions and
 # log calls record source paths; map the tree's root to "." so they read
 # "./src/main.cpp" rather than the full path of whoever built it. Before the
-# SDK is added below, so that its targets get the flag too. Not on Windows: the
-# clang-cl build records none (scanned at v1.5.11), and the flag would only
-# force a full rebuild there.
-if(NOT WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    add_compile_options(
-        "$<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.>")
+# SDK is added below, so that its targets get the flag too.
+#
+# Windows too: every public Windows zip up to v1.5.13 carried the builder's
+# user folder (180 strings across the exe, the runtime and the DLLs; the scan at
+# v1.5.11 that said otherwise was wrong). clang-cl ignores the bare flag with
+# "unknown argument ignored", so there it goes through /clang:. Changing the
+# flag forces a full rebuild once. scripts/stage_win_zip.sh refuses a stage
+# whose binaries still carry such a path.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        add_compile_options(
+            "$<$<COMPILE_LANGUAGE:C,CXX>:/clang:-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.>")
+    else()
+        add_compile_options(
+            "$<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.>")
+    endif()
 endif()
 
 # generated/ is codegen output and is gitignored, so a fresh clone does not have

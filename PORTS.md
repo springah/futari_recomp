@@ -190,6 +190,12 @@ Packaging rules — each one is here because it broke once:
 6. **No absolute paths in anything that ships.** The v1.4.0 Deck launcher and
    `futari.ini` both hardcoded the directory they were tested from, so the bundle
    only ran on that one machine. The launcher must resolve its own location.
+   The same goes for the binaries: the compiler records source paths for log
+   and assertion messages, and every public zip up to v1.5.13 (Windows) and
+   v1.5.10 (macOS) carried the builder's user folder that way. `CMakeLists.txt`
+   maps the tree's root to `.` on every platform, `stage_win_zip.sh` refuses a
+   stage whose exe or DLLs still record a user folder, and on macOS
+   `grep -a -l -r -E '/Users/[^/]+/' Futari-<version>.app` must print nothing.
 7. **Check what a bundle actually contains, not what you meant to put in it.**
    `strings <binary> | grep rexglue-v` reports the SDK each component was built
    against; v1.4.0's Deck zip mixed a v0.8.3 runtime with a v0.9.0-dev binary.
