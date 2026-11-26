@@ -26,11 +26,11 @@ Everything up to the tag is done; the tag and the GitHub Release are the user's 
 - `launcher` = **7b7f237**, pushed. Every leg merged: release docs, launcher polish (gamepad navigation, Roboto,
   "Check for updates", shader stamp), macOS (Cocoa picker, Renut over MoltenVK, source-built DXC bundled), rectangle
   lists and point sprites by tessellation on macOS, the fresh-process start after a console-install extraction
-  (ba1a9f0, 10/10 on iacon), the guest clock reset, build.ps1's shader dump and dxc-bin fetch (renderbag/dxc-bin), the
+  (ba1a9f0, 10/10 on the Windows PC), the guest clock reset, build.ps1's shader dump and dxc-bin fetch (renderbag/dxc-bin), the
   `--futari_renut_stamp` tool mode, the stage script's running-game refusal. Placeholders resolved; the changelog date
   is still `2026-11-DD`: fill it at the tag.
 - Windows zip, from 7b7f237, every refusal and boot check passed, file list vs v1.5.4 = +`make_shaders.py` and the
-  four `renut_tools/` files: `C:\Users\shant\Desktop\projects\futari_recomp\out\Mushihimesama-Futari-PC-v1.5.5.zip`,
+  four `renut_tools/` files: `out\Mushihimesama-Futari-PC-v1.5.5.zip`,
   36,761,330 bytes, sha256 `af638ad234936e17665be19e37aad560b27503b9d1a5bb5c097333159b3be7ff`.
 - macOS zip, from 7b7f237 (release-shaders tree, seal OK, "no game shaders built in" boot check passed, file list vs
   v1.5.4 = +`LICENSE-DirectXShaderCompiler.txt`, `renut_tools/shader_common.h`, `lib/libdxcompiler.dylib`):
@@ -48,20 +48,20 @@ Everything up to the tag is done; the tag and the GitHub Release are the user's 
 
 ## 0c. Released, 2026-11-04 evening
 
-- The user's hands pass on the Windows zip (unzipped on iacon's Desktop from the staged zip) passed: "Tag and release".
+- The user's hands pass on the Windows zip (unzipped on the Windows PC's Desktop from the staged zip) passed: "Tag and release".
 - `main` = **dc588e2** (`Merge launcher: v1.5.5`, README.md and PORTS.md taken from `launcher`; `git diff launcher main`
   empty; every commit author and committer the noreply identity), `launcher` = a77a1e6 (the changelog date commit),
   tag **v1.5.5** on dc588e2, all three pushed; Guards on `main` green.
 - GitHub Release https://github.com/springah/futari_recomp/releases/tag/v1.5.5 (Latest) with the four assets:
   `Mushihimesama-Futari-PC-v1.5.5.zip` (36,761,330 B, af638ad2...) and `Mushihimesama-Futari-macOS-v1.5.5.zip`
-  (43,373,062 B, 4cbed461...) with their `.sha256` files (the Windows one re-written LF; the one iacon wrote was CRLF).
+  (43,373,062 B, 4cbed461...) with their `.sha256` files (the Windows one re-written LF; the one the Windows PC wrote was CRLF).
   Notes = the draft of §8 as it stood, title with the em-dash of the earlier releases. rc2 and rc3 notes carry a
   "Superseded by v1.5.5" line like rc1's.
 - Replies posted: #8 (Scaloup: v1.5.5, setup screen + F2 replace the rc1 steps, same stage-for-stage question, log
   and GPU asked for; issue left open) and #4 (itemzer0: F2 writes top-level `futari.ini` lines, a language key could
   go the same way; map and injector welcome, dumped strings not).
 - Not done: the SHARED share got nothing (these zips carry no game data; the GitHub Release is the distribution, as
-  for v1.5.4). The hands folder on iacon was deleted after the pass. The follow-ups of §0b stand.
+  for v1.5.4). The hands folder on the Windows PC was deleted after the pass. The follow-ups of §0b stand.
 
 ## 1. Merge the legs into `launcher` (Mac, main clone)
 
@@ -239,7 +239,7 @@ Watch the Guards run on `main` (no-game-data, shellcheck, identity) before the r
 ## 8. GitHub Release
 
 The notes body: the draft written with this checklist,
-`/private/tmp/claude-501/-Users-shant-Desktop/906f8d28-efa8-421c-b9bd-d51aa24fa6ef/scratchpad/release_notes_v1.5.5.md`
+`release_notes_v1.5.5.md` in a scratch folder outside the repository
 (a temporary folder: copy it somewhere lasting first), with its MERGE-OWNER lines resolved the same way as step 1
 and the two SHA-256 values filled in from the `.sha256` files. The tag message and title use `--`; earlier release
 titles used an em-dash, switch if you prefer the match.

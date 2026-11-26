@@ -1113,7 +1113,7 @@ void BlitShiftMeasuredRows() {
 
 // Even frames: the game's quad is already on whole pixels at every multiplier.
 void BlitShiftEvenFrameIsZero() {
-  for (const auto [w, h] : {std::pair{1920.0, 1080.0}, {1280.0, 720.0}, {3840.0, 2160.0}, {1080.0, 1920.0}}) {
+  for (const auto& [w, h] : {std::pair{1920.0, 1080.0}, {1280.0, 720.0}, {3840.0, 2160.0}, {1080.0, 1920.0}}) {
     for (const double m : kMultipliers) {
       const std::string what = Name(w, h, m);
       const std::optional<QuadShift> s = CheckSnapped(GameTransform(kGameTurn, w, h), w, h, GameQuad(m), what);
@@ -1155,7 +1155,7 @@ void BlitShiftOddBoth() {
 // Every 90-degree turn and mirror at odd and even sizes: on whole pixels, size kept, offset below one pixel.
 void BlitShiftAllOrientations() {
   for (const Turn& r : kAllTurns) {
-    for (const auto [w, h] : {std::pair{1919.0, 1017.0}, {1920.0, 1017.0}, {1919.0, 1080.0}, {1920.0, 1080.0}}) {
+    for (const auto& [w, h] : {std::pair{1919.0, 1017.0}, {1920.0, 1017.0}, {1919.0, 1080.0}, {1920.0, 1080.0}}) {
       for (const double m : kMultipliers) {
         const std::string what = Name(w, h, m) + " turn " + std::to_string(int(r.xx)) + " " +
                                  std::to_string(int(r.xy)) + " " + std::to_string(int(r.yx)) + " " +

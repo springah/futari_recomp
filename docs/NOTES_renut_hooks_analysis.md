@@ -356,7 +356,7 @@ the exe/core tables keep agreeing.
 Command line (Git Bash, repo root; do not run yet):
 
 ```
-cd /c/Users/shant/Desktop/projects/futari_recomp
+cd /path/to/futari_recomp
 python3 tools/renut/renut_futari_hooks.py --gen generated --check
 python3 tools/renut/renut_futari_hooks.py --gen generated
 ```
