@@ -21,5 +21,7 @@ Full details in [CHANGELOG.md](https://github.com/springah/futari_recomp/blob/v1
 
 | File | SHA-256 |
 |---|---|
-| `Mushihimesama-Futari-PC-v1.5.13.zip` | `ae85ec6a1da4bda615a9d3c2870127756033f52804f4181e7085aada8cce2ba9` |
+| `Mushihimesama-Futari-PC-v1.5.13.zip` | `7f5f7169a8fdf217869a703bd8da1c66990eee5aac4066239f6bbbf31ff17084` |
 | `Mushihimesama-Futari-macOS-v1.5.13.zip` | `2157e051e409c0951e60033badef40218b7729212abda69b8163da91ebeb13be` |
+
+**The Windows zip was replaced on 27 November 2026.** It is a rebuild of the same game code that no longer records the build machine's folder paths in `futari.exe` and the DLLs; the file list and the behaviour are the same, and there is no need to download it again. The zip it replaced had SHA-256 `ae85ec6a1da4bda615a9d3c2870127756033f52804f4181e7085aada8cce2ba9`. The rebuild passed the same staging checks, and an unzipped copy booted on the default renderer.
